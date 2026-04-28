@@ -97,12 +97,6 @@
             </svg>
             <span>Saved</span>
           </a>
-          <a href="#" class="nav-tab" onclick="showPage('subscriptions'); return false;">
-            <svg class="nav-icon" viewBox="0 0 24 24">
-              <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z" />
-            </svg>
-            <span>Subscriptions</span>
-          </a>
         </div>
 
         <div class="sidebar-section">
@@ -175,7 +169,7 @@
               <div class="yt-tab-bar">
                 <a href="#" class="yt-tab active" onclick="setFeaturedTab('featured');return false;">Random</a>
                 <span class="yt-tab-sep">|</span>
-                <a href="#" class="yt-tab" onclick="setFeaturedTab('subscriptions');return false;">Subscriptions</a>
+                <a href="#" class="yt-tab" onclick="setFeaturedTab('downloaded');return false;">Downloaded</a>
                 <span class="yt-tab-sep">|</span>
                 <a href="#" class="yt-tab" onclick="setFeaturedTab('views');return false;">Most Viewed</a>
                 <span class="yt-tab-sep">|</span>
@@ -197,7 +191,7 @@
         <div id="youtube-modern-layout">
           <div id="home-chips" class="home-chips-container">
             <button class="chip active" onclick="setModernHomeTab('featured', this)">Featured</button>
-            <button class="chip" onclick="setModernHomeTab('subscriptions', this)">Subscriptions</button>
+            <button class="chip" onclick="setModernHomeTab('downloaded', this)">Downloaded</button>
             <button class="chip" onclick="setModernHomeTab('views', this)">Most Viewed</button>
             <button class="chip" onclick="setModernHomeTab('discussed', this)">Most Discussed</button>
             <button class="chip" onclick="setModernHomeTab('favorited', this)">Top Favorited</button>
@@ -241,9 +235,9 @@
               </div>
             </div>
             <div id="watch-description"></div>
-            <div id="watch-actions" style="margin-top: 10px; display: flex; gap: 8px;">
-              <button id="btn-save-video" class="btn-thread" style="flex: 1; padding: 10px; font-weight: bold;">Save Video</button>
-              <button id="btn-subscribe-video" class="btn-subscribe btn-thread" style="flex: 1; padding: 10px; font-weight: bold;">Subscribe</button>
+            <div id="watch-actions" style="margin-top: 10px;">
+              <button id="btn-save-video" class="btn-thread" style="width: 100%; padding: 10px; font-weight: bold;">Save
+                Video</button>
             </div>
             <div class="box" style="margin-top: 15px;">
               <div class="box-header">More From This Channel</div>

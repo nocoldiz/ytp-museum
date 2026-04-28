@@ -15,7 +15,6 @@ let currentVideoMode = "all"; // "all", "ytp", "sources"
 let sourceChannels = new Set();
 let allSearchIndex = [];    // [id, title, channel, year, views, dur, desc]
 let playbackMode = localStorage.getItem('ytp-playback-mode') || 'youtube'; 
-let subscriptions = JSON.parse(localStorage.getItem('ytp-subscriptions') || '[]');
 
 // DB Constants (Must be at top for initialization)
 const dbName = 'YTPArchiveDB';
@@ -399,33 +398,6 @@ function updatePlaybackToggleUI() {
   if (toggleM) toggleM.textContent = label;
 }
 
-function toggleSubscription(channelName) {
-  if (!channelName) return;
-  const index = subscriptions.indexOf(channelName);
-  if (index > -1) {
-    subscriptions.splice(index, 1);
-  } else {
-    subscriptions.push(channelName);
-  }
-  localStorage.setItem('ytp-subscriptions', JSON.stringify(subscriptions));
-  updateSubscribeButtons(channelName);
-}
-
-function updateSubscribeButtons(channelName) {
-  const isSubbed = subscriptions.includes(channelName);
-  const label = isSubbed ? 'Subscribed' : 'Subscribe';
-  document.querySelectorAll(`.btn-subscribe[data-channel="${escAttr(channelName)}"]`).forEach(btn => {
-    btn.textContent = label;
-    btn.classList.toggle('active', isSubbed);
-  });
-  // Also check video page button
-  const vSubBtn = document.getElementById('btn-subscribe-video');
-  if (vSubBtn && vSubBtn.dataset.channel === channelName) {
-    vSubBtn.textContent = label;
-    vSubBtn.classList.toggle('active', isSubbed);
-  }
-}
-
 // ─── NAVIGATION ──────────────────────────────────────────────────────────
 function showPage(name, pushToHistory = true) {
   if (pushToHistory) {
@@ -436,7 +408,6 @@ function showPage(name, pushToHistory = true) {
     else if (name === 'sections') path = '/sections';
     else if (name === 'overview') path = '/overview';
     else if (name === 'youtube') path = '/';
-    else if (name === 'subscriptions') path = '/subscriptions';
     updateURL(name === 'youtube' ? {} : { page: name }, path);
   }
   if (name !== 'video') {
@@ -480,9 +451,6 @@ function showPage(name, pushToHistory = true) {
   }
   if (name === 'youtube') {
     renderHomePage();
-  }
-  if (name === 'subscriptions') {
-    renderSubscriptionsPage();
   }
   if (name === 'saved') {
     renderSavedPage();
@@ -844,9 +812,6 @@ function scoreChannel(channelName, queryTokens) {
 
 function performSearch(query) {
   if (!query) return;
-  const input = document.getElementById('global-search-input');
-  if (input) input.value = query;
-  
   const suggestionsBox = document.getElementById('search-suggestions');
   if (suggestionsBox) suggestionsBox.style.display = 'none';
 
@@ -1029,22 +994,12 @@ async function openVideo(vidId, pushToHistory = true) {
   if (viewsEl) viewsEl.textContent = views;
 
   document.getElementById('watch-channel-info').innerHTML = `
-    <img src="${avatar}" alt="Avatar" onclick="openProfile('${escAttr(channel)}')" style="cursor:pointer; border-radius:50%;" loading="lazy">
+    <img src="${avatar}" alt="Avatar" onclick="openProfile('${escAttr(channel)}')" style="cursor:pointer; border-radius:50%;">
     <div style="flex:1">
       <div id="watch-channel" style="font-weight:bold; cursor:pointer; font-size:1.1rem" onclick="openProfile('${escAttr(channel)}')">${escHtml(channel)}</div>
       <div id="watch-date" style="font-size:0.85rem; color:var(--text-muted)">${fmtDate(v.publish_date)}</div>
     </div>
   `;
-
-  // Setup Subscribe button for video page
-  const vSubBtn = document.getElementById('btn-subscribe-video');
-  if (vSubBtn) {
-    vSubBtn.dataset.channel = channel;
-    const isSubbed = subscriptions.includes(channel);
-    vSubBtn.textContent = isSubbed ? 'Subscribed' : 'Subscribe';
-    vSubBtn.classList.toggle('active', isSubbed);
-    vSubBtn.onclick = () => toggleSubscription(channel);
-  }
 
   let desc = v.description || 'No description available.';
   let tagsHtml = '';
@@ -1077,12 +1032,9 @@ async function openVideo(vidId, pushToHistory = true) {
         if (isFallback) return renderError();
         return renderYoutube(true);
     }
-    const path = getLocalVideoPath(v);
-    const basePath = path.replace(/\.(mp4|m4v)$/i, '');
-    
+    const src = getLocalVideoPath(v);
     playerContainer.innerHTML = `<video id="video-player-element" controls autoplay style="width:100%; height:100%; background:#000;">
-      <source src="${basePath}.mp4" type="video/mp4">
-      <source src="${basePath}.m4v" type="video/x-m4v">
+      <source src="${src}" type="video/mp4">
     </video>`;
     const vid = document.getElementById('video-player-element');
     vid.onerror = () => {
@@ -1112,7 +1064,7 @@ async function openVideo(vidId, pushToHistory = true) {
       if (x.channel_name !== v.channel_name || x.id === v.id) return false;
       if (!x.publish_date) return globalMaxYear === currentYear;
       return parseInt(x.publish_date.slice(0, 4)) <= globalMaxYear;
-    }).slice(0, 10);
+    }).slice(0, 5);
     moreContainer.innerHTML = moreVids.map(x => renderVideoItem(x, 'list')).join('');
   }
   updateSaveButton(vidId);
@@ -1166,7 +1118,7 @@ function loadRelatedVideos(video) {
 
   // Score based on shared sections and tags
   const scored = ytData
-    .filter(v => v.id !== video.id && v.channel_name !== video.channel_name)
+    .filter(v => v.id !== video.id)
     .map(v => {
       let score = 0;
       if (v.sections) {
@@ -1179,6 +1131,9 @@ function loadRelatedVideos(video) {
           if (videoTags.has(t)) score += 2;
         });
       }
+      // Boost same channel slightly but not too much as they are already in "More from channel"
+      if (v.channel_name === video.channel_name) score += 1;
+
       return { video: v, score };
     })
     .filter(r => r.score > 0)
@@ -1297,14 +1252,9 @@ function openProfile(user, pushToHistory = true) {
 
   document.getElementById('profile-header').innerHTML = `
     <div style="display:flex; align-items:center; gap:24px;">
-      <img src="${avatar}" style="width:100px; height:100px; border-radius:50%; border:4px solid var(--border); object-fit:cover;" loading="lazy">
-      <div style="flex:1">
-        <div style="display:flex; align-items:center; gap:15px;">
-          <h2 id="profile-title" style="margin:0; font-size:2rem;">${escHtml(user)}</h2>
-          <button class="btn-subscribe btn-thread" data-channel="${escAttr(user)}" onclick="toggleSubscription('${escAttr(user)}')" style="padding:6px 15px; font-weight:bold;">
-            ${subscriptions.includes(user) ? 'Subscribed' : 'Subscribe'}
-          </button>
-        </div>
+      <img src="${avatar}" style="width:100px; height:100px; border-radius:50%; border:4px solid var(--border); object-fit:cover;">
+      <div>
+        <h2 id="profile-title" style="margin:0; font-size:2rem;">${escHtml(user)}</h2>
         <div id="profile-stats" style="margin-top:8px; color:var(--text-muted); line-height:1.4;">
           <strong>${userVideos.length}</strong> videos • 
           <strong>${fmtNum(userVideos.reduce((sum, v) => sum + (v.view_count || 0), 0))}</strong> total views<br>
@@ -1445,8 +1395,8 @@ function renderModernGrid() {
   let videos;
   if (currentModernTab === 'featured') {
     videos = shuffleArray(validVideos).slice(0, 24);
-  } else if (currentModernTab === 'subscriptions') {
-    videos = shuffleArray(validVideos.filter(v => subscriptions.includes(v.channel_name))).slice(0, 24);
+  } else if (currentModernTab === 'downloaded') {
+    videos = shuffleArray(validVideos.filter(v => v.status === 'downloaded')).slice(0, 24);
   } else if (currentModernTab === 'views') {
     videos = [...validVideos].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 24);
   } else if (currentModernTab === 'discussed') {
@@ -1461,7 +1411,7 @@ function renderModernGrid() {
 function setFeaturedTab(tab) {
   // Update active tab UI
   document.querySelectorAll('.yt-tab').forEach(t => t.classList.remove('active'));
-  const clickedTab = document.querySelector(`.yt-tab[onclick*="'${tab}'"]`);
+  const clickedTab = document.querySelector(`.yt-tab[onclick*="${tab}"]`);
   if (clickedTab) clickedTab.classList.add('active');
 
   const ytData = getActiveVideos(true);
@@ -1472,27 +1422,18 @@ function setFeaturedTab(tab) {
   let videos;
   if (tab === 'featured') {
     videos = shuffleArray(validVideos).slice(0, 8);
-  } else if (tab === 'subscriptions') {
-    videos = shuffleArray(validVideos.filter(v => subscriptions.includes(v.channel_name))).slice(0, 10);
   } else if (tab === 'views') {
     videos = [...validVideos].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 8);
   } else if (tab === 'discussed') {
+    // Use comment count if available, else fall back to views
     videos = [...validVideos].sort((a, b) => (b.comment_count || b.view_count || 0) - (a.comment_count || a.view_count || 0)).slice(0, 8);
   } else if (tab === 'favorited') {
     videos = [...validVideos].sort((a, b) => (b.like_count || 0) - (a.like_count || 0)).slice(0, 8);
-  } else {
-    videos = shuffleArray(validVideos).slice(0, 8);
+  } else if (tab === 'downloaded') {
+    videos = shuffleArray(validVideos.filter(v => v.status === 'downloaded')).slice(0, 12);
   }
-  featuredContainer.innerHTML = videos.map(v => renderVideoItem(v, 'grid')).join('');
-}
 
-function renderSubscriptionsPage() {
-  const isOld = document.body.classList.contains('theme-old');
-  if (isOld) {
-      setFeaturedTab('subscriptions');
-  } else {
-      setModernHomeTab('subscriptions');
-  }
+  featuredContainer.innerHTML = videos.map(v => renderVideoItem(v, 'list')).join('');
 }
 
 function loadMoreHomeVideos() {
@@ -1546,7 +1487,7 @@ function renderModernHomeCard(v) {
   return `
     <div class="modern-home-card" onclick="openVideo('${v.id}')">
       <div class="yt-facade">
-        ${getThumbnailMarkup(v)}
+        <img src="${thumbUrl}" alt="Thumbnail" loading="lazy">
         <div class="play-btn"></div>
       </div>
       <div class="modern-home-info">
@@ -1773,7 +1714,7 @@ function renderVideoItem(v, mode = 'list') {
     return `
     <div class="video-item grid">
       <a href="#" onclick="event.preventDefault(); event.stopPropagation(); openVideo('${v.id}')" class="video-thumb">
-        ${getThumbnailMarkup(v)}
+        <img src="${thumbUrl}" alt="" loading="lazy">
         ${dur ? `<span class="video-time">${escHtml(dur)}</span>` : ''}
       </a>
       <div class="video-info">
@@ -1795,7 +1736,7 @@ function renderVideoItem(v, mode = 'list') {
       return `
         <div class="video-item modern-list" onclick="openVideo('${v.id}')">
           <div class="modern-list-thumb">
-            ${getThumbnailMarkup(v)}
+            <img src="${thumbUrl}" alt="" loading="lazy">
             ${dur ? `<span class="video-time">${escHtml(dur)}</span>` : ''}
           </div>
           <div class="modern-list-info">
@@ -1819,7 +1760,7 @@ function renderVideoItem(v, mode = 'list') {
     <div class="video-item list" onclick="openVideo('${v.id}')" style="cursor:pointer;">
       <div class="yt-list-thumb">
         <a href="#" onclick="event.preventDefault(); event.stopPropagation(); openVideo('${v.id}')">
-          ${getThumbnailMarkup(v)}
+          <img src="${thumbUrl}" alt="" loading="lazy">
           ${dur ? `<span class="video-time">${escHtml(dur)}</span>` : ''}
         </a>
       </div>
@@ -2126,7 +2067,7 @@ function renderTable(append = false) {
       const thumbUrl = `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`;
       const facadeHtml = v.status === 'available' || v.status === 'pending' || v.status === 'downloaded'
         ? `<div class="yt-facade" id="facade-${v.id}" onclick="loadFacade('${v.id}')">
-             ${getThumbnailMarkup(v)}
+             <img src="${thumbUrl}" alt="Thumbnail" loading="lazy">
              <div class="play-btn"></div>
            </div>`
         : `<div class="yt-facade" style="background:#2a3048; display:flex; align-items:center; justify-content:center; color:var(--text-muted); cursor:default;">
@@ -2743,18 +2684,6 @@ function getLocalVideoPath(v) {
   }
 
   return (path.startsWith('videos/') || path.startsWith('sources/')) ? '../' + path : path;
-}
-
-function getThumbnailMarkup(v) {
-  const ytThumb = `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`;
-  let localThumb = ytThumb;
-  if (v.channel_name) {
-    const safeCh = v.channel_name.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80);
-    const subDir = (v.type === 'source' || (v.id && v.id.startsWith('source_'))) ? 'sources' : 'videos';
-    // Local thumb is relative to public/index.html (so ../db/...)
-    localThumb = `db/${subDir}/${encodeURIComponent(safeCh)}/${v.id}.jpg`;
-  }
-  return `<img src="${localThumb}" onerror="this.onerror=null; this.src='${ytThumb}';" alt="Thumbnail" loading="lazy">`;
 }
 
 function escHtml(s) {
