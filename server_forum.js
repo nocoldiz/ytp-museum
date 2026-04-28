@@ -28,9 +28,9 @@ const SITE_MIRROR = path.join(__dirname, 'site_mirror');
 const STATE_FILE  = path.join(SITE_MIRROR, '.scraper_state.json');
 const SCRAPER     = path.join(__dirname, 'scraper.py');
 const BASE_DOMAIN = 'youtubepoopita.forumfree.it';
-const VIDEO_INDEX = path.join(__dirname, 'docs', 'video_index.json');
-const EXCLUDED_VIDEOS = path.join(__dirname, 'docs', 'excluded_videos.json');
-const SOURCES_INDEX = path.join(__dirname, 'docs', 'sources_index.json');
+const VIDEO_INDEX = path.join(__dirname, 'db', 'video_index.json');
+const EXCLUDED_VIDEOS = path.join(__dirname, 'db', 'excluded_videos.json');
+const SOURCES_INDEX = path.join(__dirname, 'db', 'sources_index.json');
 const VIDEOS_DIR  = path.join(__dirname, 'videos');
 const SOURCES_DIR = path.join(__dirname, 'sources');
 
@@ -563,11 +563,11 @@ function onRequest(req, res) {
     return serveLocalVideo(filePath, req, res);
   }
 
-  // ── Static files from docs ────────────────────────────────────────────────
-  if (reqUrl.pathname.startsWith('/docs/')) {
-    const rel = reqUrl.pathname.slice('/docs/'.length)
+  // ── Static files from db ────────────────────────────────────────────────
+  if (reqUrl.pathname.startsWith('/db/')) {
+    const rel = reqUrl.pathname.slice('/db/'.length)
       .split('/').map(decodeURIComponent).join(path.sep);
-    const filePath = path.join(__dirname, 'docs', rel);
+    const filePath = path.join(__dirname, 'db', rel);
     if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
       const ext = path.extname(filePath).toLowerCase();
       const mime = {
@@ -639,7 +639,7 @@ function onRequest(req, res) {
     const isFrontend = frontendRoutes.some(r => reqUrl.pathname.startsWith(r));
     
     if (isFrontend) {
-       const p = path.join(__dirname, 'docs', 'index.html');
+       const p = path.join(__dirname, 'public', 'index.html');
        if (fs.existsSync(p)) {
          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
          return res.end(fs.readFileSync(p));

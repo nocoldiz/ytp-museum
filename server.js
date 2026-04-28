@@ -19,11 +19,13 @@ const { URL } = require('url');
 const crypto = require('crypto');
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
-const DOCS_DIR = path.join(__dirname, 'docs');
-const VIDEOS_DIR = path.join(__dirname, 'videos');
-const VIDEO_INDEX = path.join(DOCS_DIR, 'video_index.json');
-const EXCLUDED_VIDEOS = path.join(DOCS_DIR, 'excluded_videos.json');
-const SOURCES_INDEX = path.join(DOCS_DIR, 'sources_index.json');
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const DB_DIR = path.join(__dirname, 'db');
+const VIDEOS_DIR = path.join(DB_DIR, 'videos');
+const VIDEO_INDEX = path.join(DB_DIR, 'video_index.json');
+const EXCLUDED_VIDEOS = path.join(DB_DIR, 'excluded_videos.json');
+const SOURCES_INDEX = path.join(DB_DIR, 'sources_index.json');
+const YT_POOPERS_INDEX = path.join(DB_DIR, 'ytpoopers_index.json');
 const SOURCES_DIR = path.join(__dirname, 'sources');
 
 
@@ -116,10 +118,10 @@ function flagAsSource(videoIds, videoIndexPath, sourcesIndexPath) {
     }
 
     // Move individual metadata JSON from docs/videos to docs/sources
-    const oldJsonPath = path.join(DOCS_DIR, 'videos', `${id}.json`);
-    const newJsonPath = path.join(DOCS_DIR, 'sources', `${id}.json`);
+    const oldJsonPath = path.join(DB_DIR, 'videos', `${id}.json`);
+    const newJsonPath = path.join(DB_DIR, 'sources', `${id}.json`);
     try {
-      const sourcesJsonDir = path.join(DOCS_DIR, 'sources');
+      const sourcesJsonDir = path.join(DB_DIR, 'sources');
       if (!fs.existsSync(sourcesJsonDir)) fs.mkdirSync(sourcesJsonDir, { recursive: true });
       if (fs.existsSync(oldJsonPath)) {
         fs.renameSync(oldJsonPath, newJsonPath);
@@ -458,8 +460,13 @@ function onRequest(req, res) {
 
   // ── Static files from docs ────────────────────────────────────────────────
   let relPath = pathname === '/' ? 'index.html' : pathname.replace(/^\//, '');
-  let filePath = path.join(DOCS_DIR, relPath);
+  let filePath;
 
+  if (pathname.startsWith('/db/')) {
+    filePath = path.join(DB_DIR, pathname.substring(4));
+  } else {
+    filePath = path.join(PUBLIC_DIR, relPath);
+  }
 
   if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     const ext = path.extname(filePath).toLowerCase();
@@ -468,7 +475,7 @@ function onRequest(req, res) {
   }
 
   // SPA Fallback: if not a file, serve index.html
-  const indexFile = path.join(DOCS_DIR, 'index.html');
+  const indexFile = path.join(PUBLIC_DIR, 'index.html');
   if (fs.existsSync(indexFile)) {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
     return fs.createReadStream(indexFile).pipe(res);
@@ -493,6 +500,7 @@ const server = http.createServer(onRequest);
 server.listen(PORT, () => {
   console.log(`\nYTP Archive Dashboard — server avviato`);
   console.log(`  URL:      http://localhost:${PORT}`);
-  console.log(`  Docs:     ${DOCS_DIR}`);
+  console.log(`  Public:   ${PUBLIC_DIR}`);
+  console.log(`  DB:       ${DB_DIR}`);
   console.log();
 });

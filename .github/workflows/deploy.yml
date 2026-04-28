@@ -1,0 +1,47 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: ["main"] # Change this to your default branch name if it's different
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps: deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Prepare Deployment Artifact
+        run: |
+          mkdir _site
+          cp -r public/* _site/
+          mkdir -p _site/db
+          cp -r db/* _site/db/
+          # Optional: handle large files or exclusions here
+          rm -rf _site/db/videos # Remove if you don't want to host videos on GH Pages
+          rm -rf _site/db/sources # Remove if you don't want to host sources on GH Pages
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '_site'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
