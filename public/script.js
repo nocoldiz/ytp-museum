@@ -15,6 +15,7 @@ let currentVideoMode = "all"; // "all", "ytp", "sources"
 let sourceChannels = new Set();
 let allSearchIndex = [];    // [id, title, channel, year, views, dur, desc]
 let playbackMode = localStorage.getItem('ytp-playback-mode') || 'youtube'; 
+let subscriptions = JSON.parse(localStorage.getItem('ytp-subscriptions') || '[]');
 
 // DB Constants (Must be at top for initialization)
 const dbName = 'YTPArchiveDB';
@@ -398,6 +399,33 @@ function updatePlaybackToggleUI() {
   if (toggleM) toggleM.textContent = label;
 }
 
+function toggleSubscription(channelName) {
+  if (!channelName) return;
+  const index = subscriptions.indexOf(channelName);
+  if (index > -1) {
+    subscriptions.splice(index, 1);
+  } else {
+    subscriptions.push(channelName);
+  }
+  localStorage.setItem('ytp-subscriptions', JSON.stringify(subscriptions));
+  updateSubscribeButtons(channelName);
+}
+
+function updateSubscribeButtons(channelName) {
+  const isSubbed = subscriptions.includes(channelName);
+  const label = isSubbed ? 'Subscribed' : 'Subscribe';
+  document.querySelectorAll(`.btn-subscribe[data-channel="${escAttr(channelName)}"]`).forEach(btn => {
+    btn.textContent = label;
+    btn.classList.toggle('active', isSubbed);
+  });
+  // Also check video page button
+  const vSubBtn = document.getElementById('btn-subscribe-video');
+  if (vSubBtn && vSubBtn.dataset.channel === channelName) {
+    vSubBtn.textContent = label;
+    vSubBtn.classList.toggle('active', isSubbed);
+  }
+}
+
 // ─── NAVIGATION ──────────────────────────────────────────────────────────
 function showPage(name, pushToHistory = true) {
   if (pushToHistory) {
@@ -451,6 +479,9 @@ function showPage(name, pushToHistory = true) {
   }
   if (name === 'youtube') {
     renderHomePage();
+  }
+  if (name === 'subscriptions') {
+    renderSubscriptionsPage();
   }
   if (name === 'saved') {
     renderSavedPage();
@@ -994,12 +1025,22 @@ async function openVideo(vidId, pushToHistory = true) {
   if (viewsEl) viewsEl.textContent = views;
 
   document.getElementById('watch-channel-info').innerHTML = `
-    <img src="${avatar}" alt="Avatar" onclick="openProfile('${escAttr(channel)}')" style="cursor:pointer; border-radius:50%;">
+    <img src="${avatar}" alt="Avatar" onclick="openProfile('${escAttr(channel)}')" style="cursor:pointer; border-radius:50%;" loading="lazy">
     <div style="flex:1">
       <div id="watch-channel" style="font-weight:bold; cursor:pointer; font-size:1.1rem" onclick="openProfile('${escAttr(channel)}')">${escHtml(channel)}</div>
       <div id="watch-date" style="font-size:0.85rem; color:var(--text-muted)">${fmtDate(v.publish_date)}</div>
     </div>
   `;
+
+  // Setup Subscribe button for video page
+  const vSubBtn = document.getElementById('btn-subscribe-video');
+  if (vSubBtn) {
+    vSubBtn.dataset.channel = channel;
+    const isSubbed = subscriptions.includes(channel);
+    vSubBtn.textContent = isSubbed ? 'Subscribed' : 'Subscribe';
+    vSubBtn.classList.toggle('active', isSubbed);
+    vSubBtn.onclick = () => toggleSubscription(channel);
+  }
 
   let desc = v.description || 'No description available.';
   let tagsHtml = '';
@@ -1067,7 +1108,7 @@ async function openVideo(vidId, pushToHistory = true) {
       if (x.channel_name !== v.channel_name || x.id === v.id) return false;
       if (!x.publish_date) return globalMaxYear === currentYear;
       return parseInt(x.publish_date.slice(0, 4)) <= globalMaxYear;
-    }).slice(0, 5);
+    }).slice(0, 10);
     moreContainer.innerHTML = moreVids.map(x => renderVideoItem(x, 'list')).join('');
   }
   updateSaveButton(vidId);
@@ -1121,7 +1162,7 @@ function loadRelatedVideos(video) {
 
   // Score based on shared sections and tags
   const scored = ytData
-    .filter(v => v.id !== video.id)
+    .filter(v => v.id !== video.id && v.channel_name !== video.channel_name)
     .map(v => {
       let score = 0;
       if (v.sections) {
@@ -1134,9 +1175,6 @@ function loadRelatedVideos(video) {
           if (videoTags.has(t)) score += 2;
         });
       }
-      // Boost same channel slightly but not too much as they are already in "More from channel"
-      if (v.channel_name === video.channel_name) score += 1;
-
       return { video: v, score };
     })
     .filter(r => r.score > 0)
@@ -1255,9 +1293,14 @@ function openProfile(user, pushToHistory = true) {
 
   document.getElementById('profile-header').innerHTML = `
     <div style="display:flex; align-items:center; gap:24px;">
-      <img src="${avatar}" style="width:100px; height:100px; border-radius:50%; border:4px solid var(--border); object-fit:cover;">
-      <div>
-        <h2 id="profile-title" style="margin:0; font-size:2rem;">${escHtml(user)}</h2>
+      <img src="${avatar}" style="width:100px; height:100px; border-radius:50%; border:4px solid var(--border); object-fit:cover;" loading="lazy">
+      <div style="flex:1">
+        <div style="display:flex; align-items:center; gap:15px;">
+          <h2 id="profile-title" style="margin:0; font-size:2rem;">${escHtml(user)}</h2>
+          <button class="btn-subscribe btn-thread" data-channel="${escAttr(user)}" onclick="toggleSubscription('${escAttr(user)}')" style="padding:6px 15px; font-weight:bold;">
+            ${subscriptions.includes(user) ? 'Subscribed' : 'Subscribe'}
+          </button>
+        </div>
         <div id="profile-stats" style="margin-top:8px; color:var(--text-muted); line-height:1.4;">
           <strong>${userVideos.length}</strong> videos • 
           <strong>${fmtNum(userVideos.reduce((sum, v) => sum + (v.view_count || 0), 0))}</strong> total views<br>
@@ -1398,8 +1441,8 @@ function renderModernGrid() {
   let videos;
   if (currentModernTab === 'featured') {
     videos = shuffleArray(validVideos).slice(0, 24);
-  } else if (currentModernTab === 'downloaded') {
-    videos = shuffleArray(validVideos.filter(v => v.status === 'downloaded')).slice(0, 24);
+  } else if (currentModernTab === 'subscriptions') {
+    videos = shuffleArray(validVideos.filter(v => subscriptions.includes(v.channel_name))).slice(0, 24);
   } else if (currentModernTab === 'views') {
     videos = [...validVideos].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 24);
   } else if (currentModernTab === 'discussed') {
