@@ -15,32 +15,14 @@ ytpbackup/
 ├── scripts/
 │   ├── forum_scraper.py    # Downloads forum sections, index pages, threads
 │   ├── ytp_scraper.py      # Scans for YouTube links and downloads videos
-│   ├── compress_videos.py  # Video compression tool
-│   └── compress_pages.py   # HTML compression tool
-
-├── server.js           # Main router & Dashboard server
-├── server_forum.js     # Legacy Forum Mirror logic
-├── package.json
-├── docs/               # JSON indexes and web dashboard
-├── videos/             # Downloaded YouTube videos organized by channel
-│   ├── Sources/        # Source videos for YTPs, not organized by channel
-│   ├── despotaaa/
-│   ├── ZioTok83/
-│   └── bassman85x/
-│       └── Youtube Poop ： Mondo Emo (La parodia che ha dato inizio a TUTTO) - 6qXBHVssbg0.mkv
-└── site_mirror/
-    ├── Home.html
-    ├── .scraper_state.json
-    ├── Risorse/
-    │   ├── index/
-    │   │   ├── Risorse.html
-    │   │   ├── Risorse - pagina 2.html
-    │   │   └── …
-    │   ├── 64123456_Thread title.html        ← single-page thread
-    │   └── 64123457_Another thread/          ← multi-page thread
-    │       ├── page_1.html
-    │       └── page_2.html
-    └── … (one folder per section)
+│   └── ...
+├── public/                 # NEW: Frontend assets (HTML, JS, CSS)
+├── db/                     # NEW: Data indices and metadata JSONs
+├── videos/                 # Symlink to db/videos (Downloaded YouTube videos)
+├── site_mirror/            # Forum HTML mirror
+├── server.js               # Main router & Dashboard server
+├── server_forum.js         # Legacy Forum Mirror logic
+└── package.json
 ```
 ---
 
@@ -50,7 +32,7 @@ ytpbackup/
 The main entry point for the YTP Archive. It serves the interactive dashboard, search interface, and local video playback.
 
 > [!NOTE]
-> The dashboard (`docs/index.html`) is designed to work in two modes:
+> The dashboard (`public/index.html`) is designed to work in two modes:
 > - **Static Mode**: Can be viewed by opening the file directly or via GitHub Pages. It allows browsing the archive and watching videos via YouTube.
 > - **Server Mode**: When running via `npm start`, it enables **local video playback** (for archived videos) and **management features** (flagging sources, banning videos).
 
@@ -61,6 +43,26 @@ npm start
 ```
 
 Runs on [http://localhost:3000](http://localhost:3000) by default.
+
+---
+
+## Deployment
+
+This project is configured to be served via a Node.js server (`server.js`) for full functionality (management features, local video streaming).
+
+### GitHub Pages (Static Mode)
+
+If you wish to deploy the dashboard as a static site to GitHub Pages:
+
+1.  Go to your Repository **Settings**.
+2.  Navigate to **Pages** in the sidebar.
+3.  Under **Build and deployment > Source**, select **GitHub Actions**.
+4.  Push your code to the `main` branch.
+
+The included GitHub Action (`.github/workflows/deploy.yml`) will automatically bundle the `public/` and `db/` folders and deploy them.
+
+> [!NOTE]
+> Management features (Banning, Importing) and the Forum Mirror will not work on GitHub Pages as they require the Node.js backend.
 
 ---
 
