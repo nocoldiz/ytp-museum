@@ -8,7 +8,7 @@ from threading import Lock
 # --- CONFIGURATION ---
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
-VIDEO_DIR = PROJECT_ROOT / "videos"
+VIDEO_DIR = PROJECT_ROOT / "db" / "videos"
 CACHE_FILE = SCRIPT_DIR / "converted_cache.json"
 MAX_WORKERS = 2 
 
@@ -96,7 +96,7 @@ def main():
     all_files = [f for f in VIDEO_DIR.rglob("*") if f.suffix.lower() in EXTENSIONS]
     
     # Filter out already processed files
-    video_files = [f for f in all_files if f.name not in processed_cache]
+    video_files = [f for f in all_files if f.name not in converted_cache]
     
     skipped_count = len(all_files) - len(video_files)
     if skipped_count > 0:

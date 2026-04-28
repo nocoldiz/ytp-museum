@@ -6,8 +6,8 @@ import math
 
 # Paths
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-VIDEO_INDEX_PATH = os.path.join(BASE_DIR, 'docs', 'video_index.json')
-VIDEOS_DIR = os.path.join(BASE_DIR, 'videos')
+VIDEO_INDEX_PATH = os.path.join(BASE_DIR, 'db', 'video_index.json')
+VIDEOS_DIR = os.path.join(BASE_DIR, 'db', 'videos')
 ITALIAN_DEST_DIR = os.path.join(BASE_DIR, 'italian_videos')
 
 def load_json(path):

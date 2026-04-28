@@ -981,6 +981,7 @@ PROJECT_ROOT = SCRIPT_PATH.parent.parent if SCRIPT_PATH.parent.name == "scripts"
 DEFAULT_SITE_DIR = str(PROJECT_ROOT / "site_mirror")
 DEFAULT_VIDEO_DIR = str(PROJECT_ROOT / "db" / "videos")
 DEFAULT_DOCS_DIR = str(PROJECT_ROOT / "db")
+DEFAULT_SOURCES_DIR = str(PROJECT_ROOT / "sources")
 
 DEFAULT_FORMAT = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
 
@@ -2303,7 +2304,7 @@ def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed):
             ch_name = e.get("channel_name")
             folder_name = safe_filename(ch_name) if ch_name else "Unknown Channel"
             # Target directory is ./sources/[channel_name]
-            out_dir = os.path.join(os.path.dirname(os.path.abspath(index.filepath)), "..", "sources", folder_name)
+            out_dir = os.path.join(DEFAULT_SOURCES_DIR, folder_name)
             os.makedirs(out_dir, exist_ok=True)
             # -------------------------------------------------------
             

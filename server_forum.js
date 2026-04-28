@@ -26,12 +26,12 @@ const { spawn }   = require('child_process');
 const PORT        = parseInt(process.env.PORT || '3000', 10);
 const SITE_MIRROR = path.join(__dirname, 'site_mirror');
 const STATE_FILE  = path.join(SITE_MIRROR, '.scraper_state.json');
-const SCRAPER     = path.join(__dirname, 'scraper.py');
+const SCRAPER     = path.join(__dirname, 'scripts', 'forum_scraper.py');
 const BASE_DOMAIN = 'youtubepoopita.forumfree.it';
 const VIDEO_INDEX = path.join(__dirname, 'db', 'video_index.json');
 const EXCLUDED_VIDEOS = path.join(__dirname, 'db', 'excluded_videos.json');
 const SOURCES_INDEX = path.join(__dirname, 'db', 'sources_index.json');
-const VIDEOS_DIR  = path.join(__dirname, 'videos');
+const VIDEOS_DIR  = path.join(__dirname, 'db', 'videos');
 const SOURCES_DIR = path.join(__dirname, 'sources');
 
 // ─── Video Management Logic ──────────────────────────────────────────────────

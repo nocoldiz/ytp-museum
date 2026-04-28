@@ -430,6 +430,9 @@ function setAspectRatio(ratio, save = true) {
   if (save) {
     const isOld = document.body.classList.contains('theme-old');
     localStorage.setItem(isOld ? 'aspectRatioOld' : 'aspectRatioModern', ratio);
+    
+    // Re-render the current view to apply structural layout changes
+    handleRouting();
   }
 }
 
@@ -881,6 +884,10 @@ async function openVideo(vidId, pushToHistory = true) {
 
   document.getElementById('watch-title').textContent = title;
   const avatar = getChannelAvatar(channel);
+  const views = v.view_count != null ? fmtNum(v.view_count) : '0';
+  const viewsEl = document.getElementById('watch-views-count');
+  if (viewsEl) viewsEl.textContent = views;
+
   document.getElementById('watch-channel-info').innerHTML = `
     <img src="${avatar}" alt="Avatar" onclick="openProfile('${escAttr(channel)}')" style="cursor:pointer; border-radius:50%;">
     <div style="flex:1">
@@ -1556,11 +1563,15 @@ function renderVideoItem(v, mode = 'list') {
   const starBadge = isFirst ? `<span class="tl-star" title="First upload by ${escAttr(channel)}">★</span> ` : '';
   const avatar = getChannelAvatar(channel);
 
+  const is169 = document.body.classList.contains('aspect-ratio-16-9');
+
   if (mode === 'grid') {
-    const isOld = document.body.classList.contains('theme-old');
-    if (!isOld) {
+    // If 16:9 selected, use modern card regardless of theme
+    if (is169) {
       return renderModernHomeCard(v);
     }
+
+    // Classic Grid Layout (for 4:3)
     return `
     <div class="video-item grid">
       <a href="#" onclick="event.preventDefault(); event.stopPropagation(); openVideo('${v.id}')" class="video-thumb">
@@ -1581,8 +1592,8 @@ function renderVideoItem(v, mode = 'list') {
   }
 
   if (mode === 'list') {
-    const isOld = document.body.classList.contains('theme-old');
-    if (!isOld) {
+    // If 16:9 selected, use modern list style regardless of theme
+    if (is169) {
       return `
         <div class="video-item modern-list" onclick="openVideo('${v.id}')">
           <div class="modern-list-thumb">
@@ -1605,6 +1616,7 @@ function renderVideoItem(v, mode = 'list') {
         </div>`;
     }
 
+    // Classic List Layout (for 4:3)
     return `
     <div class="video-item list" onclick="openVideo('${v.id}')" style="cursor:pointer;">
       <div class="yt-list-thumb">

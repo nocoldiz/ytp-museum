@@ -5,9 +5,9 @@ import re
 
 # Paths
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SOURCES_INDEX_PATH = os.path.join(BASE_DIR, 'docs', 'sources_index.json')
-VIDEO_INDEX_PATH = os.path.join(BASE_DIR, 'docs', 'video_index.json')
-VIDEOS_DIR = os.path.join(BASE_DIR, 'videos')
+SOURCES_INDEX_PATH = os.path.join(BASE_DIR, 'db', 'sources_index.json')
+VIDEO_INDEX_PATH = os.path.join(BASE_DIR, 'db', 'video_index.json')
+VIDEOS_DIR = os.path.join(BASE_DIR, 'db', 'videos')
 SOURCES_DIR = os.path.join(BASE_DIR, 'sources')
 
 def load_json(path):
@@ -69,18 +69,21 @@ def main():
         
         # Determine destination
         if video_id in sources_index:
-            dest_dir = SOURCES_DIR
+            video_data = sources_index[video_id]
+            base_dest = SOURCES_DIR
         else:
             video_data = video_index.get(video_id)
-            author = "Unknown Channel"
-            if video_data and 'channel_name' in video_data:
-                author = video_data['channel_name']
+            base_dest = VIDEOS_DIR
+
+        author = "Unknown Channel"
+        if video_data and 'channel_name' in video_data:
+            author = video_data['channel_name']
+        
+        author_folder = "".join([c for c in author if c.isalnum() or c in (' ', '.', '_', '-')]).strip()
+        if not author_folder:
+            author_folder = "Unknown Channel"
             
-            author_folder = "".join([c for c in author if c.isalnum() or c in (' ', '.', '_', '-')]).strip()
-            if not author_folder:
-                author_folder = "Unknown Channel"
-                
-            dest_dir = os.path.join(VIDEOS_DIR, author_folder)
+        dest_dir = os.path.join(base_dest, author_folder)
             
         # Check if file is already at destination
         if os.path.abspath(src_path) == os.path.abspath(os.path.join(dest_dir, filename)):
