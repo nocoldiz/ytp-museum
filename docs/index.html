@@ -257,10 +257,27 @@
         <div class="page-loader">
           <div class="spinner"></div>Searching archive...
         </div>
-        <div class="box">
-          <div class="box-header">Search Results for "<span id="search-query-display"></span>"</div>
-          <div class="box-content">
-            <div id="search-filter-bar" class="search-bar search-advanced-filters">
+
+        <div class="search-header-modern">
+          <div class="search-title">Search Results for "<span id="search-query-display"></span>"</div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div class="view-toggle" style="margin-right: 8px;">
+              <button id="btn-search-view-list" class="view-btn active" onclick="setSearchViewMode('list')" title="List View">≡</button>
+              <button id="btn-search-view-grid" class="view-btn" onclick="setSearchViewMode('grid')" title="Grid View">⊞</button>
+            </div>
+            <button class="filters-toggle-btn" onclick="toggleFilters()">
+              <svg viewBox="0 0 24 24" style="width:20px; height:20px; fill:currentColor;">
+                <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"></path>
+              </svg>
+              <span>Filters</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="search-results-main">
+          <div id="search-filter-bar" class="search-bar search-advanced-filters">
+            <div class="filter-group-modern theme-old-only">
+              <label>Status</label>
               <select id="search-filter-status"
                 onchange="performSearch(document.getElementById('global-search-input').value)">
                 <option value="">All statuses</option>
@@ -268,12 +285,17 @@
                 <option value="pending">Pending</option>
                 <option value="unavailable">Unavailable</option>
               </select>
+            </div>
+            <div class="filter-group-modern theme-old-only">
+              <label>Section</label>
               <select id="search-filter-section"
                 onchange="performSearch(document.getElementById('global-search-input').value)">
                 <option value="">All sections</option>
               </select>
+            </div>
+            <div class="filter-group-modern theme-old-only">
+              <label>Years</label>
               <div class="range-group" style="display:flex; align-items:center; gap:5px;">
-                <label style="font-size:12px; color:var(--text-muted);">Years:</label>
                 <select id="search-filter-year-min"
                   onchange="performSearch(document.getElementById('global-search-input').value)">
                   <option value="">Min</option>
@@ -284,6 +306,9 @@
                   <option value="">Max</option>
                 </select>
               </div>
+            </div>
+            <div class="filter-group-modern theme-old-only">
+              <label>Language</label>
               <select id="search-filter-language"
                 onchange="performSearch(document.getElementById('global-search-input').value)">
                 <option value="any">Any language</option>
@@ -294,22 +319,31 @@
                 <option value="french">🇫🇷 French</option>
                 <option value="german">🇩🇪 German</option>
               </select>
-              <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
-                <label>Sort:</label>
-                <select id="search-sort" onchange="performSearch(document.getElementById('global-search-input').value)">
-                  <option value="relevance">Relevance</option>
-                  <option value="publish_date">Newest</option>
-                  <option value="view_count">Most Viewed</option>
-                </select>
+            </div>
+            <div class="filter-group-modern theme-old-only" style="margin-left: auto;">
+              <label>Sort</label>
+              <select id="search-sort" onchange="performSearch(document.getElementById('global-search-input').value)">
+                <option value="relevance">Relevance</option>
+                <option value="publish_date">Newest</option>
+                <option value="view_count">Most Viewed</option>
+              </select>
+            </div>
+            <div class="filter-group-modern theme-old-only" style="margin-left: 15px;">
+              <label>View</label>
+              <div class="view-toggle">
+                <button id="btn-search-view-list-old" class="view-btn active" onclick="setSearchViewMode('list')" title="List View">≡</button>
+                <button id="btn-search-view-grid-old" class="view-btn" onclick="setSearchViewMode('grid')" title="Grid View">⊞</button>
               </div>
             </div>
-            <div id="search-channels-section">
-              <h3 style="margin-bottom: 15px; color: var(--text);">Channels</h3>
-              <div id="search-channels-results" style="margin-bottom: 30px;"></div>
-            </div>
-            <h3 style="margin-bottom: 15px; color: var(--text);">Videos</h3>
-            <div id="search-videos-results"></div>
           </div>
+
+          <div id="search-channels-section" style="display:none;">
+            <h3 class="theme-old-only" style="margin-bottom: 15px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Channels</h3>
+            <div id="search-channels-results" style="margin-bottom: 30px;"></div>
+          </div>
+          
+          <h3 class="theme-old-only" style="margin-bottom: 15px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Videos</h3>
+          <div id="search-videos-results"></div>
         </div>
       </div>
 
@@ -411,7 +445,7 @@
           </div>
           <div class="view-toggle" style="margin-left: auto;">
             <button id="btn-view-table" class="view-btn active" onclick="setViewMode('table')"
-              title="Table View">≡</button>
+              title="List View">≡</button>
             <button id="btn-view-grid" class="view-btn" onclick="setViewMode('grid')" title="Grid View">⊞</button>
           </div>
         </div>

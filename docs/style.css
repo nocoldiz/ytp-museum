@@ -23,6 +23,10 @@
     --masthead-nav-active-text: #ffffff;
   }
 
+  .theme-old-only { display: none !important; }
+  body.theme-old .theme-old-only { display: block !important; }
+  body.theme-old .theme-modern-only { display: none !important; }
+
   body.theme-light {
     --bg: #f9fafb;
     --surface: #ffffff;
@@ -1338,6 +1342,110 @@
   }
 
   /* ── Modern Search Result List Card ── */
+  .search-header-modern {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  body.theme-old .search-header-modern {
+    display: none;
+  }
+
+  .search-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+  }
+
+  .filters-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 6px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+
+  .filters-toggle-btn:hover {
+    background: var(--surface2);
+    border-color: var(--text-muted);
+  }
+
+  .search-advanced-filters {
+    display: none; /* Hidden by default in modern mode */
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 20px;
+    padding: 16px 0;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+    background: transparent !important;
+    border: none !important;
+  }
+
+  body:not(.theme-old) .search-advanced-filters.active {
+    display: grid;
+  }
+
+  body.theme-old .search-advanced-filters {
+    display: flex !important;
+    background: var(--surface2) !important;
+    border: 1px solid var(--border) !important;
+    padding: 8px 12px !important;
+    border-radius: 0 !important;
+  }
+
+  .filter-group-modern {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .filter-group-modern label {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--text);
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  .filter-item-modern {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px 0;
+  }
+
+  .filter-item-modern:hover {
+    color: var(--text);
+  }
+
+  .filter-item-modern.active {
+    color: var(--text);
+    font-weight: 700;
+  }
+
+  .search-results-main h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin: 32px 0 16px 0;
+    color: var(--text);
+  }
+
+  body.theme-old .search-results-main h3 {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 8px;
+    margin-top: 20px;
+  }
+
   .video-item.modern-list {
     display: flex;
     gap: 16px;
@@ -1373,6 +1481,99 @@
 
   .video-item.modern-list:hover .modern-list-thumb img {
     transform: scale(1.02);
+  }
+
+  .video-item.modern-list:hover .modern-list-thumb img {
+    transform: scale(1.02);
+  }
+
+  /* ── Modern Channel Search Result ── */
+  .channel-card.modern-search {
+    display: flex;
+    padding: 16px 0;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+  }
+
+  .ch-card-main-modern {
+    display: flex;
+    align-items: center;
+    gap: 60px;
+    width: 100%;
+    padding: 0 40px;
+  }
+
+  @media (max-width: 800px) {
+    .ch-card-main-modern {
+      gap: 20px;
+      padding: 0;
+    }
+  }
+
+  .ch-avatar-modern {
+    width: 136px;
+    height: 136px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .ch-info-modern {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ch-name-modern {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .ch-stats-modern {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  .ch-desc-modern {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    max-width: 600px;
+  }
+
+  .ch-actions-modern {
+    display: flex;
+    gap: 12px;
+    margin-top: 8px;
+  }
+
+  .btn-subscribe-modern {
+    background: var(--text);
+    color: var(--bg);
+    border: none;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+
+  .btn-visit-modern {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-decoration: none;
+    cursor: pointer;
+  }
+
+  .btn-visit-modern:hover {
+    background: var(--border);
   }
 
   .modern-list-info {

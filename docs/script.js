@@ -803,7 +803,8 @@ function performSearch(query) {
   if (scoredVideos.length === 0) {
     videosContainer.innerHTML = '<p class="empty" style="padding:10px;">No videos found matching your criteria.</p>';
   } else {
-    videosContainer.innerHTML = scoredVideos.slice(0, 50).map(r => renderVideoItem(r.video, 'list')).join('');
+    videosContainer.classList.toggle('video-grid', searchViewMode === 'grid');
+    videosContainer.innerHTML = scoredVideos.slice(0, 50).map(r => renderVideoItem(r.video, searchViewMode)).join('');
   }
 }
 
@@ -1410,7 +1411,32 @@ function renderVideoItem(v, mode = 'list') {
     </div>`;
   }
 
-  return `
+  if (mode === 'list') {
+    const isOld = document.body.classList.contains('theme-old');
+    if (!isOld) {
+      return `
+        <div class="video-item modern-list" onclick="openVideo('${v.id}')">
+          <div class="modern-list-thumb">
+            <img src="${thumbUrl}" alt="" loading="lazy">
+            ${dur ? `<span class="video-time">${escHtml(dur)}</span>` : ''}
+          </div>
+          <div class="modern-list-info">
+            <h3 class="modern-list-title">${starBadge}${escHtml(title)}</h3>
+            <div class="modern-list-meta">
+              ${views ? `<span>${views}</span>` : ''}
+              <span class="dot-sep">•</span>
+              <span>${fmtDate(v.publish_date)}</span>
+            </div>
+            <div class="modern-list-channel" onclick="event.stopPropagation(); openProfile('${escAttr(channel)}')">
+              <img src="${avatar}" alt="">
+              <span>${escHtml(channel)}</span>
+            </div>
+            <div class="modern-list-desc">${escHtml(desc)}</div>
+          </div>
+        </div>`;
+    }
+
+    return `
     <div class="video-item list" onclick="openVideo('${v.id}')" style="cursor:pointer;">
       <div class="yt-list-thumb">
         <a href="#" onclick="event.preventDefault(); event.stopPropagation(); openVideo('${v.id}')">
@@ -1431,6 +1457,7 @@ function renderVideoItem(v, mode = 'list') {
         </div>
       </div>
     </div>`;
+  }
 }
 
 // ─── FILTER OPTIONS ───────────────────────────────────────────────────────
@@ -1480,6 +1507,7 @@ let sortField = 'publish_date';
 let sortDir = 1;
 let scrollObserver = null;
 let viewMode = 'table';
+let searchViewMode = 'list';
 
 function setViewMode(mode) {
   viewMode = mode;
@@ -1488,6 +1516,22 @@ function setViewMode(mode) {
   document.getElementById('video-table-wrap').style.display = mode === 'table' ? 'block' : 'none';
   document.getElementById('video-grid').style.display = mode === 'grid' ? 'grid' : 'none';
   renderTable(false);
+}
+
+function setSearchViewMode(mode) {
+  searchViewMode = mode;
+  const btnList = document.getElementById('btn-search-view-list');
+  const btnGrid = document.getElementById('btn-search-view-grid');
+  const btnListOld = document.getElementById('btn-search-view-list-old');
+  const btnGridOld = document.getElementById('btn-search-view-grid-old');
+
+  if (btnList) btnList.classList.toggle('active', mode === 'list');
+  if (btnGrid) btnGrid.classList.toggle('active', mode === 'grid');
+  if (btnListOld) btnListOld.classList.toggle('active', mode === 'list');
+  if (btnGridOld) btnGridOld.classList.toggle('active', mode === 'grid');
+
+  const q = document.getElementById('global-search-input').value.trim();
+  if (q) performSearch(q);
 }
 
 function loadFacade(id) {

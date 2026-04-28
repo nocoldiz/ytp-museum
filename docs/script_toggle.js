@@ -21,7 +21,31 @@ function renderChannelCard(c, mode = 'grid') {
     url = c.url || `https://www.youtube.com/${name.startsWith('@') ? name : '@' + name}`;
   }
 
+  const isOld = document.body.classList.contains('theme-old');
   const isSelected = typeof selectedChannel !== 'undefined' && selectedChannel === name;
+  
+  if (mode === 'search' && !isOld) {
+    return `
+      <div class="channel-card modern-search" onclick="event.stopPropagation(); openProfile('${escAttr(name)}')">
+        <div class="ch-card-main-modern">
+          <img src="${avatar}" class="ch-avatar-modern">
+          <div class="ch-info-modern">
+            <h4 class="ch-name-modern">${escHtml(name)}</h4>
+            <div class="ch-stats-modern">
+              <span>${videosCount} videos</span>
+              <span class="dot-sep">•</span>
+              ${viewsCount ? `<span>${fmtNum(viewsCount)} views</span>` : ''}
+            </div>
+            <div class="ch-desc-modern">Official channel for ${escHtml(name)} archival data.</div>
+            <div class="ch-actions-modern">
+              <button class="btn-subscribe-modern" onclick="event.stopPropagation(); selectChannel('${escAttr(name)}')">Analytics</button>
+              <a class="btn-visit-modern" href="${url}" target="_blank" onclick="event.stopPropagation()">YouTube</a>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
   const cardClass = mode === 'search' ? 'channel-card search-channel-card' : 'channel-card' + (isSelected ? ' selected' : '');
   const avatarClass = mode === 'search' ? 'ch-card-avatar' : 'ch-card-avatar large';
 
@@ -43,4 +67,8 @@ function renderChannelCard(c, mode = 'grid') {
         <a class="btn-card-action" href="${url}" target="_blank" onclick="event.stopPropagation()">YouTube</a>
       </div>
     </div>`;
+}
+function toggleFilters() {
+  const bar = document.getElementById('search-filter-bar');
+  if (bar) bar.classList.toggle('active');
 }
