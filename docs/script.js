@@ -1337,17 +1337,69 @@ function renderStars(viewCount) {
 }
 
 // ─── IMPORT LOGIC ──────────────────────────────────────────────────────────
+let currentImportMode = 'mass';
+
 function openImportModal() {
   const modal = document.getElementById('import-modal');
-  if (modal) modal.style.display = 'flex';
+  if (modal) {
+    modal.style.display = 'flex';
+    toggleImportMode('mass'); // Reset to mass by default
+    
+    // Populate uploader datalist
+    const uploaderDl = document.getElementById('uploader-channel-datalist');
+    const mainDl = document.getElementById('channel-datalist');
+    if (uploaderDl && mainDl) {
+      uploaderDl.innerHTML = mainDl.innerHTML;
+    }
+  }
 }
 
 function closeImportModal() {
   const modal = document.getElementById('import-modal');
   if (modal) modal.style.display = 'none';
+  
+  // Reset progress
+  document.getElementById('upload-progress-container').style.display = 'none';
+  document.getElementById('upload-progress-bar').style.width = '0%';
+  document.getElementById('btn-import-submit').disabled = false;
+}
+
+function toggleImportMode(mode) {
+  currentImportMode = mode;
+  const formMass = document.getElementById('form-import-mass');
+  const formSingle = document.getElementById('form-import-single');
+  const tabMass = document.getElementById('tab-import-mass');
+  const tabSingle = document.getElementById('tab-import-single');
+  const submitBtn = document.getElementById('btn-import-submit');
+
+  if (mode === 'mass') {
+    formMass.style.display = 'block';
+    formSingle.style.display = 'none';
+    tabMass.classList.add('active');
+    tabMass.style.color = 'var(--text)';
+    tabSingle.classList.remove('active');
+    tabSingle.style.color = 'var(--text-muted)';
+    submitBtn.innerText = 'Import';
+  } else {
+    formMass.style.display = 'none';
+    formSingle.style.display = 'block';
+    tabMass.classList.remove('active');
+    tabMass.style.color = 'var(--text-muted)';
+    tabSingle.classList.add('active');
+    tabSingle.style.color = 'var(--text)';
+    submitBtn.innerText = 'Upload & Import';
+  }
 }
 
 async function submitImport() {
+  if (currentImportMode === 'mass') {
+    await submitMassImport();
+  } else {
+    await submitSingleUpload();
+  }
+}
+
+async function submitMassImport() {
   const urlsText = document.getElementById('import-urls').value;
   const target = document.getElementById('import-target').value;
 
@@ -1377,6 +1429,88 @@ async function submitImport() {
   } catch (e) {
     alert("Failed to connect to server.");
   }
+}
+
+async function submitSingleUpload() {
+  const fileInput = document.getElementById('upload-file');
+  const title = document.getElementById('upload-title').value.trim();
+  const channel = document.getElementById('upload-channel').value.trim() || 'Unknown';
+  const type = document.getElementById('upload-type').value;
+  const id = document.getElementById('upload-id').value.trim();
+  const channelUrl = document.getElementById('upload-channel-url').value.trim();
+  const date = document.getElementById('upload-date').value;
+  const lang = document.getElementById('upload-lang').value;
+  const tags = document.getElementById('upload-tags').value.split(',').map(s => s.trim()).filter(Boolean);
+
+  if (!fileInput.files.length) {
+    alert("Please select a video file.");
+    return;
+  }
+  if (!title) {
+    alert("Please enter a title.");
+    return;
+  }
+  if (!type) {
+    alert("Please select a video type (YTP or Other).");
+    return;
+  }
+
+  const file = fileInput.files[0];
+  const submitBtn = document.getElementById('btn-import-submit');
+  const progressContainer = document.getElementById('upload-progress-container');
+  const progressBar = document.getElementById('upload-progress-bar');
+  const progressText = document.getElementById('upload-progress-text');
+
+  submitBtn.disabled = true;
+  progressContainer.style.display = 'flex';
+
+  // Use XMLHttpRequest for progress tracking
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/upload');
+
+  // Set metadata in headers (encoded to handle special characters)
+  xhr.setRequestHeader('X-Video-Title', encodeURIComponent(title));
+  xhr.setRequestHeader('X-Video-Channel-Name', encodeURIComponent(channel));
+  xhr.setRequestHeader('X-Video-Channel-URL', encodeURIComponent(channelUrl));
+  xhr.setRequestHeader('X-Video-Type', type);
+  xhr.setRequestHeader('X-Video-ID', encodeURIComponent(id));
+  xhr.setRequestHeader('X-Video-Date', date);
+  xhr.setRequestHeader('X-Video-Lang', lang);
+  xhr.setRequestHeader('X-Video-Tags', encodeURIComponent(JSON.stringify(tags)));
+  xhr.setRequestHeader('X-File-Name', encodeURIComponent(file.name));
+
+  xhr.upload.onprogress = (e) => {
+    if (e.lengthComputable) {
+      const pct = Math.round((e.loaded / e.total) * 100);
+      progressBar.style.width = pct + '%';
+      progressText.innerText = pct + '%';
+    }
+  };
+
+  xhr.onload = () => {
+    submitBtn.disabled = false;
+    let result;
+    try {
+      result = JSON.parse(xhr.responseText);
+    } catch (e) {
+      result = { success: false, error: "Invalid server response" };
+    }
+
+    if (xhr.status === 200 && result.success) {
+      alert("Video uploaded and indexed successfully!");
+      closeImportModal();
+      location.reload();
+    } else {
+      alert("Upload failed: " + (result.error || "Unknown error"));
+    }
+  };
+
+  xhr.onerror = () => {
+    submitBtn.disabled = false;
+    alert("Connection error during upload.");
+  };
+
+  xhr.send(file);
 }
 
 function renderVideoItem(v, mode = 'list') {

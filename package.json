@@ -1,0 +1,14 @@
+{
+  "name": "ytpbackup-server",
+  "version": "1.0.0",
+  "description": "Local mirror server for the YouTube Poop Italian Forum",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "forum": "node server_forum.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

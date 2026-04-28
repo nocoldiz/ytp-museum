@@ -589,25 +589,91 @@
 
   <!-- IMPORT MODAL -->
   <div id="import-modal" class="modal-overlay" style="display:none;">
-    <div class="modal-content">
+    <div class="modal-content" style="width: 600px;">
       <div class="modal-header">
-        <h3>Import YouTube Videos</h3>
+        <h3 id="import-modal-title">Import Videos</h3>
         <button onclick="closeImportModal()">&times;</button>
       </div>
       <div class="modal-body">
-        <p>Paste YouTube video links below (one per line or comma-separated):</p>
-        <textarea id="import-urls" placeholder="https://www.youtube.com/watch?v=..."></textarea>
-        <div style="margin-top: 15px;">
-          <label>Target Index:</label>
-          <select id="import-target">
-            <option value="videos">Videos Index</option>
-            <option value="sources">Other videos Index</option>
-          </select>
+        <div class="yt-tab-bar" style="margin-bottom: 20px; display: flex; gap: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
+          <a href="#" class="yt-tab active" id="tab-import-mass" onclick="toggleImportMode('mass'); return false;" style="font-weight: bold; color: var(--text);">Mass URL Import</a>
+          <a href="#" class="yt-tab" id="tab-import-single" onclick="toggleImportMode('single'); return false;" style="font-weight: bold; color: var(--text-muted);">Single File Upload</a>
+        </div>
+
+        <!-- Mass Import Form -->
+        <div id="form-import-mass">
+          <p style="margin-bottom: 10px; font-size: 14px; color: var(--text-muted);">Enter YouTube URLs (one per line, or separated by commas/spaces):</p>
+          <textarea id="import-urls" placeholder="https://www.youtube.com/watch?v=..."></textarea>
+          <div style="margin-top: 15px;">
+            <label style="font-size: 14px;">Target Index:</label>
+            <select id="import-target">
+              <option value="videos">Videos Index (video_index.json)</option>
+              <option value="sources">Sources Index (sources_index.json)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Single Upload Form -->
+        <div id="form-import-single" style="display: none;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div style="grid-column: span 2;">
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Video File *</label>
+              <input type="file" id="upload-file" accept="video/*" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+            </div>
+            <div>
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Title *</label>
+              <input type="text" id="upload-title" placeholder="Video Title" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+            </div>
+            <div>
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Channel Name *</label>
+              <input type="text" id="upload-channel" list="uploader-channel-datalist" placeholder="Unknown" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+              <datalist id="uploader-channel-datalist"></datalist>
+            </div>
+            <div>
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Video Type *</label>
+              <select id="upload-type" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-top: 0;">
+                <option value="">-- Select Type --</option>
+                <option value="ytp">YouTube Poop (YTP)</option>
+                <option value="other">Other Video (Source)</option>
+              </select>
+            </div>
+            <div>
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Video ID (optional)</label>
+              <input type="text" id="upload-id" placeholder="e.g. gZrBjgbL660" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+            </div>
+            <div>
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Channel URL (optional)</label>
+              <input type="text" id="upload-channel-url" placeholder="https://youtube.com/@..." style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+            </div>
+            <div>
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Publish Date (optional)</label>
+              <input type="date" id="upload-date" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+            </div>
+            <div>
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Language (optional)</label>
+              <select id="upload-lang" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-top: 0;">
+                <option value="">Unknown</option>
+                <option value="italian">Italian</option>
+                <option value="english">English</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Tags (optional, comma-separated)</label>
+              <input type="text" id="upload-tags" placeholder="tag1, tag2, ..." style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+            </div>
+          </div>
         </div>
       </div>
       <div class="modal-footer">
+        <div id="upload-progress-container" style="display: none; flex: 1; align-items: center; gap: 10px;">
+          <div style="flex: 1; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden;">
+            <div id="upload-progress-bar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.2s;"></div>
+          </div>
+          <span id="upload-progress-text" style="font-size: 12px; color: var(--text-muted);">0%</span>
+        </div>
         <button class="btn-cancel" onclick="closeImportModal()">Cancel</button>
-        <button class="btn-submit" onclick="submitImport()">Import</button>
+        <button class="btn-submit" id="btn-import-submit" onclick="submitImport()">Import</button>
       </div>
     </div>
   </div>
