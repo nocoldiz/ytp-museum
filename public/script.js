@@ -283,6 +283,16 @@ function initApp(vRaw, sRaw, pRaw) {
     renderHomePage();
   }
 
+  // Restore theme and aspect ratio
+  const lastMode = localStorage.getItem('lastThemeMode') || 'old';
+  if (lastMode === 'modern' && document.body.classList.contains('theme-old')) {
+    toggleThemeMode(); // This will also handle aspect ratio restoration
+  } else {
+    // Already in old mode, just restore its aspect ratio
+    const ratio = localStorage.getItem('aspectRatioOld') || '4-3';
+    setAspectRatio(ratio, false);
+  }
+
   handleRouting();
 }
 
@@ -408,11 +418,32 @@ function showPage(name, pushToHistory = true) {
 }
 
 
+function setAspectRatio(ratio, save = true) {
+  document.body.classList.remove('aspect-ratio-4-3', 'aspect-ratio-16-9');
+  document.body.classList.add('aspect-ratio-' + ratio);
+  
+  // Sync all selectors
+  document.querySelectorAll('.aspect-ratio-selector').forEach(sel => {
+    sel.value = ratio;
+  });
+
+  if (save) {
+    const isOld = document.body.classList.contains('theme-old');
+    localStorage.setItem(isOld ? 'aspectRatioOld' : 'aspectRatioModern', ratio);
+  }
+}
+
 // ─── THEME TOGGLES & SEARCH ────────────────────────────────────────────────
 function toggleThemeMode() {
   const isOld = document.body.classList.toggle('theme-old');
   const btn = document.getElementById('toggle-modern-old');
   if (btn) btn.textContent = isOld ? 'Switch to Modern Mode' : 'Switch to Old Mode';
+
+  localStorage.setItem('lastThemeMode', isOld ? 'old' : 'modern');
+
+  // Restore aspect ratio for this mode
+  const ratio = localStorage.getItem(isOld ? 'aspectRatioOld' : 'aspectRatioModern') || (isOld ? '4-3' : '16-9');
+  setAspectRatio(ratio, false);
 
   syncSearchLayout();
 

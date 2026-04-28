@@ -1152,15 +1152,25 @@
 
   .video-thumb img {
     width: 120px;
-    height: 90px;
+    height: auto;
+    aspect-ratio: 4/3;
     border: 2px solid var(--border);
     object-fit: cover;
   }
 
+  body.aspect-ratio-16-9 .video-thumb img {
+    aspect-ratio: 16/9;
+  }
+
   .video-item.grid .video-thumb img {
     width: 185px;
-    height: 138px;
+    height: auto;
+    aspect-ratio: 4/3;
     border: 1px solid var(--border);
+  }
+
+  body.aspect-ratio-16-9 .video-item.grid .video-thumb img {
+    aspect-ratio: 16/9;
   }
 
   .video-time {

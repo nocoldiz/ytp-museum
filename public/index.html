@@ -40,6 +40,13 @@
               style="color: inherit; border: none; background: transparent; padding: 0; font-size: 12px; cursor: pointer; outline: none; appearance: auto; font-weight: bold;"
               title="Limit videos up to this year"></select>
             <span class="theme-sep">|</span>
+            <select class="aspect-ratio-selector" onchange="setAspectRatio(this.value)"
+              style="color: inherit; border: none; background: transparent; padding: 0; font-size: 12px; cursor: pointer; outline: none; appearance: auto; font-weight: bold;"
+              title="Switch between 4:3 and 16:9 thumbnails">
+              <option value="4-3">4:3</option>
+              <option value="16-9">16:9</option>
+            </select>
+            <span class="theme-sep">|</span>
             <a href="#" class="btn-video-mode" onclick="toggleVideoMode(); return false;"
               style="color: inherit; border: none; padding: 0;">Show all videos</a> <span class="theme-sep">|</span>
             <a href="#" id="toggle-modern-old" onclick="toggleThemeMode(); return false;"
@@ -122,6 +129,13 @@
           <select id="modern-global-year-selector" onchange="setGlobalMaxYear(this.value)"
             style="color: inherit; border: none; background: transparent; padding: 0; font-size: 12px; cursor: pointer; outline: none; appearance: auto; font-weight: bold;"
             title="Limit videos up to this year"></select>
+          <span class="theme-sep">|</span>
+          <select class="aspect-ratio-selector" onchange="setAspectRatio(this.value)"
+            style="color: inherit; border: none; background: transparent; padding: 0; font-size: 12px; cursor: pointer; outline: none; appearance: auto; font-weight: bold;"
+            title="Switch between 4:3 and 16:9 thumbnails">
+            <option value="4-3">4:3</option>
+            <option value="16-9">16:9</option>
+          </select>
           <span class="theme-sep">|</span>
           <a href="#" class="btn-video-mode" onclick="toggleVideoMode(); return false;">Show all videos</a>
           <a href="#" onclick="toggleThemeMode(); return false;">Switch to Old Mode</a>
