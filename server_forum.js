@@ -23,7 +23,7 @@ const { URL }     = require('url');
 const { spawn }   = require('child_process');
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const PORT        = parseInt(process.env.PORT || '3000', 10);
+const PORT        = parseInt(process.env.PORT || '3001', 10);
 const SITE_MIRROR = path.join(__dirname, 'site_mirror');
 const STATE_FILE  = path.join(SITE_MIRROR, '.scraper_state.json');
 const SCRAPER     = path.join(__dirname, 'scripts', 'forum_scraper.py');

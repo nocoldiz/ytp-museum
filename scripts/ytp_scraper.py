@@ -2597,44 +2597,41 @@ def do_scrape_thumbnails(index, docs_dir):
     
     changes_made = False
 
-    # 1. Collect unique channels from the main index (video_index.json)
-    print("  Syncing channels from video_index.json...")
-    for e in index.data.values():
-        ch_url = e.get("channel_url")
-        ch_name = e.get("channel_name")
-        if ch_url and ch_url not in youtubers_data:
-            youtubers_data[ch_url] = {
-                "channel_name": ch_name,
-                "channel_url": ch_url,
-                "description": None,
-                "subscriber_count": None,
-                "creation_date": None,
-                "thumbnail": None,
-            }
-            changes_made = True
-
-    # 2. Collect unique channels from sources_index.json
-    print("  Syncing channels from sources_index.json...")
+    # 1. Collect unique channels from both video_index.json and sources_index.json
+    print("  Syncing channels from indices...")
+    indices_to_sync = [index.data] # video_index.json
+    
     src_path = os.path.join(docs_dir, "sources_index.json")
     if os.path.exists(src_path):
         try:
-            with open(src_path, encoding="utf-8") as f:
-                sources_data = json.load(f)
-            for e in sources_data.values():
-                ch_url = e.get("channel_url")
-                ch_name = e.get("channel_name")
-                if ch_url and ch_url not in youtubers_data:
-                    youtubers_data[ch_url] = {
-                        "channel_name": ch_name,
-                        "channel_url": ch_url,
-                        "description": None,
-                        "subscriber_count": None,
-                        "creation_date": None,
-                        "thumbnail": None,
-                    }
-                    changes_made = True
+            with open(src_path, "r", encoding="utf-8") as f:
+                src_data = json.load(f)
+                if isinstance(src_data, dict):
+                    indices_to_sync.append(src_data)
         except Exception as e:
             print(f"  [!] Error reading sources_index.json: {e}")
+
+    for data_dict in indices_to_sync:
+        for e in data_dict.values():
+            ch_url = e.get("channel_url")
+            ch_name = e.get("channel_name")
+            if not ch_url:
+                continue
+            
+            if ch_url not in youtubers_data:
+                youtubers_data[ch_url] = {
+                    "channel_name": ch_name,
+                    "channel_url": ch_url,
+                    "description": None,
+                    "subscriber_count": None,
+                    "creation_date": None,
+                    "thumbnail": None,
+                }
+                changes_made = True
+            elif ch_name and not youtubers_data[ch_url].get("channel_name"):
+                # Update name if it was missing in the poopers index
+                youtubers_data[ch_url]["channel_name"] = ch_name
+                changes_made = True
 
     if changes_made:
         print(f"  [+] Updated ytpoopers_index.json with new channels.")

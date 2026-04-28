@@ -297,9 +297,17 @@ function initApp(vRaw, sRaw, pRaw) {
 }
 
 // ─── ROUTING ──────────────────────────────────────────────────────────────
+function getAppRoot() {
+  return window.location.pathname.startsWith('/ytp-museum/') ? '/ytp-museum/' : '/';
+}
+
 function handleRouting() {
   const url = new URL(window.location);
-  const path = url.pathname;
+  const root = getAppRoot();
+  let path = url.pathname;
+  if (path.startsWith(root)) {
+    path = '/' + path.slice(root.length);
+  }
   const params = url.searchParams;
 
   let page = params.get('page');
@@ -340,17 +348,16 @@ function handleRouting() {
 }
 
 function updateURL(params, path = '/') {
-  if (params === null) {
-    window.history.pushState({}, '', path);
-    return;
-  }
-  const url = new URL(window.location);
+  const root = getAppRoot();
+  const appPath = path.startsWith('/') ? path.slice(1) : path;
+  const finalPath = root + appPath;
+
   const newParams = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) {
+  for (const [k, v] of Object.entries(params || {})) {
     if (v) newParams.set(k, v);
   }
   const newSearch = newParams.toString();
-  const newUrl = path + (newSearch ? '?' + newSearch : '');
+  const newUrl = finalPath + (newSearch ? '?' + newSearch : '');
   window.history.pushState({ ...params }, '', newUrl);
 }
 
