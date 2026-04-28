@@ -436,6 +436,7 @@ function showPage(name, pushToHistory = true) {
     else if (name === 'sections') path = '/sections';
     else if (name === 'overview') path = '/overview';
     else if (name === 'youtube') path = '/';
+    else if (name === 'subscriptions') path = '/subscriptions';
     updateURL(name === 'youtube' ? {} : { page: name }, path);
   }
   if (name !== 'video') {
@@ -843,6 +844,9 @@ function scoreChannel(channelName, queryTokens) {
 
 function performSearch(query) {
   if (!query) return;
+  const input = document.getElementById('global-search-input');
+  if (input) input.value = query;
+  
   const suggestionsBox = document.getElementById('search-suggestions');
   if (suggestionsBox) suggestionsBox.style.display = 'none';
 
@@ -1457,7 +1461,7 @@ function renderModernGrid() {
 function setFeaturedTab(tab) {
   // Update active tab UI
   document.querySelectorAll('.yt-tab').forEach(t => t.classList.remove('active'));
-  const clickedTab = document.querySelector(`.yt-tab[onclick*="${tab}"]`);
+  const clickedTab = document.querySelector(`.yt-tab[onclick*="'${tab}'"]`);
   if (clickedTab) clickedTab.classList.add('active');
 
   const ytData = getActiveVideos(true);
@@ -1468,18 +1472,27 @@ function setFeaturedTab(tab) {
   let videos;
   if (tab === 'featured') {
     videos = shuffleArray(validVideos).slice(0, 8);
+  } else if (tab === 'subscriptions') {
+    videos = shuffleArray(validVideos.filter(v => subscriptions.includes(v.channel_name))).slice(0, 10);
   } else if (tab === 'views') {
     videos = [...validVideos].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 8);
   } else if (tab === 'discussed') {
-    // Use comment count if available, else fall back to views
     videos = [...validVideos].sort((a, b) => (b.comment_count || b.view_count || 0) - (a.comment_count || a.view_count || 0)).slice(0, 8);
   } else if (tab === 'favorited') {
     videos = [...validVideos].sort((a, b) => (b.like_count || 0) - (a.like_count || 0)).slice(0, 8);
-  } else if (tab === 'downloaded') {
-    videos = shuffleArray(validVideos.filter(v => v.status === 'downloaded')).slice(0, 12);
+  } else {
+    videos = shuffleArray(validVideos).slice(0, 8);
   }
+  featuredContainer.innerHTML = videos.map(v => renderVideoItem(v, 'grid')).join('');
+}
 
-  featuredContainer.innerHTML = videos.map(v => renderVideoItem(v, 'list')).join('');
+function renderSubscriptionsPage() {
+  const isOld = document.body.classList.contains('theme-old');
+  if (isOld) {
+      setFeaturedTab('subscriptions');
+  } else {
+      setModernHomeTab('subscriptions');
+  }
 }
 
 function loadMoreHomeVideos() {
@@ -1533,7 +1546,7 @@ function renderModernHomeCard(v) {
   return `
     <div class="modern-home-card" onclick="openVideo('${v.id}')">
       <div class="yt-facade">
-        <img src="${thumbUrl}" alt="Thumbnail" loading="lazy">
+        ${getThumbnailMarkup(v)}
         <div class="play-btn"></div>
       </div>
       <div class="modern-home-info">
@@ -1760,7 +1773,7 @@ function renderVideoItem(v, mode = 'list') {
     return `
     <div class="video-item grid">
       <a href="#" onclick="event.preventDefault(); event.stopPropagation(); openVideo('${v.id}')" class="video-thumb">
-        <img src="${thumbUrl}" alt="" loading="lazy">
+        ${getThumbnailMarkup(v)}
         ${dur ? `<span class="video-time">${escHtml(dur)}</span>` : ''}
       </a>
       <div class="video-info">
@@ -1782,7 +1795,7 @@ function renderVideoItem(v, mode = 'list') {
       return `
         <div class="video-item modern-list" onclick="openVideo('${v.id}')">
           <div class="modern-list-thumb">
-            <img src="${thumbUrl}" alt="" loading="lazy">
+            ${getThumbnailMarkup(v)}
             ${dur ? `<span class="video-time">${escHtml(dur)}</span>` : ''}
           </div>
           <div class="modern-list-info">
@@ -1806,7 +1819,7 @@ function renderVideoItem(v, mode = 'list') {
     <div class="video-item list" onclick="openVideo('${v.id}')" style="cursor:pointer;">
       <div class="yt-list-thumb">
         <a href="#" onclick="event.preventDefault(); event.stopPropagation(); openVideo('${v.id}')">
-          <img src="${thumbUrl}" alt="" loading="lazy">
+          ${getThumbnailMarkup(v)}
           ${dur ? `<span class="video-time">${escHtml(dur)}</span>` : ''}
         </a>
       </div>
@@ -2113,7 +2126,7 @@ function renderTable(append = false) {
       const thumbUrl = `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`;
       const facadeHtml = v.status === 'available' || v.status === 'pending' || v.status === 'downloaded'
         ? `<div class="yt-facade" id="facade-${v.id}" onclick="loadFacade('${v.id}')">
-             <img src="${thumbUrl}" alt="Thumbnail" loading="lazy">
+             ${getThumbnailMarkup(v)}
              <div class="play-btn"></div>
            </div>`
         : `<div class="yt-facade" style="background:#2a3048; display:flex; align-items:center; justify-content:center; color:var(--text-muted); cursor:default;">
@@ -2730,6 +2743,18 @@ function getLocalVideoPath(v) {
   }
 
   return (path.startsWith('videos/') || path.startsWith('sources/')) ? '../' + path : path;
+}
+
+function getThumbnailMarkup(v) {
+  const ytThumb = `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`;
+  let localThumb = ytThumb;
+  if (v.channel_name) {
+    const safeCh = v.channel_name.replace(/[<>:"/\\|?*]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80);
+    const subDir = (v.type === 'source' || (v.id && v.id.startsWith('source_'))) ? 'sources' : 'videos';
+    // Local thumb is relative to public/index.html (so ../db/...)
+    localThumb = `db/${subDir}/${encodeURIComponent(safeCh)}/${v.id}.jpg`;
+  }
+  return `<img src="${localThumb}" onerror="this.onerror=null; this.src='${ytThumb}';" alt="Thumbnail" loading="lazy">`;
 }
 
 function escHtml(s) {

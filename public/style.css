@@ -3831,18 +3831,27 @@
 
   body:not(.theme-old) #page-video .col-left .box-content {
     padding: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
   }
 
   body:not(.theme-old) #page-video .col-left .video-item.list {
     display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 15px;
     padding: 0;
   }
 
+  body:not(.theme-old) #page-video .col-left .yt-list-thumb {
+    width: 100%;
+  }
+
   body:not(.theme-old) #page-video .col-left .yt-list-thumb img {
-    width: 168px;
-    height: 94px;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
     border-radius: 8px;
     object-fit: cover;
   }
