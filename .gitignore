@@ -1,0 +1,7 @@
+__pycache__
+/videos
+/italian_videos
+/site_mirror
+/sources
+*.pyc
+*.bak
