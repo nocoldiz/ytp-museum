@@ -46,7 +46,11 @@
               <option value="4-3">4:3</option>
               <option value="16-9">16:9</option>
             </select>
-            <span class="theme-sep">|</span>
+            <span id="playback-source-container" style="display:none;">
+              <a href="#" id="playback-source-toggle" onclick="togglePlaybackMode(); return false;"
+                style="color: inherit; border: none; padding: 0; font-weight: bold;">YouTube Mode</a>
+              <span class="theme-sep">|</span>
+            </span>
             <a href="#" class="btn-video-mode" onclick="toggleVideoMode(); return false;"
               style="color: inherit; border: none; padding: 0;">Show all videos</a> <span class="theme-sep">|</span>
             <a href="http://localhost:3001" target="_blank"
@@ -139,7 +143,10 @@
             <option value="4-3">4:3</option>
             <option value="16-9">16:9</option>
           </select>
-          <span class="theme-sep">|</span>
+          <span class="playback-source-container-modern" style="display:none;">
+            <a href="#" class="playback-source-toggle-modern" onclick="togglePlaybackMode(); return false;" style="font-weight: bold;">YouTube Mode</a>
+            <span class="theme-sep">|</span>
+          </span>
           <a href="#" class="btn-video-mode" onclick="toggleVideoMode(); return false;">Show all videos</a>
           <span class="theme-sep">|</span>
           <a href="http://localhost:3001" target="_blank" style="color: inherit; border: none; padding: 0; font-weight: bold;">YTP Italian Forum</a>

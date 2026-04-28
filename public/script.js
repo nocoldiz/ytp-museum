@@ -13,6 +13,8 @@ let charts = {};
 let globalMaxYear = new Date().getFullYear();
 let currentVideoMode = "all"; // "all", "ytp", "sources"
 let sourceChannels = new Set();
+let allSearchIndex = [];    // [id, title, channel, year, views, dur, desc]
+let playbackMode = localStorage.getItem('ytp-playback-mode') || 'youtube'; 
 
 // DB Constants (Must be at top for initialization)
 const dbName = 'YTPArchiveDB';
@@ -153,8 +155,11 @@ async function autoLoad() {
     }
   } catch (e) { }
   try {
-    const rp = await fetch('db/ytpoopers_index.json'); // fixed path
+    const rp = await fetch('db/ytpoopers_index.json');
     if (rp.ok) pData = await rp.json();
+
+    const rsi = await fetch('db/search_index.json');
+    if (rsi.ok) allSearchIndex = await rsi.json();
   } catch (e) { }
 
   initApp(vData, sData, pData);
@@ -174,6 +179,13 @@ async function autoLoad() {
         const helpBtn = document.getElementById('btn-help');
         if (importBtn) importBtn.style.display = 'inline-block';
         if (helpBtn) helpBtn.style.display = 'none';
+
+        // Show playback source toggle
+        const ps = document.getElementById('playback-source-container');
+        const psm = document.querySelector('.playback-source-container-modern');
+        if (ps) ps.style.display = 'inline-block';
+        if (psm) psm.style.display = 'inline-block';
+        updatePlaybackToggleUI();
       }
     } catch (e) { }
   }
@@ -365,6 +377,27 @@ window.addEventListener('popstate', () => {
   handleRouting();
 });
 
+function togglePlaybackMode() {
+  playbackMode = (playbackMode === 'youtube') ? 'mirror' : 'youtube';
+  localStorage.setItem('ytp-playback-mode', playbackMode);
+  updatePlaybackToggleUI();
+  
+  // If we are currently watching a video, reload the player
+  const url = new URL(window.location);
+  const vidId = url.searchParams.get('v');
+  if (vidId && document.getElementById('page-video').classList.contains('active')) {
+      openVideo(vidId, false);
+  }
+}
+
+function updatePlaybackToggleUI() {
+  const label = playbackMode === 'youtube' ? 'YouTube Mode' : 'Mirror Mode';
+  const toggle = document.getElementById('playback-source-toggle');
+  const toggleM = document.querySelector('.playback-source-toggle-modern');
+  if (toggle) toggle.textContent = label;
+  if (toggleM) toggleM.textContent = label;
+}
+
 // ─── NAVIGATION ──────────────────────────────────────────────────────────
 function showPage(name, pushToHistory = true) {
   if (pushToHistory) {
@@ -498,21 +531,26 @@ function onGlobalSearchInput() {
     const queryTokens = tokenize(q);
     if (queryTokens.length === 0) return;
 
-    // Search titles and channel names for suggestions
-    const ytData = getActiveVideos(false);
+    // Search titles and channel names for suggestions using the index if available
+    const isUsingIndex = allSearchIndex.length > 0;
+    const data = isUsingIndex ? allSearchIndex : getActiveVideos(false);
 
     // Get unique titles and channel names that match
     const titleMatches = [];
     const channelMatches = new Set();
 
-    for (const v of ytData) {
-      if (scoreField(v.title, queryTokens).score > 0) {
-        titleMatches.push({ text: v.title, type: 'video' });
+    for (const item of data) {
+      const title = isUsingIndex ? item[1] : item.title;
+      const channel = isUsingIndex ? item[2] : item.channel_name;
+
+      if (title && scoreField(title, queryTokens).score > 0) {
+        titleMatches.push({ text: title, type: 'video' });
       }
-      if (v.channel_name && scoreField(v.channel_name, queryTokens).score > 0) {
-        channelMatches.add(v.channel_name);
+      if (channel && scoreField(channel, queryTokens).score > 0) {
+        channelMatches.add(channel);
       }
-      if (titleMatches.length > 50) break; // Limit scanning for performance
+      // Stop scanning once we have enough for a good suggestion list
+      if (titleMatches.length > 30 && channelMatches.size > 5) break; 
     }
 
     let results = [
@@ -814,22 +852,40 @@ function performSearch(query) {
   }
 
   // ── Search Videos ────────────────────────────────────────────────────
-  let scoredVideos = ytData
-    .map(v => ({ video: v, score: scoreVideo(v, queryTokens) }))
-    .filter(r => r.score > 0);
+  let scoredVideos = [];
+  
+  if (allSearchIndex.length > 0 && !fStatus && !fSection && fLang === 'any') {
+    // Fast path: use minified search index if no complex filters are active
+    scoredVideos = allSearchIndex
+      .map(entry => {
+        const v = {
+            id: entry[0], title: entry[1], channel_name: entry[2], 
+            publish_date: entry[3] ? entry[3] + '-01-01' : '',
+            view_count: entry[4], duration: entry[5], description: entry[6],
+            status: 'downloaded'
+        };
+        return { video: v, score: scoreVideo(v, queryTokens) };
+      })
+      .filter(r => r.score > 0);
+  } else {
+    // Fallback to full data search for complex filters
+    scoredVideos = ytData
+      .map(v => ({ video: v, score: scoreVideo(v, queryTokens) }))
+      .filter(r => r.score > 0);
 
-  // Apply filters
-  scoredVideos = scoredVideos.filter(({ video: v }) => {
-    if (fStatus && v.status !== fStatus) return false;
-    if (fSection && !(v.sections || []).includes(fSection)) return false;
+    // Apply filters
+    scoredVideos = scoredVideos.filter(({ video: v }) => {
+      if (fStatus && v.status !== fStatus) return false;
+      if (fSection && !(v.sections || []).includes(fSection)) return false;
 
-    const y = v.publish_date ? parseInt(v.publish_date.slice(0, 4)) : null;
-    if (fYearMin && (!y || y < parseInt(fYearMin))) return false;
-    if (fYearMax && (!y || y > parseInt(fYearMax))) return false;
+      const y = v.publish_date ? parseInt(v.publish_date.slice(0, 4)) : null;
+      if (fYearMin && (!y || y < parseInt(fYearMin))) return false;
+      if (fYearMax && (!y || y > parseInt(fYearMax))) return false;
 
-    if (fLang !== 'any' && (v.language || '').toLowerCase() !== fLang) return false;
-    return true;
-  });
+      if (fLang !== 'any' && (v.language || '').toLowerCase() !== fLang) return false;
+      return true;
+    });
+  }
 
   // Sort
   if (fSort === 'relevance') {
@@ -840,13 +896,55 @@ function performSearch(query) {
     scoredVideos.sort((a, b) => (b.video.view_count || 0) - (a.video.view_count || 0));
   }
 
-  const videosContainer = document.getElementById('search-videos-results');
-  if (scoredVideos.length === 0) {
-    videosContainer.innerHTML = '<p class="empty" style="padding:10px;">No videos found matching your criteria.</p>';
-  } else {
-    videosContainer.classList.toggle('video-grid', searchViewMode === 'grid');
-    videosContainer.innerHTML = scoredVideos.slice(0, 50).map(r => renderVideoItem(r.video, searchViewMode)).join('');
+  filteredVideos = scoredVideos.map(r => r.video);
+  currentPage = 1;
+  renderSearchVideos(false);
+  setupSearchScrollObserver();
+}
+
+let searchScrollObserver = null;
+function setupSearchScrollObserver() {
+  if (searchScrollObserver) searchScrollObserver.disconnect();
+  const sentinel = document.getElementById('search-scroll-sentinel');
+  if (!sentinel) return;
+
+  searchScrollObserver = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting) {
+      if (currentPage * PAGE_SIZE < filteredVideos.length) {
+        currentPage++;
+        renderSearchVideos(true);
+      }
+    }
+  }, { rootMargin: '400px' });
+  searchScrollObserver.observe(sentinel);
+}
+
+function renderSearchVideos(append = false) {
+  const container = document.getElementById('search-videos-results');
+  const total = filteredVideos.length;
+  const countLabel = document.getElementById('search-count-label');
+  if (countLabel) countLabel.textContent = `${total} videos found`;
+
+  if (total === 0) {
+    container.innerHTML = '<p class="empty" style="padding:10px;">No videos found matching your criteria.</p>';
+    return;
   }
+
+  const start = (currentPage - 1) * PAGE_SIZE;
+  const slice = filteredVideos.slice(start, start + PAGE_SIZE);
+  const html = slice.map(v => renderVideoItem(v, typeof searchViewMode !== 'undefined' ? searchViewMode : 'list')).join('');
+
+  if (append) container.insertAdjacentHTML('beforeend', html);
+  else container.innerHTML = html;
+
+  // Ensure sentinel is at the bottom
+  let sentinel = document.getElementById('search-scroll-sentinel');
+  if (!sentinel) {
+    sentinel = document.createElement('div');
+    sentinel.id = 'search-scroll-sentinel';
+    sentinel.style.height = '10px';
+  }
+  container.after(sentinel);
 }
 
 // ─── YOUTUBE LOGIC ───────────────────────────────────────────────────────
@@ -916,13 +1014,50 @@ async function openVideo(vidId, pushToHistory = true) {
   document.getElementById('watch-description').innerHTML = linkify(escHtml(desc)) + tagsHtml;
 
   const playerContainer = document.getElementById('watch-player');
-  if (v.status === 'downloaded' && v.local_file) {
-    const src = getLocalVideoPath(v);
-    playerContainer.innerHTML = `<video controls autoplay style="width:100%; height:100%; background:#000;">
-      <source src="${src}" type="video/mp4" onerror="fallbackToYoutube('${v.id}')">
+  const hasLocal = (v.status === 'downloaded' && v.local_file);
+  const isYoutubeDead = (v.status === 'unavailable' || v.status === 'failed');
+
+  function renderError() {
+    playerContainer.innerHTML = `
+      <div style="display:flex; align-items:center; justify-content:center; height:100%; background:#000; color:#fff; flex-direction:column; gap:10px; font-family:sans-serif; text-align:center; padding:20px;">
+        <div style="font-size:3rem;">🚫</div>
+        <div style="font-size:1.2rem; font-weight:bold;">Video Not Available</div>
+        <div style="color:#aaa; font-size:0.9rem;">This video is no longer on YouTube and is missing from the local mirror.</div>
+      </div>
+    `;
+  }
+
+  function renderLocal(isFallback = false) {
+    if (!hasLocal) {
+        if (isFallback) return renderError();
+        return renderYoutube(true);
+    }
+    const path = getLocalVideoPath(v);
+    const basePath = path.replace(/\.(mp4|m4v)$/i, '');
+    
+    playerContainer.innerHTML = `<video id="video-player-element" controls autoplay style="width:100%; height:100%; background:#000;">
+      <source src="${basePath}.mp4" type="video/mp4">
+      <source src="${basePath}.m4v" type="video/x-m4v">
     </video>`;
+    const vid = document.getElementById('video-player-element');
+    vid.onerror = () => {
+        console.warn("Local playback failed, trying YouTube...");
+        renderYoutube(true);
+    };
+  }
+
+  function renderYoutube(isFallback = false) {
+    if (isYoutubeDead) {
+        if (isFallback) return renderError();
+        return renderLocal(true);
+    }
+    playerContainer.innerHTML = `<iframe width="100%" height="100%" src="https://www.youtube.com/embed/${v.id}?autoplay=1" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
+  }
+
+  if (playbackMode === 'mirror') {
+    renderLocal();
   } else {
-    fallbackToYoutube(v.id);
+    renderYoutube();
   }
 
   const moreContainer = document.getElementById('more-from-channel');
@@ -1359,7 +1494,7 @@ function renderModernHomeCard(v) {
         <div class="play-btn"></div>
       </div>
       <div class="modern-home-info">
-        <img class="channel-avatar" src="${channelAvatar}" alt="Avatar" onclick="event.stopPropagation(); openProfile('${escAttr(chText)}')">
+        <img class="channel-avatar" src="${channelAvatar}" alt="Avatar" loading="lazy" onclick="event.stopPropagation(); openProfile('${escAttr(chText)}')">
         <div class="modern-home-text">
           <h3 class="modern-home-title" title="${escAttr(titleText)}">${escHtml(titleText)}</h3>
           <a href="#" class="modern-home-ch" onclick="event.stopPropagation(); openProfile('${escAttr(chText)}')">${escHtml(chText)}</a>
@@ -1588,7 +1723,7 @@ function renderVideoItem(v, mode = 'list') {
       <div class="video-info">
         <a href="watch?v=${v.id}" onclick="event.preventDefault(); event.stopPropagation(); openVideo('${v.id}')" class="video-title" title="${escAttr(title)}">${starBadge}${escHtml(title)}</a>
         <div class="video-meta" style="display:flex; align-items:center; gap:6px;">
-          <img src="${avatar}" style="width:20px; height:20px; border-radius:50%; object-fit:cover;">
+          <img src="${avatar}" style="width:20px; height:20px; border-radius:50%; object-fit:cover;" loading="lazy">
           <div style="flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
             <a href="#" onclick="return openProfile('${escAttr(channel)}')">${escHtml(channel)}</a>
             ${views ? `<br><span>${views}</span>` : ''}
@@ -1615,7 +1750,7 @@ function renderVideoItem(v, mode = 'list') {
               <span>${fmtDate(v.publish_date)}</span>
             </div>
             <div class="modern-list-channel" onclick="event.stopPropagation(); openProfile('${escAttr(channel)}')">
-              <img src="${avatar}" alt="">
+              <img src="${avatar}" alt="" loading="lazy">
               <span>${escHtml(channel)}</span>
             </div>
             <div class="modern-list-desc">${escHtml(desc)}</div>
@@ -1639,7 +1774,7 @@ function renderVideoItem(v, mode = 'list') {
           <span class="yt-stars">${renderStars(v.view_count)}</span>
           ${views ? `<span class="yt-views">${views}</span>` : ''}
           <div style="display:flex; align-items:center; gap:6px;">
-            <img src="${avatar}" style="width:20px; height:20px; border-radius:50%; object-fit:cover;">
+            <img src="${avatar}" style="width:20px; height:20px; border-radius:50%; object-fit:cover;" loading="lazy">
             <a href="#" class="yt-channel" onclick="event.stopPropagation();return openProfile('${escAttr(channel)}')">${escHtml(channel)}</a>
           </div>
         </div>

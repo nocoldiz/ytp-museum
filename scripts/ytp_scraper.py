@@ -1295,6 +1295,15 @@ class VideoIndex:
             path = Path(self.filepath).resolve()
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(self.data, f, separators=(',', ':'), ensure_ascii=False)
+            
+            # Auto-generate minified search index
+            try:
+                from generate_search_index import generate_search_index
+                generate_search_index(self.docs_dir)
+            except ImportError:
+                pass # Script might not be in the same folder during some runs
+            except Exception as e:
+                print(f"  [!] Error generating search index: {e}")
         except Exception as e:
             print(f"\n  [!] Error saving index to {self.filepath}: {e}")
 
