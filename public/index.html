@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YTP Archive</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body class="theme-old theme-light">
+
+  <!-- LANDING -->
+  <div id="landing">
+    <h1>YTP Archive<br>Visualizer</h1>
+    <p>Interactive analytics dashboard for your YouTube Poop archive index.</p>
+    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2z" />
+      </svg>
+      <p><strong>Drop video_index.json, sources_index.json & ytpoopers_index.json here</strong><br>or click to browse
+      </p>
+    </div>
+    <input type="file" id="fileInput" accept=".json" multiple>
+    <p class="auto-load">Also tries to auto-load <code>video_index.json</code>, <code>sources_index.json</code> &
+      <code>ytpoopers_index.json</code>
+    </p>
+  </div>
+
+  <!-- APP -->
+  <div id="app">
+    <div id="sidebar-backdrop" onclick="toggleSidebar()"></div>
+    <div id="baseDiv">
+      <div id="masthead-utility">
+        <div id="masthead-utility-right" style="float: right;">
+          <div id="theme-toggles" style="display:inline-block; margin-right: 15px; font-size: 12px; color: inherit;">
+            <select id="global-year-selector" onchange="setGlobalMaxYear(this.value)"
+              style="color: inherit; border: none; background: transparent; padding: 0; font-size: 12px; cursor: pointer; outline: none; appearance: auto; font-weight: bold;"
+              title="Limit videos up to this year"></select>
+            <span class="theme-sep">|</span>
+            <a href="#" class="btn-video-mode" onclick="toggleVideoMode(); return false;"
+              style="color: inherit; border: none; padding: 0;">Show all videos</a> <span class="theme-sep">|</span>
+            <a href="#" id="toggle-modern-old" onclick="toggleThemeMode(); return false;"
+              style="color: inherit; border: none; padding: 0;">Switch to Modern Mode</a> <span
+              class="theme-sep">|</span>
+            <a href="#" id="toggle-night-day" onclick="toggleNightDay(); return false;"
+              style="color: inherit; border: none; padding: 0;">Switch to Night Mode</a>
+          </div>
+          <a href="#" id="btn-import" onclick="openImportModal(); return false;"
+            style="display:none; color: inherit; border: none; padding: 0; font-size: 12px; margin-right: 15px;">Import</a>
+          <a href="#" id="btn-help" style="color: inherit; border: none; padding: 0; font-size: 12px;">Help</a>
+        </div>
+        <div style="clear:both;"></div>
+      </div>
+      <div id="masthead">
+        <button id="burger-menu" onclick="toggleSidebar(); return false;" style="display:none">☰</button>
+        <a id="logo" href="#" onclick="showPage('youtube'); return false;">YouTube</a>
+
+        <div id="masthead-nav-right">
+          <!-- Placeholder for utility links in modern mode if needed -->
+        </div>
+      </div>
+      <div id="masthead-nav">
+        <div class="sidebar-section">
+          <a href="#" class="nav-tab active" onclick="showPage('youtube'); return false;">
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
+            </svg>
+            <span>Home</span>
+          </a>
+          <a href="#" class="nav-tab" onclick="showPage('channels'); return false;">
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path
+                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08s5.97 1.09 6 3.08c-1.29 1.94-3.5 3.22-6 3.22z" />
+            </svg>
+            <span>Channels</span>
+          </a>
+          <a href="#" class="nav-tab" onclick="showPage('saved'); return false;">
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z" />
+            </svg>
+            <span>Saved</span>
+          </a>
+        </div>
+
+        <div class="sidebar-section">
+          <div class="sidebar-header">Explore</div>
+          <a href="#" class="nav-tab" onclick="showPage('videos'); return false;">
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path
+                d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z" />
+            </svg>
+            <span>Manager</span>
+          </a>
+          <a href="#" class="nav-tab" onclick="showPage('timeline'); return false;">
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path
+                d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" />
+            </svg>
+            <span>Timeline</span>
+          </a>
+          <a href="#" class="nav-tab" onclick="showPage('overview'); return false;">
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z" />
+            </svg>
+            <span>Analytics</span>
+          </a>
+        </div>
+        <div id="masthead-search">
+          <div class="search-form" style="position: relative;">
+            <input type="text" class="search-term" id="global-search-input" placeholder="Search"
+              oninput="onGlobalSearchInput()" autocomplete="off">
+            <button class="search-button"
+              onclick="performSearch(document.getElementById('global-search-input').value)">Search</button>
+            <div id="search-suggestions" class="search-suggestions"></div>
+          </div>
+        </div>
+        <!-- Modern Mode Theme Toggles (Sidebar bottom) -->
+        <div id="theme-toggles-modern" style="display: none;">
+          <select id="modern-global-year-selector" onchange="setGlobalMaxYear(this.value)"
+            style="color: inherit; border: none; background: transparent; padding: 0; font-size: 12px; cursor: pointer; outline: none; appearance: auto; font-weight: bold;"
+            title="Limit videos up to this year"></select>
+          <span class="theme-sep">|</span>
+          <a href="#" class="btn-video-mode" onclick="toggleVideoMode(); return false;">Show all videos</a>
+          <a href="#" onclick="toggleThemeMode(); return false;">Switch to Old Mode</a>
+          <a href="#" onclick="toggleNightDay(); return false;">Switch to Night Mode</a>
+        </div>
+      </div>
+      <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+      <!-- YOUTUBE HOME -->
+      <div class="page active is-loading" id="page-youtube">
+        <div class="page-loader">
+          <div class="spinner"></div>Loading archive data...
+        </div>
+        <div class="layout-2col" id="youtube-old-layout">
+          <div class="home-main">
+            <div id="homepage-featured-heading">
+              <h2 class="yt-featured-title">Featured Videos</h2>
+              <div class="yt-tab-bar">
+                <a href="#" class="yt-tab active" onclick="setFeaturedTab('featured');return false;">Random</a>
+                <span class="yt-tab-sep">|</span>
+                <a href="#" class="yt-tab" onclick="setFeaturedTab('downloaded');return false;">Downloaded</a>
+                <span class="yt-tab-sep">|</span>
+                <a href="#" class="yt-tab" onclick="setFeaturedTab('views');return false;">Most Viewed</a>
+                <span class="yt-tab-sep">|</span>
+                <a href="#" class="yt-tab" onclick="setFeaturedTab('discussed');return false;">Most Discussed</a>
+                <span class="yt-tab-sep">|</span>
+                <a href="#" class="yt-tab" onclick="setFeaturedTab('favorited');return false;">Top Favorited</a>
+              </div>
+            </div>
+            <div id="featured-videos"></div>
+          </div>
+          <div class="home-side">
+            <div class="box">
+              <div class="box-header">Most Popular</div>
+              <div class="box-content" id="popular-videos"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="youtube-modern-layout">
+          <div id="home-chips" class="home-chips-container">
+            <button class="chip active" onclick="setModernHomeTab('featured', this)">Featured</button>
+            <button class="chip" onclick="setModernHomeTab('downloaded', this)">Downloaded</button>
+            <button class="chip" onclick="setModernHomeTab('views', this)">Most Viewed</button>
+            <button class="chip" onclick="setModernHomeTab('discussed', this)">Most Discussed</button>
+            <button class="chip" onclick="setModernHomeTab('favorited', this)">Top Favorited</button>
+          </div>
+          <div id="modern-videos-grid"></div>
+        </div>
+      </div>
+
+      <!-- YOUTUBE VIDEO -->
+      <div class="page" id="page-video">
+        <div class="layout-2col">
+          <div class="col-right" style="width: 640px;">
+            <div id="watch-title">Loading...</div>
+            <div id="watch-video-container">
+              <div id="watch-player"></div>
+            </div>
+            <div id="video-responses-section" style="margin-top: 20px; display: none;">
+              <h3 id="responses-count-title"
+                style="margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 8px; font-size: 16px;">
+                Video Responses</h3>
+              <div id="video-responses"></div>
+            </div>
+            <div id="watch-comments-section" style="margin-top: 20px;">
+              <h3 id="comments-count-title"
+                style="margin-bottom: 15px; border-bottom: 1px solid var(--border); padding-bottom: 8px; font-size: 16px;">
+                Comments</h3>
+              <div id="watch-comments"></div>
+            </div>
+          </div>
+          <div class="col-left" style="width: 300px;">
+            <div class="watch-stats">
+              <div class="watch-views" id="watch-views-count">0</div>
+              views
+            </div>
+            <div id="watch-channel-info">
+              <img src="https://upload.wikimedia.org/wikipedia/commons/8/89/Portrait_Placeholder.png"
+                alt="Channel Icon">
+              <div>
+                Added: <strong id="watch-date"></strong><br>
+                From: <a href="#" id="watch-channel" onclick="return false;">Unknown</a>
+              </div>
+            </div>
+            <div id="watch-description"></div>
+            <div id="watch-actions" style="margin-top: 10px;">
+              <button id="btn-save-video" class="btn-thread" style="width: 100%; padding: 10px; font-weight: bold;">Save
+                Video</button>
+            </div>
+            <div class="box" style="margin-top: 15px;">
+              <div class="box-header">More From This Channel</div>
+              <div class="box-content" id="more-from-channel"></div>
+            </div>
+            <div class="box" id="related-videos-box" style="margin-top: 15px;">
+              <div class="box-header">Related Videos</div>
+              <div class="box-content" id="related-videos"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- YOUTUBE PROFILE -->
+      <div class="page" id="page-profile">
+        <div id="profile-header">
+          <div id="profile-title">Channel Name</div>
+        </div>
+        <div id="profile-nav">
+          <a href="#" class="active" onclick="return false;">Channel</a>
+          <a href="#" onclick="return false;">Videos</a>
+        </div>
+        <div class="layout-2col" style="margin-top: 20px;">
+          <div class="col-left">
+            <div class="box">
+              <div class="box-header">Profile</div>
+              <div class="box-content" id="profile-stats"></div>
+            </div>
+          </div>
+          <div class="col-right">
+            <div class="box">
+              <div class="box-content" id="profile-featured"></div>
+            </div>
+            <div class="box">
+              <div class="box-header">Recent Videos</div>
+              <div class="box-content" id="profile-videos"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SEARCH PAGE -->
+      <div class="page is-loading" id="page-search">
+        <div class="page-loader">
+          <div class="spinner"></div>Searching archive...
+        </div>
+
+        <div class="search-header-modern">
+          <div class="search-title">Search Results for "<span id="search-query-display"></span>"</div>
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div class="view-toggle" style="margin-right: 8px;">
+              <button id="btn-search-view-list" class="view-btn active" onclick="setSearchViewMode('list')" title="List View">≡</button>
+              <button id="btn-search-view-grid" class="view-btn" onclick="setSearchViewMode('grid')" title="Grid View">⊞</button>
+            </div>
+            <button class="filters-toggle-btn" onclick="toggleFilters()">
+              <svg viewBox="0 0 24 24" style="width:20px; height:20px; fill:currentColor;">
+                <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"></path>
+              </svg>
+              <span>Filters</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="search-results-main">
+          <div id="search-filter-bar" class="search-bar search-advanced-filters">
+            <div class="filter-group-modern theme-old-only">
+              <label>Status</label>
+              <select id="search-filter-status"
+                onchange="performSearch(document.getElementById('global-search-input').value)">
+                <option value="">All statuses</option>
+                <option value="downloaded">Downloaded</option>
+                <option value="pending">Pending</option>
+                <option value="unavailable">Unavailable</option>
+              </select>
+            </div>
+            <div class="filter-group-modern theme-old-only">
+              <label>Section</label>
+              <select id="search-filter-section"
+                onchange="performSearch(document.getElementById('global-search-input').value)">
+                <option value="">All sections</option>
+              </select>
+            </div>
+            <div class="filter-group-modern theme-old-only">
+              <label>Years</label>
+              <div class="range-group" style="display:flex; align-items:center; gap:5px;">
+                <select id="search-filter-year-min"
+                  onchange="performSearch(document.getElementById('global-search-input').value)">
+                  <option value="">Min</option>
+                </select>
+                <span style="color:var(--text-muted);">-</span>
+                <select id="search-filter-year-max"
+                  onchange="performSearch(document.getElementById('global-search-input').value)">
+                  <option value="">Max</option>
+                </select>
+              </div>
+            </div>
+            <div class="filter-group-modern theme-old-only">
+              <label>Language</label>
+              <select id="search-filter-language"
+                onchange="performSearch(document.getElementById('global-search-input').value)">
+                <option value="any">Any language</option>
+                <option value="english">🇬🇧 English</option>
+                <option value="italian">🇮🇹 Italian</option>
+                <option value="spanish">🇪🇸 Spanish</option>
+                <option value="russian">🇷🇺 Russian</option>
+                <option value="french">🇫🇷 French</option>
+                <option value="german">🇩🇪 German</option>
+              </select>
+            </div>
+            <div class="filter-group-modern theme-old-only" style="margin-left: auto;">
+              <label>Sort</label>
+              <select id="search-sort" onchange="performSearch(document.getElementById('global-search-input').value)">
+                <option value="relevance">Relevance</option>
+                <option value="publish_date">Newest</option>
+                <option value="view_count">Most Viewed</option>
+              </select>
+            </div>
+            <div class="filter-group-modern theme-old-only" style="margin-left: 15px;">
+              <label>View</label>
+              <div class="view-toggle">
+                <button id="btn-search-view-list-old" class="view-btn active" onclick="setSearchViewMode('list')" title="List View">≡</button>
+                <button id="btn-search-view-grid-old" class="view-btn" onclick="setSearchViewMode('grid')" title="Grid View">⊞</button>
+              </div>
+            </div>
+          </div>
+
+          <div id="search-channels-section" style="display:none;">
+            <h3 class="theme-old-only" style="margin-bottom: 15px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Channels</h3>
+            <div id="search-channels-results" style="margin-bottom: 30px;"></div>
+          </div>
+          
+          <h3 class="theme-old-only" style="margin-bottom: 15px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Videos</h3>
+          <div id="search-videos-results"></div>
+        </div>
+      </div>
+
+      <!-- OVERVIEW -->
+      <div class="page is-loading" id="page-overview">
+        <div class="page-loader">
+          <div class="spinner"></div>Loading analytics...
+        </div>
+        <div class="stats-grid" id="overview-stats"></div>
+        <div class="charts-row cols2">
+          <div class="chart-card box">
+            <div class="box-header">Videos by Year</div>
+            <div class="box-content">
+              <canvas id="chart-year"></canvas>
+            </div>
+          </div>
+          <div class="chart-card box">
+            <div class="box-header">Status Breakdown</div>
+            <div class="box-content">
+              <canvas id="chart-status"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="charts-row cols2">
+          <div class="chart-card box">
+            <div class="box-header">Top 15 Channels by Video Count</div>
+            <div class="box-content">
+              <canvas id="chart-top-channels"></canvas>
+            </div>
+          </div>
+          <div class="chart-card box">
+            <div class="box-header">Videos per Section</div>
+            <div class="box-content">
+              <canvas id="chart-sections"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="charts-row cols3">
+          <div class="chart-card box">
+            <div class="box-header">View Count Distribution</div>
+            <div class="box-content">
+              <canvas id="chart-views-dist"></canvas>
+            </div>
+          </div>
+          <div class="chart-card box">
+            <div class="box-header">Top 10 by Views</div>
+            <div class="box-content">
+              <canvas id="chart-top-views"></canvas>
+            </div>
+          </div>
+          <div class="chart-card box">
+            <div class="box-header">Top 10 by Likes</div>
+            <div class="box-content">
+              <canvas id="chart-top-likes"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="box" style="margin-top: 20px;">
+          <div class="box-header">Archive by Year <span class="count-badge" id="years-count-label"></span></div>
+          <div class="box-content">
+            <div id="year-detail-panel" style="display:none"></div>
+            <div class="year-grid" id="year-grid"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VIDEOS -->
+      <div class="page is-loading" id="page-videos">
+        <div class="page-loader">
+          <div class="spinner"></div>Loading videos...
+        </div>
+        <div class="yt-tab-bar" style="margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
+          <a href="#" class="yt-tab active" id="manager-tab-videos" onclick="showPage('videos'); return false;">YTP</a>
+          <span class="yt-tab-sep">|</span>
+          <a href="#" class="yt-tab" id="manager-tab-sources" onclick="showPage('sources'); return false;">Other videos</a>
+        </div>
+        <div class="section-header">
+          <h2>Video Search</h2>
+          <span class="count-badge" id="videos-count-label"></span>
+          <div id="management-actions" style="display:none; margin-left: 15px; gap: 8px;">
+            <button class="btn-play" onclick="bulkAction('flag-source')"
+              style="background:var(--accent); padding:5px 12px; font-size:12px">Flag as Source</button>
+            <div style="height: 20px; width: 1px; background: var(--border); margin: 0 5px;"></div>
+            <select id="mgmt-lang-select"
+              style="font-size:12px; padding:4px; border-radius:4px; border:1px solid var(--border); background:var(--surface);">
+              <option value="">Set Language...</option>
+              <option value="english">🇬🇧 English</option>
+              <option value="italian">🇮🇹 Italian</option>
+              <option value="spanish">🇪🇸 Spanish</option>
+              <option value="russian">🇷🇺 Russian</option>
+              <option value="french">🇫🇷 French</option>
+              <option value="german">🇩🇪 German</option>
+            </select>
+            <button class="btn-play" onclick="bulkAction('set-lang')"
+              style="background:var(--accent2); padding:5px 12px; font-size:12px">Apply Lang</button>
+            <button class="btn-play" onclick="toggleAllManage(false)"
+              style="background:var(--surface); color:var(--text); border:1px solid var(--border); padding:5px 12px; font-size:12px">Deselect
+              All</button>
+          </div>
+          <div class="view-toggle" style="margin-left: auto;">
+            <button id="btn-view-table" class="view-btn active" onclick="setViewMode('table')"
+              title="List View">≡</button>
+            <button id="btn-view-grid" class="view-btn" onclick="setViewMode('grid')" title="Grid View">⊞</button>
+          </div>
+        </div>
+        <div class="search-bar">
+          <input type="text" id="search-input"
+            placeholder="Search title, channel, tags, thread, description, video ID..."
+            onkeypress="if(event.key==='Enter')applyFilters()">
+          <select id="filter-status" onchange="applyFilters()">
+            <option value="">All statuses</option>
+            <option value="downloaded">Downloaded</option>
+            <option value="pending">Pending</option>
+            <option value="unavailable">Unavailable</option>
+          </select>
+          <select id="filter-section" onchange="applyFilters()">
+            <option value="">All sections</option>
+          </select>
+          <select id="filter-language" class="tag-list" onchange="applyFilters()">
+            <option value="any">Any language</option>
+            <option value="english">🇬🇧 English</option>
+            <option value="italian">🇮🇹 Italian</option>
+            <option value="spanish">🇪🇸 Spanish</option>
+            <option value="russian">🇷🇺 Russian</option>
+            <option value="french">🇫🇷 French</option>
+            <option value="german">🇩🇪 German</option>
+          </select>
+          <input type="text" id="filter-channel" list="channel-datalist" placeholder="All channels"
+            oninput="applyFilters()">
+          <datalist id="channel-datalist"></datalist>
+        </div>
+        <div class="search-bar">
+          <label>Views ≥</label>
+          <div class="range-group"><input type="number" id="filter-views-min" placeholder="0" oninput="applyFilters()">
+          </div>
+          <label>Likes ≥</label>
+          <div class="range-group"><input type="number" id="filter-likes-min" placeholder="0" oninput="applyFilters()">
+          </div>
+          <label>Years:</label>
+          <div class="range-group">
+            <select id="filter-year-min" onchange="applyFilters()">
+              <option value="">Min</option>
+            </select>
+            <span style="color:var(--text-muted);">-</span>
+            <select id="filter-year-max" onchange="applyFilters()">
+              <option value="">Max</option>
+            </select>
+          </div>
+        </div>
+        <div id="video-grid" class="video-grid" style="display:none"></div>
+        <div class="table-wrap" id="video-table-wrap">
+          <table id="video-table">
+            <thead>
+              <tr>
+                <th id="th-manage" style="display:none"><input type="checkbox" onchange="toggleAllManage(this.checked)">
+                </th>
+                <th data-field="title" onclick="sortTable('title')" style="cursor:pointer">Title / ID <span
+                    class="sort-arrow">↕</span></th>
+                <th data-field="channel_name" onclick="sortTable('channel_name')" style="cursor:pointer">Channel <span
+                    class="sort-arrow">↕</span></th>
+                <th data-field="publish_date" onclick="sortTable('publish_date')" style="cursor:pointer">Date <span
+                    class="sort-arrow">↕</span></th>
+                <th data-field="status" onclick="sortTable('status')" style="cursor:pointer">Status <span
+                    class="sort-arrow">↕</span></th>
+                <th data-field="language" onclick="sortTable('language')" style="cursor:pointer">Lang <span
+                    class="sort-arrow">↕</span></th>
+                <th data-field="view_count" onclick="sortTable('view_count')" style="cursor:pointer">Views <span
+                    class="sort-arrow">↕</span></th>
+                <th data-field="like_count" onclick="sortTable('like_count')" style="cursor:pointer">Likes <span
+                    class="sort-arrow">↕</span></th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="video-tbody"></tbody>
+          </table>
+        </div>
+        <div id="scroll-sentinel" style="height: 1px;"></div>
+        <div class="pagination" id="pagination"></div>
+      </div>
+
+      <!-- CHANNELS -->
+      <div class="page is-loading" id="page-channels">
+        <div class="page-loader">
+          <div class="spinner"></div>Loading channels...
+        </div>
+        <div class="section-header">
+          <h2>Channels</h2>
+          <span class="count-badge" id="channels-count-label"></span>
+        </div>
+        <div class="search-bar">
+          <input type="text" id="channel-search" placeholder="Search channels..." oninput="renderChannelGrid()">
+          <label>First Video ≥</label>
+          <div class="range-group"><input type="number" id="channel-year-min" placeholder="YYYY"
+              oninput="renderChannelGrid()"></div>
+          <label>First Video ≤</label>
+          <div class="range-group"><input type="number" id="channel-year-max" placeholder="YYYY"
+              oninput="renderChannelGrid()"></div>
+        </div>
+        <div id="channel-detail-panel" style="display:none"></div>
+        <div class="channel-grid" id="channel-grid"></div>
+      </div>
+
+      <!-- TIMELINE -->
+      <div class="page" id="page-timeline">
+        <div class="section-header">
+          <h2>Interactive Timeline</h2>
+          <span class="count-badge">Scroll to zoom, drag to pan</span>
+        </div>
+        <div class="search-bar">
+          <input type="text" id="timeline-channel-filter" list="timeline-channel-datalist"
+            placeholder="Filter by channel..." oninput="scheduleRender()">
+          <datalist id="timeline-channel-datalist"></datalist>
+          <button class="btn-thread"
+            onclick="document.getElementById('timeline-channel-filter').value=''; scheduleRender();">Clear</button>
+          <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
+            <label style="font-size: 12px; color: var(--text-muted);">Zoom:</label>
+            <input type="range" id="timeline-zoom-slider" min="0" max="100" value="50" style="width: 150px;">
+          </div>
+        </div>
+        <div id="timeline-container">
+          <div id="timeline-track"></div>
+        </div>
+      </div>
+
+
+
+      <!-- OTHER VIDEOS -->
+      <div class="page" id="page-sources"></div>
+
+      <!-- SECTIONS REMOVED -->
+
+      <!-- SAVED -->
+      <div class="page" id="page-saved">
+        <div class="section-header">
+          <h2>Saved Videos</h2>
+          <span class="count-badge" id="saved-count-label">Videos saved locally in your browser</span>
+        </div>
+        <div id="saved-videos-grid" class="video-grid"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- IMPORT MODAL -->
+  <div id="import-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-content" style="width: 600px;">
+      <div class="modal-header">
+        <h3 id="import-modal-title">Import Videos</h3>
+        <button onclick="closeImportModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="yt-tab-bar" style="margin-bottom: 20px; display: flex; gap: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
+          <a href="#" class="yt-tab active" id="tab-import-mass" onclick="toggleImportMode('mass'); return false;" style="font-weight: bold; color: var(--text);">Mass URL Import</a>
+          <a href="#" class="yt-tab" id="tab-import-single" onclick="toggleImportMode('single'); return false;" style="font-weight: bold; color: var(--text-muted);">Single File Upload</a>
+        </div>
+
+        <!-- Mass Import Form -->
+        <div id="form-import-mass">
+          <p style="margin-bottom: 10px; font-size: 14px; color: var(--text-muted);">Enter YouTube URLs (one per line, or separated by commas/spaces):</p>
+          <textarea id="import-urls" placeholder="https://www.youtube.com/watch?v=..."></textarea>
+          <div style="margin-top: 15px;">
+            <label style="font-size: 14px;">Target Index:</label>
+            <select id="import-target">
+              <option value="videos">Videos Index (video_index.json)</option>
+              <option value="sources">Sources Index (sources_index.json)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Single Upload Form -->
+        <div id="form-import-single" style="display: none;">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div style="grid-column: span 2;">
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Video File *</label>
+              <input type="file" id="upload-file" accept="video/*" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+            </div>
+            <div>
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Title *</label>
+              <input type="text" id="upload-title" placeholder="Video Title" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+            </div>
+            <div>
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Channel Name *</label>
+              <input type="text" id="upload-channel" list="uploader-channel-datalist" placeholder="Unknown" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+              <datalist id="uploader-channel-datalist"></datalist>
+            </div>
+            <div>
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Video Type *</label>
+              <select id="upload-type" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-top: 0;">
+                <option value="">-- Select Type --</option>
+                <option value="ytp">YouTube Poop (YTP)</option>
+                <option value="other">Other Video (Source)</option>
+              </select>
+            </div>
+            <div>
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Video ID (optional)</label>
+              <input type="text" id="upload-id" placeholder="e.g. gZrBjgbL660" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+            </div>
+            <div>
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Channel URL (optional)</label>
+              <input type="text" id="upload-channel-url" placeholder="https://youtube.com/@..." style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+            </div>
+            <div>
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Publish Date (optional)</label>
+              <input type="date" id="upload-date" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+            </div>
+            <div>
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Language (optional)</label>
+              <select id="upload-lang" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-top: 0;">
+                <option value="">Unknown</option>
+                <option value="italian">Italian</option>
+                <option value="english">English</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Tags (optional, comma-separated)</label>
+              <input type="text" id="upload-tags" placeholder="tag1, tag2, ..." style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div id="upload-progress-container" style="display: none; flex: 1; align-items: center; gap: 10px;">
+          <div style="flex: 1; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden;">
+            <div id="upload-progress-bar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.2s;"></div>
+          </div>
+          <span id="upload-progress-text" style="font-size: 12px; color: var(--text-muted);">0%</span>
+        </div>
+        <button class="btn-cancel" onclick="closeImportModal()">Cancel</button>
+        <button class="btn-submit" id="btn-import-submit" onclick="submitImport()">Import</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="script_toggle.js"></script>
+  <script src="script.js"></script>
+</body>
+
+</html>
