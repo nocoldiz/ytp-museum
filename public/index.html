@@ -616,6 +616,15 @@
           <button class="btn-thread"
             onclick="clearTimelineTags()">Clear All</button>
           
+          <div style="margin-left: 20px; display: flex; align-items: center; gap: 8px; background: var(--surface2); padding: 4px; border-radius: 8px; border: 1px solid var(--border);">
+            <label style="font-size: 11px; color: var(--text-muted); margin-left: 5px;">Show:</label>
+            <div class="tl-type-filter" style="display: flex; gap: 4px;">
+              <button class="tl-type-btn active" onclick="setTimelineVideoType('both', this)">Both</button>
+              <button class="tl-type-btn" onclick="setTimelineVideoType('ytp', this)">YTP</button>
+              <button class="tl-type-btn" onclick="setTimelineVideoType('sources', this)">Sources</button>
+            </div>
+          </div>
+
           <div style="margin-left: 20px; display: flex; align-items: center; gap: 8px;">
             <label style="font-size: 12px; color: var(--text-muted);">Jump to:</label>
             <select id="timeline-era-selector" onchange="jumpToEra(this.value)" style="font-size:12px; padding:4px; border-radius:4px; border:1px solid var(--border); background:var(--surface2); color:var(--text);">

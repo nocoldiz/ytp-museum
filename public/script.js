@@ -3050,6 +3050,14 @@ const tlEras = [
 ];
 
 let timelineSelectedChannels = [];
+let timelineVideoType = 'both'; // 'both', 'ytp', 'sources'
+
+function setTimelineVideoType(type, btn) {
+  timelineVideoType = type;
+  document.querySelectorAll('.tl-type-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  scheduleRender();
+}
 
 function handleTimelineFilterKey(e) {
   if (e.key === 'Enter') {
@@ -3191,7 +3199,7 @@ function initTimeline() {
   // Populate channel datalist
   const dl = document.getElementById('timeline-channel-datalist');
   if (dl && dl.children.length === 0) {
-    const channels = [...new Set(allVideos.map(v => v.channel_name).filter(Boolean))].sort();
+    const channels = [...new Set([...allVideos, ...allSources].map(v => v.channel_name).filter(Boolean))].sort();
     channels.forEach(ch => {
       const opt = document.createElement('option');
       opt.value = ch;
@@ -3356,7 +3364,11 @@ function renderTimelineView() {
   }
 
   // 4. Render Points
-  let visible = allVideos.filter(v => {
+  const baseList = timelineVideoType === 'ytp' ? allVideos : 
+                   timelineVideoType === 'sources' ? allSources : 
+                   [...allVideos, ...allSources];
+
+  let visible = baseList.filter(v => {
     if (!v.publish_date) return false;
     const t = new Date(v.publish_date).getTime();
     if (t < startT || t > endT) return false;
