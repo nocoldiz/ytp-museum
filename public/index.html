@@ -97,6 +97,12 @@
             </svg>
             <span>Saved</span>
           </a>
+          <a href="#" class="nav-tab" onclick="showPage('playlists'); return false;">
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path d="M4 10h12v2H4zm0-4h12v2H4zm0 8h8v2H4zm10 0v6l5-3-5-3z" />
+            </svg>
+            <span>Playlists</span>
+          </a>
         </div>
 
         <div class="sidebar-section">
@@ -235,9 +241,9 @@
               </div>
             </div>
             <div id="watch-description"></div>
-            <div id="watch-actions" style="margin-top: 10px;">
-              <button id="btn-save-video" class="btn-thread" style="width: 100%; padding: 10px; font-weight: bold;">Save
-                Video</button>
+            <div id="watch-actions" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
+              <button id="btn-save-video" class="btn-thread" style="width: 100%; padding: 10px; font-weight: bold;">Save Video</button>
+              <button id="btn-add-to-playlist" class="btn-thread" style="width: 100%; padding: 10px; font-weight: bold;" onclick="openAddToPlaylistModal()">Add to Playlist</button>
             </div>
             <div class="box" style="margin-top: 15px;">
               <div class="box-header">More From This Channel</div>
@@ -368,6 +374,11 @@
             <h3 class="theme-old-only" style="margin-bottom: 15px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Channels</h3>
             <div id="search-channels-results" style="margin-bottom: 30px;"></div>
           </div>
+
+          <div id="search-playlists-section" style="display:none;">
+            <h3 class="theme-old-only" style="margin-bottom: 15px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Playlists</h3>
+            <div id="search-playlists-results" class="video-grid" style="margin-bottom: 30px;"></div>
+          </div>
           
           <h3 class="theme-old-only" style="margin-bottom: 15px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Videos</h3>
           <div id="search-videos-results"></div>
@@ -454,8 +465,7 @@
             <button class="btn-play" onclick="bulkAction('flag-source')"
               style="background:var(--accent); padding:5px 12px; font-size:12px">Flag as Source</button>
             <div style="height: 20px; width: 1px; background: var(--border); margin: 0 5px;"></div>
-            <select id="mgmt-lang-select"
-              style="font-size:12px; padding:4px; border-radius:4px; border:1px solid var(--border); background:var(--surface);">
+            <select id="mgmt-lang-select" style="font-size:12px; padding:4px; border-radius:4px; border:1px solid var(--border); background:var(--surface);">
               <option value="">Set Language...</option>
               <option value="english">🇬🇧 English</option>
               <option value="italian">🇮🇹 Italian</option>
@@ -466,6 +476,8 @@
             </select>
             <button class="btn-play" onclick="bulkAction('set-lang')"
               style="background:var(--accent2); padding:5px 12px; font-size:12px">Apply Lang</button>
+            <button class="btn-play" onclick="openAddToPlaylistModal(true)"
+              style="background:var(--accent2); padding:5px 12px; font-size:12px">Add to Playlist</button>
             <button class="btn-play" onclick="toggleAllManage(false)"
               style="background:var(--surface); color:var(--text); border:1px solid var(--border); padding:5px 12px; font-size:12px">Deselect
               All</button>
@@ -602,6 +614,28 @@
 
       <!-- SECTIONS REMOVED -->
 
+      <!-- PLAYLISTS -->
+      <div id="page-playlists" class="page">
+        <div class="section-header">
+          <h2>Playlists</h2>
+          <span class="count-badge" id="playlists-count-label">0 playlists</span>
+          <button class="btn-submit" style="margin-left:auto;" onclick="openCreatePlaylistModal()">+ New Playlist</button>
+        </div>
+        
+        <div id="playlists-list-container">
+          <div id="playlists-grid" class="video-grid"></div>
+        </div>
+        
+        <div id="playlist-detail-container" style="display:none;">
+          <div class="section-header" style="margin-bottom:20px;">
+            <button class="btn-thread" onclick="closePlaylistDetail()">← Back</button>
+            <h2 id="playlist-detail-title" style="margin-left:15px;"></h2>
+            <span id="playlist-detail-meta" class="count-badge" style="margin-left:10px;"></span>
+          </div>
+          <div id="playlist-videos-grid" class="video-grid"></div>
+        </div>
+      </div>
+
       <!-- SAVED -->
       <div class="page" id="page-saved">
         <div class="section-header">
@@ -701,6 +735,46 @@
         </div>
         <button class="btn-cancel" onclick="closeImportModal()">Cancel</button>
         <button class="btn-submit" id="btn-import-submit" onclick="submitImport()">Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLAYLIST MODALS -->
+  <div id="playlist-create-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-content" style="width: 400px;">
+      <div class="modal-header">
+        <h3>Create New Playlist</h3>
+        <button onclick="closePlaylistModal('create')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label>Playlist Name:</label>
+        <input type="text" id="new-playlist-name" placeholder="My Favorites">
+        <div id="playlist-type-selection" style="margin-top:15px;">
+          <label>Type:</label>
+          <div style="display:flex; gap:10px; margin-top:5px;">
+            <label style="flex:1; cursor:pointer;"><input type="radio" name="playlist-type" value="local" checked> Local (Browser)</label>
+            <label id="server-playlist-option" style="flex:1; cursor:pointer; display:none;"><input type="radio" name="playlist-type" value="server"> Server (Public)</label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closePlaylistModal('create')">Cancel</button>
+        <button class="btn-submit" onclick="submitCreatePlaylist()">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="playlist-add-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-content" style="width: 450px;">
+      <div class="modal-header">
+        <h3>Add to Playlist</h3>
+        <button onclick="closePlaylistModal('add')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div id="playlist-selection-list" style="max-height:300px; overflow-y:auto; margin-bottom:15px;">
+          <!-- Playlists will be loaded here -->
+        </div>
+        <button class="btn-modern" style="width:100%;" onclick="openCreatePlaylistModal()">+ Create New Playlist</button>
       </div>
     </div>
   </div>

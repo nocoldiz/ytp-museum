@@ -19,6 +19,7 @@ let playbackMode = localStorage.getItem('ytp-playback-mode') || 'youtube';
 // DB Constants (Must be at top for initialization)
 const dbName = 'YTPArchiveDB';
 const storeName = 'savedVideos';
+const playlistStoreName = 'playlists';
 let db;
 
 function toggleVideoMode() {
@@ -200,6 +201,13 @@ async function autoLoad() {
     console.error("Database initialization failed:", e);
   }
   await autoLoad();
+  
+  // Initial playlist load
+  try {
+    const local = await getLocalPlaylists();
+    const server = await getServerPlaylists();
+    allPlaylists = { local, server };
+  } catch (e) { }
 })();
 
 
@@ -454,6 +462,9 @@ function showPage(name, pushToHistory = true) {
   }
   if (name === 'saved') {
     renderSavedPage();
+  }
+  if (name === 'playlists') {
+    renderPlaylistsPage();
   }
 }
 
@@ -851,6 +862,32 @@ function performSearch(query) {
     channelsContainer.innerHTML = scoredChannels.map(({ name: c }) => renderChannelCard(c, 'search')).join('');
   }
 
+  // ── Search Playlists ──────────────────────────────────────────────────
+  const playlists = [...allPlaylists.local, ...allPlaylists.server];
+  const scoredPlaylists = playlists
+    .map(p => {
+      let score = 0;
+      const pTokens = tokenize(p.name);
+      queryTokens.forEach(t => {
+        if (pTokens.some(pt => pt.includes(t))) score += 1;
+      });
+      return { ...p, score };
+    })
+    .filter(p => p.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  const playlistsSection = document.getElementById('search-playlists-section');
+  const playlistsContainer = document.getElementById('search-playlists-results');
+  if (scoredPlaylists.length === 0) {
+    if (playlistsSection) playlistsSection.style.display = 'none';
+  } else {
+    if (playlistsSection) playlistsSection.style.display = 'block';
+    playlistsContainer.innerHTML = scoredPlaylists.map(p => {
+      const type = allPlaylists.local.some(lp => lp.id === p.id) ? 'local' : 'server';
+      return renderPlaylistCard(p, type);
+    }).join('');
+  }
+
   // ── Search Videos ────────────────────────────────────────────────────
   let scoredVideos = [];
   
@@ -1065,7 +1102,7 @@ async function openVideo(vidId, pushToHistory = true) {
       if (!x.publish_date) return globalMaxYear === currentYear;
       return parseInt(x.publish_date.slice(0, 4)) <= globalMaxYear;
     }).slice(0, 5);
-    moreContainer.innerHTML = moreVids.map(x => renderVideoItem(x, 'list')).join('');
+    moreContainer.innerHTML = moreVids.map(x => renderVideoItem(x, 'grid')).join('');
   }
   updateSaveButton(vidId);
   loadVideoResponses(v);
@@ -1146,7 +1183,7 @@ function loadRelatedVideos(video) {
   }
 
   document.getElementById('related-videos-box').style.display = 'block';
-  container.innerHTML = scored.map(r => renderVideoItem(r.video, 'list')).join('');
+  container.innerHTML = scored.map(r => renderVideoItem(r.video, 'grid')).join('');
 }
 
 async function loadComments(vidId) {
@@ -1240,7 +1277,7 @@ function openProfile(user, pushToHistory = true) {
   showPage('profile', false);
   const ytData = [...allVideos, ...allSources];
   const avatar = getChannelAvatar(user);
-  const userVideos = ytData.filter(v => v.channel_name === user);
+  let userVideos = ytData.filter(v => v.channel_name === user);
   // Apply global year limit
   userVideos = userVideos.filter(v => {
     if (!v.publish_date) return true;
@@ -3023,6 +3060,9 @@ function initDB() {
       if (!db.objectStoreNames.contains(storeName)) {
         db.createObjectStore(storeName, { keyPath: 'id' });
       }
+      if (!db.objectStoreNames.contains(playlistStoreName)) {
+        db.createObjectStore(playlistStoreName, { keyPath: 'id' });
+      }
     };
     request.onsuccess = (e) => {
       db = e.target.result;
@@ -3121,8 +3161,254 @@ async function renderSavedPage() {
   if (saved.length === 0) {
     grid.innerHTML = '<div class="empty" style="grid-column: 1/-1; padding: 40px; text-align: center; color: var(--text-muted);">No saved videos yet. Start exploring and click "Save Video" to keep track of your favorites!</div>';
   } else {
-    // Sort by views or date? Let's do most recent (if we had a saved_at timestamp, but we don't yet)
     grid.innerHTML = saved.map(v => renderVideoItem(v, 'grid')).join('');
+  }
+}
+
+// ─── PLAYLISTS ────────────────────────────────────────────────────────────
+
+let allPlaylists = { local: [], server: [] };
+let selectedPlaylist = null;
+let bulkPlaylistMode = false;
+
+async function getLocalPlaylists() {
+  return new Promise((resolve) => {
+    if (!db) return resolve([]);
+    const transaction = db.transaction([playlistStoreName], 'readonly');
+    const store = transaction.objectStore(playlistStoreName);
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => resolve([]);
+  });
+}
+
+async function getServerPlaylists() {
+  try {
+    const r = await fetch('/api/playlists');
+    const res = await r.json();
+    return res.success ? Object.values(res.playlists) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+async function renderPlaylistsPage() {
+  const grid = document.getElementById('playlists-grid');
+  const label = document.getElementById('playlists-count-label');
+  const listContainer = document.getElementById('playlists-list-container');
+  const detailContainer = document.getElementById('playlist-detail-container');
+
+  if (!grid) return;
+  listContainer.style.display = 'block';
+  detailContainer.style.display = 'none';
+
+  const local = await getLocalPlaylists();
+  const server = await getServerPlaylists();
+  allPlaylists = { local, server };
+
+  const total = local.length + server.length;
+  if (label) label.textContent = `${total} playlists (${local.length} local, ${server.length} server)`;
+
+  if (total === 0) {
+    grid.innerHTML = '<div class="empty" style="grid-column: 1/-1; padding: 40px; text-align: center; color: var(--text-muted);">No playlists found. Create one to get started!</div>';
+  } else {
+    const html = [
+      ...local.map(p => renderPlaylistCard(p, 'local')),
+      ...server.map(p => renderPlaylistCard(p, 'server'))
+    ].join('');
+    grid.innerHTML = html;
+  }
+}
+
+function renderPlaylistCard(p, type) {
+  const count = p.videoIds ? p.videoIds.length : 0;
+  return `
+    <div class="vid-card" onclick="openPlaylistDetail('${p.id}', '${type}')">
+      <div class="yt-facade" style="background:var(--surface2); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px;">
+        <svg style="width:48px; height:48px; fill:var(--text-muted);" viewBox="0 0 24 24">
+          <path d="M4 10h12v2H4zm0-4h12v2H4zm0 8h8v2H4zm10 0v6l5-3-5-3z" />
+        </svg>
+        <span style="font-size:1.2rem; font-weight:bold;">${count} videos</span>
+      </div>
+      <div class="vid-card-info">
+        <div class="vid-card-title" style="font-size:1.1rem; font-weight:bold;">${escHtml(p.name)}</div>
+        <div class="vid-card-meta">
+          <span class="status-badge" style="background:${type === 'server' ? 'var(--accent)' : 'var(--surface2)'}; color:#fff; padding:2px 6px; border-radius:4px; font-size:0.7rem;">${type.toUpperCase()}</span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+async function openPlaylistDetail(id, type) {
+  const listContainer = document.getElementById('playlists-list-container');
+  const detailContainer = document.getElementById('playlist-detail-container');
+  const titleEl = document.getElementById('playlist-detail-title');
+  const metaEl = document.getElementById('playlist-detail-meta');
+  const videoGrid = document.getElementById('playlist-videos-grid');
+
+  listContainer.style.display = 'none';
+  detailContainer.style.display = 'block';
+  videoGrid.innerHTML = 'Loading videos...';
+
+  let playlist;
+  if (type === 'local') {
+    const local = await getLocalPlaylists();
+    playlist = local.find(p => p.id === id);
+  } else {
+    const server = await getServerPlaylists();
+    playlist = server.find(p => p.id === id);
+  }
+
+  if (!playlist) return;
+
+  titleEl.textContent = playlist.name;
+  metaEl.textContent = `${playlist.videoIds.length} videos • ${type === 'local' ? 'Stored in browser' : 'Public server playlist'}`;
+
+  if (playlist.videoIds.length === 0) {
+    videoGrid.innerHTML = '<div class="empty">This playlist is empty.</div>';
+  } else {
+    const ytData = [...allVideos, ...allSources];
+    const videos = playlist.videoIds.map(vidId => ytData.find(v => v.id === vidId)).filter(Boolean);
+    videoGrid.innerHTML = videos.map(v => renderVideoItem(v, 'grid')).join('');
+  }
+}
+
+function closePlaylistDetail() {
+  document.getElementById('playlists-list-container').style.display = 'block';
+  document.getElementById('playlist-detail-container').style.display = 'none';
+}
+
+function openCreatePlaylistModal() {
+  document.getElementById('playlist-create-modal').style.display = 'flex';
+  document.getElementById('server-playlist-option').style.display = isServerMode ? 'block' : 'none';
+}
+
+function closePlaylistModal(type) {
+  document.getElementById(`playlist-${type}-modal`).style.display = 'none';
+}
+
+async function submitCreatePlaylist() {
+  const name = document.getElementById('new-playlist-name').value.trim();
+  const type = document.querySelector('input[name="playlist-type"]:checked').value;
+
+  if (!name) return alert("Please enter a name.");
+
+  if (type === 'local') {
+    const id = 'local_' + Date.now();
+    const playlist = { id, name, videoIds: [], created_at: new Date().toISOString() };
+    const transaction = db.transaction([playlistStoreName], 'readwrite');
+    transaction.objectStore(playlistStoreName).add(playlist);
+    transaction.oncomplete = () => {
+      closePlaylistModal('create');
+      if (document.getElementById('page-playlists').classList.contains('active')) renderPlaylistsPage();
+      else alert("Playlist created!");
+    };
+  } else {
+    try {
+      const r = await fetch('/api/playlists/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      const res = await r.json();
+      if (res.success) {
+        closePlaylistModal('create');
+        if (document.getElementById('page-playlists').classList.contains('active')) renderPlaylistsPage();
+        else alert("Server playlist created!");
+      } else {
+        alert("Error: " + res.error);
+      }
+    } catch (e) {
+      alert("Failed to create server playlist.");
+    }
+  }
+}
+
+async function openAddToPlaylistModal(isBulk = false) {
+  bulkPlaylistMode = isBulk;
+  const list = document.getElementById('playlist-selection-list');
+  list.innerHTML = 'Loading playlists...';
+  document.getElementById('playlist-add-modal').style.display = 'flex';
+
+  const local = await getLocalPlaylists();
+  const server = await getServerPlaylists();
+
+  if (local.length === 0 && server.length === 0) {
+    list.innerHTML = '<p class="empty">No playlists found. Create one first!</p>';
+    return;
+  }
+
+  let html = '';
+  if (local.length > 0) {
+    html += '<div style="font-weight:bold; margin-bottom:5px; font-size:0.9rem; color:var(--text-muted);">Local Playlists</div>';
+    html += local.map(p => `
+      <div class="suggestion-item" onclick="confirmAddToPlaylist('${p.id}', 'local')">
+        <span class="suggestion-text">${escHtml(p.name)}</span>
+        <span class="suggestion-type">${p.videoIds.length} vids</span>
+      </div>
+    `).join('');
+  }
+  if (server.length > 0) {
+    html += '<div style="font-weight:bold; margin:10px 0 5px 0; font-size:0.9rem; color:var(--text-muted);">Server Playlists</div>';
+    html += server.map(p => `
+      <div class="suggestion-item" onclick="confirmAddToPlaylist('${p.id}', 'server')">
+        <span class="suggestion-text">${escHtml(p.name)}</span>
+        <span class="suggestion-type">${p.videoIds.length} vids</span>
+      </div>
+    `).join('');
+  }
+  list.innerHTML = html;
+}
+
+async function confirmAddToPlaylist(playlistId, type) {
+  let videoIds = [];
+  if (bulkPlaylistMode) {
+    const checks = document.querySelectorAll('.manage-check:checked');
+    videoIds = Array.from(checks).map(cb => cb.getAttribute('data-id'));
+  } else {
+    const url = new URL(window.location);
+    const vidId = url.searchParams.get('v');
+    if (vidId) videoIds = [vidId];
+  }
+
+  if (videoIds.length === 0) return alert("No videos selected.");
+
+  if (type === 'local') {
+    const transaction = db.transaction([playlistStoreName], 'readwrite');
+    const store = transaction.objectStore(playlistStoreName);
+    const request = store.get(playlistId);
+    request.onsuccess = () => {
+      const p = request.result;
+      const existing = new Set(p.videoIds);
+      let added = 0;
+      videoIds.forEach(id => {
+        if (!existing.has(id)) {
+          p.videoIds.push(id);
+          added++;
+        }
+      });
+      store.put(p);
+      alert(`Added ${added} videos to playlist "${p.name}".`);
+      closePlaylistModal('add');
+    };
+  } else {
+    try {
+      const r = await fetch('/api/playlists/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ playlistId, videoIds })
+      });
+      const res = await r.json();
+      if (res.success) {
+        alert(`Added ${res.addedCount} videos to server playlist.`);
+        closePlaylistModal('add');
+      } else {
+        alert("Error: " + res.error);
+      }
+    } catch (e) {
+      alert("Failed to add to server playlist.");
+    }
   }
 }
 

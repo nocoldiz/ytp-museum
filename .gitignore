@@ -6,3 +6,4 @@ __pycache__
 *.pyc
 *.bak
 quickstart.md
+db/video_index - Copia.json

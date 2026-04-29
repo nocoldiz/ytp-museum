@@ -26,6 +26,7 @@ const VIDEO_INDEX = path.join(DB_DIR, 'video_index.json');
 const EXCLUDED_VIDEOS = path.join(DB_DIR, 'excluded_videos.json');
 const SOURCES_INDEX = path.join(DB_DIR, 'sources_index.json');
 const YT_POOPERS_INDEX = path.join(DB_DIR, 'ytpoopers_index.json');
+const PLAYLISTS_FILE = path.join(DB_DIR, 'playlists.json');
 const SOURCES_DIR = path.join(__dirname, 'sources');
 
 
@@ -223,6 +224,66 @@ function setLanguage(videoIds, language, videoIndexPath, sourcesIndexPath) {
     return { success: true, results };
   } catch (err) {
     return { success: false, error: 'Failed to save changes' };
+  }
+}
+
+/**
+ * Gets all server-defined playlists.
+ */
+function getPlaylists(playlistsPath) {
+  try {
+    if (fs.existsSync(playlistsPath)) {
+      return JSON.parse(fs.readFileSync(playlistsPath, 'utf8'));
+    }
+    return {};
+  } catch (err) {
+    return {};
+  }
+}
+
+/**
+ * Creates a new server playlist.
+ */
+function createPlaylist(name, playlistsPath) {
+  let playlists = getPlaylists(playlistsPath);
+  const id = 'pl_' + crypto.randomBytes(6).toString('hex');
+  playlists[id] = {
+    id,
+    name,
+    videoIds: [],
+    created_at: new Date().toISOString()
+  };
+  try {
+    fs.writeFileSync(playlistsPath, JSON.stringify(playlists));
+    return { success: true, playlist: playlists[id] };
+  } catch (err) {
+    return { success: false, error: 'Failed to save playlist' };
+  }
+}
+
+/**
+ * Adds videos to a server playlist.
+ */
+function addVideosToPlaylist(playlistId, videoIds, playlistsPath) {
+  let playlists = getPlaylists(playlistsPath);
+  if (!playlists[playlistId]) {
+    return { success: false, error: 'Playlist not found' };
+  }
+  
+  const existingIds = new Set(playlists[playlistId].videoIds);
+  const added = [];
+  for (const id of videoIds) {
+    if (!existingIds.has(id)) {
+      playlists[playlistId].videoIds.push(id);
+      added.push(id);
+    }
+  }
+  
+  try {
+    fs.writeFileSync(playlistsPath, JSON.stringify(playlists));
+    return { success: true, addedCount: added.length };
+  } catch (err) {
+    return { success: false, error: 'Failed to update playlist' };
   }
 }
 
@@ -426,6 +487,52 @@ function onRequest(req, res) {
       try {
         const { videoIds, language } = JSON.parse(body);
         const result = setLanguage(videoIds, language, VIDEO_INDEX, SOURCES_INDEX);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // ── API: Playlists ───────────────────────────────────────────────────────
+  if (pathname === '/api/playlists' && req.method === 'GET') {
+    const playlists = getPlaylists(PLAYLISTS_FILE);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, playlists }));
+    return;
+  }
+
+  if (pathname === '/api/playlists/create' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const { name } = JSON.parse(body);
+        if (!name) throw new Error("Name is required");
+        const result = createPlaylist(name, PLAYLISTS_FILE);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  if (pathname === '/api/playlists/add' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const { playlistId, videoIds } = JSON.parse(body);
+        if (!playlistId || !videoIds || !Array.isArray(videoIds)) {
+          throw new Error("Invalid request data");
+        }
+        const result = addVideosToPlaylist(playlistId, videoIds, PLAYLISTS_FILE);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } catch (err) {
