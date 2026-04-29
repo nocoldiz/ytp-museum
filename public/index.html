@@ -11,23 +11,17 @@
 </head>
 
 <body class="theme-old theme-light">
-
-  <!-- LANDING -->
-  <div id="landing">
-    <h1>YTP Archive<br>Visualizer</h1>
-    <p>Interactive analytics dashboard for your YouTube Poop archive index.</p>
-    <div class="drop-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M9 13h6m-3-3v6m-9 1V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2z" />
-      </svg>
-      <p><strong>Drop video_index.json, sources_index.json & ytpoopers_index.json here</strong><br>or click to browse
-      </p>
-    </div>
-    <input type="file" id="fileInput" accept=".json" multiple>
-    <p class="auto-load">Also tries to auto-load <code>video_index.json</code>, <code>sources_index.json</code> &
-      <code>ytpoopers_index.json</code>
-    </p>
-  </div>
+  <script>
+    (function() {
+      const mode = localStorage.getItem('lastThemeMode') || 'old';
+      const dark = localStorage.getItem('ytp-theme-dark') === 'true';
+      if (mode === 'modern') document.body.classList.remove('theme-old');
+      if (dark) {
+        document.body.classList.remove('theme-light');
+        document.body.classList.add('theme-dark');
+      }
+    })();
+  </script>
 
   <!-- APP -->
   <div id="app">

@@ -97,42 +97,15 @@ function setGlobalMaxYear(year) {
     if (user) openProfile(decodeURIComponent(user), false);
   }
 }
-document.getElementById('fileInput').addEventListener('change', e => {
-  const files = Array.from(e.target.files);
-  loadMultipleFiles(files);
-});
+// Manual file loading removed as per user request.
 
-const dz = document.getElementById('dropZone');
-dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag-over'); });
-dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
-dz.addEventListener('drop', e => {
-  e.preventDefault(); dz.classList.remove('drag-over');
-  const files = Array.from(e.dataTransfer.files);
-  loadMultipleFiles(files);
-});
-
-async function loadMultipleFiles(files) {
-  let videoData = null;
-  let sourceData = null;
-  let pooperData = null;
-
-  for (const f of files) {
-    const text = await f.text();
-    const json = JSON.parse(text);
-    if (f.name.includes('sources')) sourceData = json;
-    else if (f.name.includes('ytpoopers')) pooperData = json;
-    else videoData = json;
-  }
-  initApp(videoData, sourceData, pooperData);
-}
+// loadMultipleFiles removed.
 
 // Auto-load from same directory
 async function autoLoad() {
   const isHttp = window.location.protocol.startsWith('http');
   if (isHttp) {
-    // Skip landing page immediately if on a server
-    document.getElementById('landing').style.display = 'none';
-    document.getElementById('app').style.display = 'block';
+    // App auto-loads data from server
   }
 
   let vData = null;
@@ -249,14 +222,9 @@ function initApp(vRaw, sRaw, pRaw) {
   }
 
   if (!vRaw && !sRaw) {
-    if (!window.location.protocol.startsWith('http')) {
-      document.getElementById('landing').style.display = 'flex';
-      document.getElementById('app').style.display = 'none';
-    }
     return;
   }
 
-  document.getElementById('landing').style.display = 'none';
   document.getElementById('app').style.display = 'block';
 
   // Hide all loaders
@@ -334,6 +302,11 @@ function handleRouting() {
   let videoId = params.get('v');
   let user = params.get('user') || params.get('c') || params.get('channel');
   let query = params.get('q') || params.get('search_query');
+
+  if (page === 'search' && !query) {
+    showPage('youtube', true);
+    return;
+  }
 
   // Handle YouTube-style paths
   if (path.startsWith('/watch')) {
@@ -859,7 +832,7 @@ function performSearch(query) {
     if (channelsSection) channelsSection.style.display = 'none';
   } else {
     if (channelsSection) channelsSection.style.display = 'block';
-    channelsContainer.innerHTML = scoredChannels.map(({ name: c }) => renderChannelCard(c, 'search')).join('');
+    channelsContainer.innerHTML = scoredChannels.slice(0, 3).map(({ name: c }) => renderChannelCard(c, 'search')).join('');
   }
 
   // ── Search Playlists ──────────────────────────────────────────────────
@@ -961,6 +934,13 @@ function renderSearchVideos(append = false) {
   const total = filteredVideos.length;
   const countLabel = document.getElementById('search-count-label');
   if (countLabel) countLabel.textContent = `${total} videos found`;
+  
+  const isModern = !document.body.classList.contains('theme-old');
+  if (searchViewMode === 'grid') {
+    container.className = isModern ? 'modern-videos-grid-search' : 'video-grid';
+  } else {
+    container.className = isModern ? 'video-list-modern-search' : 'video-list';
+  }
 
   if (total === 0) {
     container.innerHTML = '<p class="empty" style="padding:10px;">No videos found matching your criteria.</p>';
@@ -1274,6 +1254,13 @@ function fallbackToYoutube(vidId) {
 
 function openProfile(user, pushToHistory = true) {
   if (pushToHistory) updateURL({ user: user }, '/@' + encodeURIComponent(user));
+
+  // If modern mode is active, use the new modern profile renderer
+  if (!document.body.classList.contains('theme-old')) {
+    renderModernProfile(user);
+    return;
+  }
+
   showPage('profile', false);
   const ytData = [...allVideos, ...allSources];
   const avatar = getChannelAvatar(user);
@@ -1320,6 +1307,154 @@ function openProfile(user, pushToHistory = true) {
   }
   return false;
 }
+
+async function renderModernProfile(user, activeTab = 'home') {
+  const p = document.getElementById('page-profile');
+  showPage('profile', false);
+  p.innerHTML = '<div class="loading">Loading profile...</div>';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+
+  // Ensure playlists are loaded
+  if (allPlaylists.local.length === 0 && allPlaylists.server.length === 0) {
+    const [local, server] = await Promise.all([getLocalPlaylists(), getServerPlaylists()]);
+    allPlaylists = { local, server };
+  }
+
+  const avatar = getChannelAvatar(user);
+  const pooper = Object.values(pooperMap).find(x => x.channel_name === user) || { channel_name: user };
+  const ytData = [...allVideos, ...allSources];
+  const videos = ytData.filter(v => v.channel_name === user);
+  
+  const subCount = pooper.subscriber_count ? fmtNum(pooper.subscriber_count) + ' iscritti' : videos.length + ' video';
+  const videoCountText = videos.length + ' video';
+  const handle = pooper.channel_url ? '@' + pooper.channel_url.split('/').pop() : '@' + user.replace(/\s+/g, '').toLowerCase();
+
+  p.innerHTML = `
+    <div class="modern-profile-container">
+      <div class="modern-channel-header">
+        <div class="modern-channel-banner"></div>
+        <div class="modern-channel-main-info">
+          <img src="${avatar}" class="modern-channel-avatar">
+          <div class="modern-channel-text">
+            <h1 class="modern-channel-name">${escHtml(user)}</h1>
+            <div class="modern-channel-handle-stats">
+              <span>${escHtml(handle)}</span>
+              <span class="dot-sep">•</span>
+              <span>${subCount}</span>
+              <span class="dot-sep">•</span>
+              <span>${videoCountText}</span>
+            </div>
+            <div class="modern-channel-bio">${escHtml(pooper.description || 'Nessuna descrizione disponibile.')}</div>
+            <button class="modern-btn-subscribe">Iscritto</button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="modern-channel-nav">
+        <div class="modern-nav-tab ${activeTab === 'home' ? 'active' : ''}" onclick="renderModernProfileTab('${escAttr(user)}', 'home')">Home</div>
+        <div class="modern-nav-tab ${activeTab === 'videos' ? 'active' : ''}" onclick="renderModernProfileTab('${escAttr(user)}', 'videos')">Video</div>
+        <div class="modern-nav-tab" onclick="alert('Shorts subsection coming soon!')">Short</div>
+        <div class="modern-nav-tab" onclick="alert('Live subsection coming soon!')">Live</div>
+        <div class="modern-nav-tab" onclick="alert('Playlists subsection coming soon!')">Playlist</div>
+        <div class="modern-nav-tab" onclick="alert('Posts subsection coming soon!')">Post</div>
+        <div class="modern-nav-tab"><svg style="width:20px;height:20px;fill:currentColor" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></div>
+      </div>
+
+      <div class="modern-channel-content" id="modern-profile-content">
+        <!-- Content injected here -->
+      </div>
+    </div>
+  `;
+
+  renderModernProfileTabContent(user, activeTab);
+}
+
+function renderModernProfileTab(user, tab) {
+  // Update UI tabs
+  document.querySelectorAll('.modern-nav-tab').forEach(el => {
+    el.classList.toggle('active', el.textContent.toLowerCase() === tab);
+  });
+  renderModernProfileTabContent(user, tab);
+}
+
+function renderModernProfileTabContent(user, tab) {
+  const container = document.getElementById('modern-profile-content');
+  if (!container) return;
+
+  const ytData = [...allVideos, ...allSources];
+  const videos = ytData.filter(v => v.channel_name === user);
+
+  if (tab === 'home') {
+    renderModernChannelHome(user, container, videos);
+  } else if (tab === 'videos') {
+    container.innerHTML = `
+      <div class="modern-videos-grid">
+        ${videos.sort((a,b) => (b.publish_date||'').localeCompare(a.publish_date||'')).map(v => renderModernHomeCard(v)).join('')}
+      </div>
+    `;
+  }
+}
+
+function renderModernChannelHome(user, container, channelVideos) {
+  container.innerHTML = '';
+  const channelVideoIds = new Set(channelVideos.map(v => v.id));
+  
+  // 1. Find relevant playlists
+  const relevantPlaylists = [];
+  [...allPlaylists.local, ...allPlaylists.server].forEach(p => {
+    if (p.videoIds && p.videoIds.some(id => channelVideoIds.has(id))) {
+      relevantPlaylists.push(p);
+    }
+  });
+
+  // 2. Render Playlist Sections
+  relevantPlaylists.forEach(p => {
+    const pVideos = p.videoIds
+      .map(id => channelVideos.find(v => v.id === id))
+      .filter(Boolean);
+    
+    if (pVideos.length === 0) return;
+
+    const section = document.createElement('div');
+    section.className = 'modern-section';
+    section.innerHTML = `
+      <h2 class="modern-section-title">${escHtml(p.name)} <span style="color:var(--text-muted); font-size:14px; font-weight:normal; margin-left:8px;">Riproduci tutto</span></h2>
+      <div class="modern-carousel-container">
+        ${pVideos.map(v => renderModernHomeCard(v)).join('')}
+      </div>
+    `;
+    container.appendChild(section);
+  });
+
+  // 3. Popular Videos Section
+  const popularVideos = [...channelVideos].sort((a,b) => (b.view_count||0) - (a.view_count||0)).slice(0, 10);
+  if (popularVideos.length > 0) {
+    const section = document.createElement('div');
+    section.className = 'modern-section';
+    section.innerHTML = `
+      <h2 class="modern-section-title">Video popolari</h2>
+      <div class="modern-carousel-container">
+        ${popularVideos.map(v => renderModernHomeCard(v)).join('')}
+      </div>
+    `;
+    container.appendChild(section);
+  }
+
+  // 4. Recent Videos Section
+  const recentVideos = [...channelVideos].sort((a,b) => (b.publish_date||'').localeCompare(a.publish_date||'')).slice(0, 10);
+  if (recentVideos.length > 0) {
+    const section = document.createElement('div');
+    section.className = 'modern-section';
+    section.innerHTML = `
+      <h2 class="modern-section-title">Video</h2>
+      <div class="modern-carousel-container">
+        ${recentVideos.map(v => renderModernHomeCard(v)).join('')}
+      </div>
+    `;
+    container.appendChild(section);
+  }
+}
+
 
 function updateVideoLayoutForTheme() {
   const isOld = document.body.classList.contains('theme-old');
@@ -1742,8 +1877,8 @@ function renderVideoItem(v, mode = 'list') {
   const is169 = document.body.classList.contains('aspect-ratio-16-9');
 
   if (mode === 'grid') {
-    // If 16:9 selected, use modern card regardless of theme
-    if (is169) {
+    // In modern mode, always use modern card for grid
+    if (!document.body.classList.contains('theme-old') || is169) {
       return renderModernHomeCard(v);
     }
 
@@ -1768,8 +1903,8 @@ function renderVideoItem(v, mode = 'list') {
   }
 
   if (mode === 'list') {
-    // If 16:9 selected, use modern list style regardless of theme
-    if (is169) {
+    // In modern mode, always use modern list style
+    if (!document.body.classList.contains('theme-old') || is169) {
       return `
         <div class="video-item modern-list" onclick="openVideo('${v.id}')">
           <div class="modern-list-thumb">

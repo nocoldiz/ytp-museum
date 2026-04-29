@@ -100,91 +100,6 @@
     text-decoration: underline;
   }
 
-  /* ── LANDING ── */
-  #landing {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 100vh;
-    gap: 32px;
-    padding: 40px;
-  }
-
-  #landing h1 {
-    font-size: 3rem;
-    font-weight: 800;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    text-align: center;
-  }
-
-  #landing p {
-    color: var(--text-muted);
-    font-size: 1.1rem;
-    text-align: center;
-    max-width: 500px;
-  }
-
-  .drop-zone {
-    border: 2px dashed var(--border);
-    border-radius: var(--radius);
-    padding: 60px 80px;
-    text-align: center;
-    cursor: pointer;
-    transition: all .2s;
-    background: var(--surface);
-    width: 100%;
-    max-width: 500px;
-  }
-
-  .drop-zone:hover,
-  .drop-zone.drag-over {
-    border-color: var(--accent);
-    background: var(--surface2);
-  }
-
-  .drop-zone svg {
-    width: 48px;
-    height: 48px;
-    margin-bottom: 16px;
-    opacity: .6;
-  }
-
-  .drop-zone p {
-    color: var(--text-muted);
-  }
-
-  .drop-zone strong {
-    color: var(--accent);
-  }
-
-  #fileInput {
-    display: none;
-  }
-
-  .btn-load {
-    background: linear-gradient(135deg, var(--accent), #a18fff);
-    border: none;
-    border-radius: 8px;
-    color: #fff;
-    padding: 14px 36px;
-    font-size: 1rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: opacity .2s;
-  }
-
-  .btn-load:hover {
-    opacity: .85;
-  }
-
-  .auto-load {
-    font-size: .85rem;
-    color: var(--text-muted);
-  }
-
   /* ── LOADERS ── */
   .spinner {
     width: 40px;
@@ -220,7 +135,6 @@
   .page.is-loading>*:not(.page-loader) {
     display: none !important;
   }
-
 
   /* ── APP ── */
   #app {
@@ -1163,7 +1077,7 @@
     margin: 0 4px;
   }
 
-  #modern-videos-grid {
+  #modern-videos-grid, .modern-videos-grid-search {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
     gap: 40px 16px;
@@ -1629,24 +1543,37 @@
   /* ── Modern Channel Search Result ── */
   .channel-card.modern-search {
     display: flex;
-    padding: 16px 0;
-    margin-bottom: 24px;
-    border-bottom: 1px solid var(--border);
+    flex: 1;
+    min-width: 320px;
+    max-width: 450px;
+    padding: 24px 0;
+    margin-bottom: 0;
+    border-bottom: none;
     cursor: pointer;
+    transition: background 0.2s;
+    border-radius: 12px;
+  }
+
+  .channel-card.modern-search:hover {
+    background: var(--surface2);
   }
 
   .ch-card-main-modern {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 60px;
+    gap: 15px;
     width: 100%;
-    padding: 0 40px;
+    padding: 0 15px;
+    text-align: center;
   }
 
   #search-channels-results {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 20px;
+    display: flex;
+    gap: 30px;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
   }
 
   @media (max-width: 800px) {
@@ -1657,11 +1584,12 @@
   }
 
   .ch-avatar-modern {
-    width: 136px;
-    height: 136px;
+    width: 180px;
+    height: 180px;
     border-radius: 50%;
     object-fit: cover;
     flex-shrink: 0;
+    margin-bottom: 15px;
   }
 
   .ch-info-modern {
@@ -4079,3 +4007,172 @@ body.theme-old .btn-back {
   padding: 4px 8px;
   font-size: 12px;
 }
+/* MODERN CHANNEL PROFILE */
+.modern-profile-container {
+    padding: 0;
+    color: var(--text);
+}
+
+.modern-channel-header {
+    display: flex;
+    flex-direction: column;
+    padding: 0 0 16px 0;
+    max-width: 1284px;
+    margin: 0 auto;
+}
+
+.modern-channel-banner {
+    height: 200px;
+    background: #000;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    background-size: cover;
+    background-position: center;
+}
+
+.modern-channel-main-info {
+    display: flex;
+    gap: 24px;
+    padding: 0 16px;
+    align-items: flex-start;
+}
+
+.modern-channel-avatar {
+    width: 160px;
+    height: 160px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.modern-channel-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.modern-channel-name {
+    font-size: 36px;
+    font-weight: 700;
+    margin: 0 0 4px 0;
+    line-height: 1.2;
+}
+
+.modern-channel-handle-stats {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.modern-channel-bio {
+    font-size: 14px;
+    color: var(--text-muted);
+    line-height: 20px;
+    margin-bottom: 16px;
+    max-width: 600px;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.modern-btn-subscribe {
+    background: var(--text);
+    color: var(--bg);
+    border: none;
+    padding: 10px 16px;
+    border-radius: 20px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+    transition: opacity 0.2s;
+}
+
+.modern-btn-subscribe:hover {
+    opacity: 0.9;
+}
+
+/* MODERN CHANNEL NAV */
+.modern-channel-nav {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    margin-top: 16px;
+    padding: 0 16px;
+    gap: 24px;
+    position: sticky;
+    top: 56px;
+    background: var(--bg);
+    z-index: 10;
+}
+
+.modern-nav-tab {
+    padding: 14px 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-muted);
+    cursor: pointer;
+    position: relative;
+    white-space: nowrap;
+}
+
+.modern-nav-tab.active {
+    color: var(--text);
+}
+
+.modern-nav-tab.active::after {
+    content: " \;
+ position: absolute;
+ bottom: 0;
+ left: 0;
+ width: 100%;
+ height: 2px;
+ background: var(--text);
+}
+
+.modern-nav-tab:hover {
+ color: var(--text);
+}
+
+/* MODERN CHANNEL CONTENT */
+.modern-channel-content {
+ max-width: 1284px;
+ margin: 0 auto;
+ padding: 24px 16px;
+}
+
+.modern-section {
+ margin-bottom: 40px;
+}
+
+.modern-section-title {
+ font-size: 20px;
+ font-weight: 700;
+ margin-bottom: 16px;
+ display: flex;
+ align-items: center;
+ gap: 8px;
+}
+
+.modern-carousel-container {
+ display: flex;
+ gap: 16px;
+ overflow-x: auto;
+ padding-bottom: 16px;
+ scrollbar-width: none; /* Firefox */
+}
+
+.modern-carousel-container::-webkit-scrollbar {
+ display: none; /* Chrome/Safari */
+}
+
+.modern-carousel-container .modern-home-card {
+ flex: 0 0 210px;
+}
+
+/* CAROUSEL CONTROLS (optional, for future) */
+.carousel-wrapper {
+ position: relative;
+}
+
