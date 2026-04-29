@@ -131,7 +131,7 @@
           </a>
         </div>
         <!-- Modern Mode Settings (Sidebar bottom) -->
-        <div id="theme-toggles-modern" class="sidebar-section" style="margin-top: auto;">
+        <div id="theme-toggles-modern" class="sidebar-section theme-modern-only" style="margin-top: auto;">
           <div class="sidebar-divider"></div>
           <div class="sidebar-header">Settings</div>
           
@@ -614,13 +614,31 @@
           <datalist id="timeline-channel-datalist"></datalist>
           <button class="btn-thread"
             onclick="document.getElementById('timeline-channel-filter').value=''; scheduleRender();">Clear</button>
+          
+          <div style="margin-left: 20px; display: flex; align-items: center; gap: 8px;">
+            <label style="font-size: 12px; color: var(--text-muted);">Jump to:</label>
+            <select id="timeline-era-selector" onchange="jumpToEra(this.value)" style="font-size:12px; padding:4px; border-radius:4px; border:1px solid var(--border); background:var(--surface2); color:var(--text);">
+              <option value="">Select Era...</option>
+              <option value="2006">Era 2: Genesi (2006)</option>
+              <option value="2008">Era 4: Community IT (2008)</option>
+              <option value="2011">Era 5: Golden Age IT (2011)</option>
+              <option value="2017">Era 6: Adpocalypse (2017)</option>
+              <option value="2023">Era 7: Post-Modern (2023)</option>
+            </select>
+          </div>
+
           <div style="margin-left: auto; display: flex; align-items: center; gap: 10px;">
             <label style="font-size: 12px; color: var(--text-muted);">Zoom:</label>
             <input type="range" id="timeline-zoom-slider" min="0" max="100" value="50" style="width: 150px;">
           </div>
         </div>
         <div id="timeline-container">
-          <div id="timeline-track"></div>
+          <!-- The SVG engine will inject content here -->
+          <div id="timeline-tooltip" class="tl-tooltip" style="display:none;"></div>
+        </div>
+        <div id="timeline-minimap-container">
+          <canvas id="timeline-minimap"></canvas>
+          <div id="timeline-minimap-viewbox"></div>
         </div>
       </div>
 

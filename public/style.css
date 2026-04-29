@@ -3123,136 +3123,165 @@
     font-size: .75rem;
   }
 
-  /* ─── TIMELINE (canvas + DOM cards) ──────────────────────── */
+  /* ─── TIMELINE (SVG + Lanes) ──────────────────────── */
   #timeline-container {
     position: relative;
     width: 100%;
-    height: calc(100vh - 200px);
-    min-height: 400px;
+    height: calc(100vh - 280px);
+    min-height: 500px;
     overflow: hidden;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     cursor: grab;
     user-select: none;
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.2);
   }
 
   #timeline-container:active {
     cursor: grabbing;
   }
 
-  /* Canvas covers full area for grid/axis (pointer-events:none set inline) */
-  canvas.tl-canvas {
+  /* SVG elements */
+  .tl-svg {
     display: block;
+    width: 100%;
+    height: 100%;
   }
 
-  /* Video event card */
-  .tl-card {
-    position: absolute;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-bottom: 3px solid var(--accent);
-    border-radius: 6px 6px 0 0;
-    padding: 6px 10px;
-    width: 230px;
-    cursor: pointer;
-    z-index: 5;
-    transform: translateX(-50%);
-    transition: box-shadow 0.12s, border-color 0.12s;
-    overflow: hidden;
+  .tl-era-zone {
+    opacity: 0.15;
+    transition: opacity 0.3s;
+  }
+  .tl-era-zone:hover {
+    opacity: 0.25;
   }
 
-  .tl-card:hover {
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
-    border-left-color: var(--accent);
-    z-index: 10;
-    background: var(--surface);
+  .tl-lane-bg {
+    fill: rgba(255,255,255,0.02);
+  }
+  .tl-lane-line {
+    stroke: var(--border);
+    stroke-dasharray: 4 4;
+    opacity: 0.5;
   }
 
-  .tl-card-title {
-    font-size: 11.5px;
-    font-weight: 700;
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 210px;
-    line-height: 1.35;
-  }
-
-  .tl-card-sub {
-    font-size: 10px;
-    color: var(--text-muted);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-top: 2px;
-  }
-
-  .tl-star {
-    color: gold;
-    margin-right: 2px;
-    font-size: 11px;
-  }
-
-  /* Milestone card (>10M views) */
-  .tl-card.tl-milestone {
-    border-bottom-color: #e65;
-    background: color-mix(in srgb, var(--surface2) 92%, #e6553300);
-  }
-
-  .tl-card.tl-milestone .tl-card-title {
-    color: #e65;
-  }
-
-  /* First upload badge */
-  .tl-card.tl-first {
-    border-bottom-color: gold;
-  }
-
-  /* Dot on spine (::before on tl-card) */
-  .tl-card::before {
-    content: '';
-    position: absolute;
-    left: 50%;
-    bottom: -8px;
-    transform: translateX(-50%);
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--accent);
-    border: 1.5px solid var(--surface);
-  }
-
-  .tl-card.tl-milestone::before {
-    background: #e65;
-  }
-
-  .tl-card.tl-first::before {
-    background: gold;
-  }
-
-  /* Hint / zoom label bar */
-  .tl-hint {
-    position: absolute;
-    bottom: 12px;
-    left: 50%;
-    transform: translateX(-50%);
-    font-size: 11px;
-    color: var(--text-muted);
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 20px;
-    padding: 4px 16px;
+  .tl-era-label {
+    fill: var(--text-muted);
+    font-size: 14px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
     pointer-events: none;
-    z-index: 20;
-    white-space: nowrap;
   }
 
-  .tl-cap-notice {
-    bottom: 44px;
-    font-style: italic;
+  .tl-point {
+    cursor: pointer;
+    transition: r 0.15s, fill 0.15s, filter 0.15s;
+    stroke: var(--surface);
+    stroke-width: 1px;
   }
+
+  .tl-point:hover {
+    r: 8 !important;
+    filter: brightness(1.5) drop-shadow(0 0 5px currentColor);
+  }
+
+  .tl-point.milestone {
+    stroke: gold;
+    stroke-width: 2px;
+  }
+
+  /* Rich Tooltip */
+  .tl-tooltip {
+    position: absolute;
+    z-index: 1000;
+    width: 280px;
+    background: rgba(30, 36, 53, 0.85);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 0;
+    color: #fff;
+    pointer-events: none;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    overflow: hidden;
+    transform: translate(-50%, -100%);
+    margin-top: -15px;
+    transition: opacity 0.2s, transform 0.2s;
+  }
+
+  .tl-tooltip-thumb {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: #000;
+    object-fit: cover;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .tl-tooltip-content {
+    padding: 12px;
+  }
+
+  .tl-tooltip-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    line-height: 1.3;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .tl-tooltip-meta {
+    font-size: 11px;
+    color: rgba(255,255,255,0.6);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  /* Minimap */
+  #timeline-minimap-container {
+    position: relative;
+    width: 100%;
+    height: 60px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-top: none;
+    border-radius: 0 0 var(--radius) var(--radius);
+    overflow: hidden;
+    cursor: crosshair;
+  }
+
+  #timeline-minimap {
+    width: 100%;
+    height: 100%;
+    display: block;
+    opacity: 0.6;
+  }
+
+  #timeline-minimap-viewbox {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: rgba(108, 99, 255, 0.15);
+    border-left: 2px solid var(--accent);
+    border-right: 2px solid var(--accent);
+    pointer-events: none;
+    box-shadow: 0 0 15px rgba(108, 99, 255, 0.3);
+  }
+
+  /* Era Colors */
+  .era-0 { fill: #444; }
+  .era-1 { fill: #556; }
+  .era-2 { fill: #346; }
+  .era-3 { fill: #c94; }
+  .era-4 { fill: #284; }
+  .era-5 { fill: #173; }
+  .era-6 { fill: #932; }
+  .era-7 { fill: #539; }
 
   /* ─── END TIMELINE ─────────────────────────────────────────── */
 

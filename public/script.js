@@ -3035,11 +3035,20 @@ function downloadFile(url, filename) {
     });
 }
 // ─── TIMELINE ENGINE ────────────────────────────────────────────────────────
-const TS_MIN = new Date(2006, 0, 1).getTime();
-const TS_MAX = new Date(new Date().getFullYear(), 11, 31, 23, 59, 59).getTime();
+const TS_MIN = new Date(2004, 0, 1).getTime(); // Start from actual YouTube genesis
+const TS_MAX = new Date(new Date().getFullYear() + 1, 0, 1).getTime();
 const TS_MS_PER_DAY = 86400000;
-const TL_MAX_CARDS = 60;        // Hard cap on DOM video cards per frame
-const TL_MIN_LABEL_PX = 28;    // Min pixels between axis labels
+const TL_MAX_POINTS = 1200;    // More points allowed in SVG than DOM cards
+const TL_MIN_LABEL_PX = 40;
+
+const tlEras = [
+  { id: 0, name: "Origins", start: "2004-01-01", end: "2007-01-01", color: "era-2" },
+  { id: 1, name: "US Golden", start: "2007-01-01", end: "2010-12-31", color: "era-3" },
+  { id: 2, name: "IT Origins", start: "2008-01-01", end: "2010-12-31", color: "era-4" },
+  { id: 3, name: "IT Golden Era", start: "2011-01-01", end: "2016-12-31", color: "era-5" },
+  { id: 4, name: "Adpocalypse", start: "2017-01-01", end: "2022-12-31", color: "era-6" },
+  { id: 5, name: "Modern Era", start: "2023-01-01", end: "2026-12-31", color: "era-7" }
+];
 
 let ts = {
   initialized: false,
@@ -3075,9 +3084,23 @@ function initTimeline() {
 
     container.addEventListener('wheel', e => {
       e.preventDefault();
-      // Map vertical scroll to horizontal time movement
-      ts.centerTime += e.deltaY * ts.msPerPixel * 0.8;
+      const zoomFactor = 1.1;
+      const mouseX = e.clientX - container.getBoundingClientRect().left;
+      const timeAtMouse = ts.centerTime + (mouseX - container.clientWidth / 2) * ts.msPerPixel;
+
+      if (e.deltaY < 0) ts.msPerPixel /= zoomFactor;
+      else ts.msPerPixel *= zoomFactor;
+
+      // Limit zoom
+      const minMs = TS_MS_PER_DAY / 500;
+      const maxMs = (TS_MAX - TS_MIN) / container.clientWidth;
+      ts.msPerPixel = Math.max(minMs, Math.min(maxMs, ts.msPerPixel));
+
+      // Adjust center to zoom towards mouse
+      ts.centerTime = timeAtMouse - (mouseX - container.clientWidth / 2) * ts.msPerPixel;
+
       clampTimeline(container.clientWidth);
+      updateZoomSlider();
       scheduleRender();
     }, { passive: false });
 
@@ -3085,31 +3108,20 @@ function initTimeline() {
     const zoomSlider = document.getElementById('timeline-zoom-slider');
     if (zoomSlider) {
       zoomSlider.addEventListener('input', () => {
-        const w = container.clientWidth;
-        const val = parseFloat(zoomSlider.value); // 0 = zoomed out, 100 = zoomed in
-        const minMs = TS_MS_PER_DAY / 150;
-        const maxMs = (TS_MAX - TS_MIN) / w;
-
-        // Logarithmic zoom for smoother feel
+        const val = parseFloat(zoomSlider.value);
+        const minMs = TS_MS_PER_DAY / 500;
+        const maxMs = (TS_MAX - TS_MIN) / container.clientWidth;
         const logMin = Math.log(minMs);
         const logMax = Math.log(maxMs);
         const logVal = logMax - (val / 100) * (logMax - logMin);
         ts.msPerPixel = Math.exp(logVal);
-
-        clampTimeline(w);
+        clampTimeline(container.clientWidth);
         scheduleRender();
       });
-
-      // Initial slider sync
-      const minMs = TS_MS_PER_DAY / 150;
-      const maxMs = (TS_MAX - TS_MIN) / container.clientWidth;
-      const logMin = Math.log(minMs);
-      const logMax = Math.log(maxMs);
-      const currentLog = Math.log(ts.msPerPixel);
-      zoomSlider.value = ((logMax - currentLog) / (logMax - logMin)) * 100;
     }
 
     container.addEventListener('mousedown', e => {
+      if (e.target.closest('.tl-point')) return;
       ts.isDragging = true; ts.startX = e.clientX; ts.startCenterTime = ts.centerTime;
     });
     window.addEventListener('mousemove', e => {
@@ -3119,24 +3131,25 @@ function initTimeline() {
       scheduleRender();
     });
     window.addEventListener('mouseup', () => { ts.isDragging = false; });
-    window.addEventListener('mouseleave', () => { ts.isDragging = false; });
 
-    let lastTX = 0;
-    container.addEventListener('touchstart', e => { lastTX = e.touches[0].clientX; }, { passive: true });
-    container.addEventListener('touchmove', e => {
-      e.preventDefault();
-      const dx = e.touches[0].clientX - lastTX; lastTX = e.touches[0].clientX;
-      ts.centerTime -= dx * ts.msPerPixel;
-      clampTimeline(container.clientWidth); scheduleRender();
-    }, { passive: false });
+    // Minimap interaction
+    const mm = document.getElementById('timeline-minimap-container');
+    if (mm) {
+      mm.addEventListener('mousedown', e => {
+        const x = e.clientX - mm.getBoundingClientRect().left;
+        ts.centerTime = TS_MIN + (x / mm.clientWidth) * (TS_MAX - TS_MIN);
+        clampTimeline(container.clientWidth);
+        scheduleRender();
+      });
+    }
 
     ts.initialized = true;
   }
 
-  // Populate channel datalist for timeline filter
+  // Populate channel datalist
   const dl = document.getElementById('timeline-channel-datalist');
   if (dl && dl.children.length === 0) {
-    const channels = [...new Set([...allVideos, ...allSources].map(v => v.channel_name).filter(Boolean))].sort();
+    const channels = [...new Set(allVideos.map(v => v.channel_name).filter(Boolean))].sort();
     channels.forEach(ch => {
       const opt = document.createElement('option');
       opt.value = ch;
@@ -3144,6 +3157,29 @@ function initTimeline() {
     });
   }
 
+  scheduleRender();
+}
+
+function updateZoomSlider() {
+  const zoomSlider = document.getElementById('timeline-zoom-slider');
+  const container = document.getElementById('timeline-container');
+  if (!zoomSlider || !container) return;
+  const minMs = TS_MS_PER_DAY / 500;
+  const maxMs = (TS_MAX - TS_MIN) / container.clientWidth;
+  const logMin = Math.log(minMs);
+  const logMax = Math.log(maxMs);
+  const currentLog = Math.log(ts.msPerPixel);
+  zoomSlider.value = ((logMax - currentLog) / (logMax - logMin)) * 100;
+}
+
+function jumpToEra(year) {
+  if (!year) return;
+  ts.centerTime = new Date(parseInt(year), 0, 1).getTime();
+  // Set reasonable zoom for the era
+  const container = document.getElementById('timeline-container');
+  ts.msPerPixel = (TS_MS_PER_DAY * 365) / (container.clientWidth / 1.5);
+  clampTimeline(container.clientWidth);
+  updateZoomSlider();
   scheduleRender();
 }
 
@@ -3195,139 +3231,196 @@ function renderTimelineView() {
   const half = W / 2;
   const startT = ts.centerTime - half * ts.msPerPixel;
   const endT = ts.centerTime + half * ts.msPerPixel;
-  const zoom = getZoomLevel();
-  const cfg = getTickConfig(zoom);
 
-  // ── 1. Canvas grid (no DOM nodes for grid lines) ───────────────────────
-  let canvas = container.querySelector('canvas.tl-canvas');
-  if (!canvas) {
-    canvas = document.createElement('canvas');
-    canvas.className = 'tl-canvas';
-    canvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:1;';
-    container.appendChild(canvas);
+  // 1. Prepare SVG
+  let svg = container.querySelector('svg.tl-svg');
+  if (!svg) {
+    svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("class", "tl-svg");
+    container.appendChild(svg);
   }
-  canvas.width = W;
-  canvas.height = H;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, W, H);
+  svg.innerHTML = ''; // Clear for re-render (optimized with fragments if needed)
 
-  const isDark = document.body.classList.contains('theme-dark') || !document.body.classList.contains('theme-light');
-  const gridColor = isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)';
-  const majorColor = isDark ? 'rgba(255,255,255,0.20)' : 'rgba(0,0,0,0.20)';
-  const labelColor = isDark ? '#aaa' : '#555';
-  const majorLabelClr = isDark ? '#eee' : '#111';
+  // 2. Render Era Backgrounds
+  tlEras.forEach(era => {
+    const tStart = new Date(era.start).getTime();
+    const tEnd = new Date(era.end).getTime();
+    if (tEnd < startT || tStart > endT) return;
+
+    const x1 = Math.max(0, (tStart - startT) / ts.msPerPixel);
+    const x2 = Math.min(W, (tEnd - startT) / ts.msPerPixel);
+
+    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+    rect.setAttribute("x", x1);
+    rect.setAttribute("y", 0);
+    rect.setAttribute("width", x2 - x1);
+    rect.setAttribute("height", H);
+    rect.setAttribute("class", `tl-era-zone ${era.color}`);
+    svg.appendChild(rect);
+
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("x", x1 + 10);
+    label.setAttribute("y", 30);
+    label.setAttribute("class", "tl-era-label");
+    label.textContent = era.name;
+    svg.appendChild(label);
+  });
+
+  // 3. Render Lanes & Grid
+  const LANE_H = 40;
   const AXIS_H = 60;
+  const lanesCount = Math.floor((H - AXIS_H) / LANE_H);
 
-  // Draw axis background at bottom
-  ctx.fillStyle = isDark ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.04)';
-  ctx.fillRect(0, H - AXIS_H, W, AXIS_H);
-
-  // Draw ticks & labels on canvas
-  const cur = new Date(startT);
-  cfg.start(cur);
-  let lastLabelX = -999;
-
-  while (cur.getTime() <= endT) {
-    const xPos = (cur.getTime() - startT) / ts.msPerPixel;
-    const isMaj = cfg.isMajor(cur);
-
-    // Grid line
-    ctx.beginPath();
-    ctx.moveTo(xPos, 0);
-    ctx.lineTo(xPos, H - AXIS_H);
-    ctx.strokeStyle = isMaj ? majorColor : gridColor;
-    ctx.lineWidth = isMaj ? 1.5 : 0.8;
-    ctx.stroke();
-
-    // Spine dot
-    ctx.beginPath();
-    ctx.arc(xPos, H - AXIS_H - 3, isMaj ? 4 : 2, 0, Math.PI * 2);
-    ctx.fillStyle = isMaj ? (isDark ? '#4af' : '#36c') : (isDark ? '#555' : '#bbb');
-    ctx.fill();
-
-    // Label (skip if too close to previous)
-    if (xPos - lastLabelX >= TL_MIN_LABEL_PX) {
-      const label = cfg.label(cur);
-      ctx.font = isMaj ? 'bold 13px sans-serif' : '11px sans-serif';
-      ctx.fillStyle = isMaj ? majorLabelClr : labelColor;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'top';
-      ctx.fillText(label, xPos, H - AXIS_H + 10);
-      lastLabelX = xPos;
-    }
-
-    cfg.advance(cur);
-  }
-
-  // Horizontal spine line
-  ctx.beginPath();
-  ctx.moveTo(0, H - AXIS_H - 1); ctx.lineTo(W, H - AXIS_H - 1);
-  ctx.strokeStyle = isDark ? '#4af' : '#36c';
-  ctx.lineWidth = 2; ctx.stroke();
-
-  // ── 2. DOM cards – remove existing, rebuild with DocumentFragment ──────
-  // Remove old cards only (not the canvas)
-  Array.from(container.querySelectorAll('.tl-card, .tl-hint')).forEach(el => el.remove());
-
-  const showOnlyMilestones = (zoom === 'years');
-
-
-  // Filter + sort visible videos
+  // Group by channels to define lanes
   const channelFilter = document.getElementById('timeline-channel-filter')?.value || '';
-  const allVids = allVideos;
-  let visible = allVids.filter(v => {
+  const filtered = allVideos.filter(v => {
     if (!v.publish_date) return false;
     if (channelFilter && !(v.channel_name || '').toLowerCase().includes(channelFilter.toLowerCase())) return false;
-    const t = new Date(v.publish_date).getTime();
-    if (t < startT || t > endT) return false;
-    if (showOnlyMilestones && (v.view_count || 0) < 10_000_000) return false;
     return true;
   });
 
-  // Sort by views descending so most important show first when capped
-  visible.sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
-  // Cap to avoid DOM explosion
-  const capped = visible.length > TL_MAX_CARDS;
-  visible = visible.slice(0, TL_MAX_CARDS);
-  // Re-sort by date for stagger
-  visible.sort((a, b) => a.publish_date.localeCompare(b.publish_date));
+  // Pick top channels for lanes
+  const counts = {};
+  filtered.forEach(v => counts[v.channel_name] = (counts[v.channel_name] || 0) + 1);
+  const topChannels = Object.entries(counts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, lanesCount)
+    .map(e => e[0]);
 
-  const frag = document.createDocumentFragment();
-  const CARD_W = 240;
-  const CARD_H = 60;
-  const placed = [];
+  topChannels.forEach((ch, i) => {
+    const y = i * LANE_H + 80;
+    const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+    line.setAttribute("x1", 0); line.setAttribute("y1", y);
+    line.setAttribute("x2", W); line.setAttribute("y2", y);
+    line.setAttribute("class", "tl-lane-line");
+    svg.appendChild(line);
+
+    const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+    label.setAttribute("x", 10);
+    label.setAttribute("y", y - 5);
+    label.setAttribute("fill", "var(--text-muted)");
+    label.setAttribute("font-size", "10px");
+    label.textContent = ch;
+    svg.appendChild(label);
+  });
+
+  // 4. Render Points
+  let visible = filtered.filter(v => {
+    const t = new Date(v.publish_date).getTime();
+    return t >= startT && t <= endT;
+  });
+
+  // Cap points for performance
+  visible.sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
+  visible = visible.slice(0, TL_MAX_POINTS);
 
   visible.forEach(v => {
     const t = new Date(v.publish_date).getTime();
-    const xPos = (t - startT) / ts.msPerPixel;
-    const isMilestone = (v.view_count || 0) >= 10_000_000;
-    const isFirst = window.channelFirstUploadIds && window.channelFirstUploadIds.has(v.id);
+    const x = (t - startT) / ts.msPerPixel;
+    const laneIdx = topChannels.indexOf(v.channel_name);
+    let y;
+    if (laneIdx !== -1) {
+      y = laneIdx * LANE_H + 80;
+    } else {
+      // Deterministic y for non-top channels using a simple hash of channel name
+      let hash = 0;
+      const ch = v.channel_name || '';
+      for (let i = 0; i < ch.length; i++) hash = ((hash << 5) - hash) + ch.charCodeAt(i);
+      const offset = Math.abs(hash) % 60; // 60px spread for community
+      y = H - AXIS_H - 40 - offset;
+    }
 
-    let row = 0;
-    while (placed.some(p => p.row === row && Math.abs(p.left - xPos) < CARD_W)) row++;
-    placed.push({ row, left: xPos });
+    const point = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    point.setAttribute("cx", x);
+    point.setAttribute("cy", y);
+    const isMilestone = (v.view_count || 0) >= 1_000_000;
+    point.setAttribute("r", isMilestone ? 5 : 3.5);
+    point.setAttribute("class", `tl-point ${isMilestone ? 'milestone' : ''}`);
+    point.setAttribute("fill", isMilestone ? "gold" : "var(--accent)");
 
-    const card = document.createElement('div');
-    card.className = 'tl-card' + (isMilestone ? ' tl-milestone' : '') + (isFirst ? ' tl-first' : '');
-    card.style.left = `${Math.round(xPos)}px`;
-    card.style.bottom = `${AXIS_H + 20 + row * CARD_H}px`;
-    card.onclick = () => openVideo(v.id);
+    point.onmouseenter = (e) => showTimelineTooltip(v, e);
+    point.onmouseleave = hideTimelineTooltip;
+    point.onclick = () => openVideo(v.id);
 
-    const views = v.view_count ? fmtNum(v.view_count) + ' views' : '';
-    card.innerHTML =
-      `<div class="tl-card-title">${isFirst ? '<span class="tl-star">★</span>' : ''}${escHtml(v.title || v.id)}</div>` +
-      `<div class="tl-card-sub">${escHtml(v.channel_name || '?')}${views ? ' · ' + views : ''}</div>`;
-    frag.appendChild(card);
+    svg.appendChild(point);
   });
 
-  if (capped) {
-    const cap = document.createElement('div');
-    cap.className = 'tl-hint tl-cap-notice';
-    cap.textContent = `Showing top ${TL_MAX_CARDS} of ${visible.length + (TL_MAX_CARDS - visible.length)} visible videos. Zoom in to see more.`;
-    frag.appendChild(cap);
-  }
+  renderMinimap();
+}
 
-  container.appendChild(frag);
+function renderMinimap() {
+  const canvas = document.getElementById('timeline-minimap');
+  const viewbox = document.getElementById('timeline-minimap-viewbox');
+  if (!canvas || !viewbox) return;
+
+  const W = canvas.clientWidth;
+  const H = canvas.clientHeight;
+  canvas.width = W; canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  // Draw density
+  const buckets = 100;
+  const counts = new Array(buckets).fill(0);
+  allVideos.forEach(v => {
+    if (!v.publish_date) return;
+    const t = new Date(v.publish_date).getTime();
+    const idx = Math.floor(((t - TS_MIN) / (TS_MAX - TS_MIN)) * buckets);
+    if (idx >= 0 && idx < buckets) counts[idx]++;
+  });
+
+  const max = Math.max(...counts);
+  ctx.fillStyle = 'var(--accent)';
+  counts.forEach((c, i) => {
+    const h = (c / max) * H;
+    ctx.fillRect((i / buckets) * W, H - h, (W / buckets) - 1, h);
+  });
+
+  // Update viewbox
+  const container = document.getElementById('timeline-container');
+  const half = (container.clientWidth / 2) * ts.msPerPixel;
+  const startT = ts.centerTime - half;
+  const endT = ts.centerTime + half;
+
+  const x1 = ((startT - TS_MIN) / (TS_MAX - TS_MIN)) * W;
+  const x2 = ((endT - TS_MIN) / (TS_MAX - TS_MIN)) * W;
+  viewbox.style.left = `${x1}px`;
+  viewbox.style.width = `${x2 - x1}px`;
+}
+
+function showTimelineTooltip(v, e) {
+  const tt = document.getElementById('timeline-tooltip');
+  if (!tt) return;
+
+  const views = v.view_count ? fmtBig(v.view_count) + ' views' : 'No views';
+  const date = new Date(v.publish_date).toLocaleDateString();
+
+  tt.innerHTML = `
+    <img src="${v.thumbnail || 'https://i.ytimg.com/vi/' + v.id + '/mqdefault.jpg'}" class="tl-tooltip-thumb">
+    <div class="tl-tooltip-content">
+      <div class="tl-tooltip-title">${escHtml(v.title || v.id)}</div>
+      <div class="tl-tooltip-meta">
+        <span>${escHtml(v.channel_name || '?')}</span>
+        <span>${views} • ${date}</span>
+      </div>
+    </div>
+  `;
+
+  const container = document.getElementById('timeline-container');
+  const rect = container.getBoundingClientRect();
+
+  tt.style.display = 'block';
+  tt.style.left = `${e.clientX - rect.left}px`;
+  tt.style.top = `${e.clientY - rect.top}px`;
+  tt.style.opacity = '1';
+}
+
+function hideTimelineTooltip() {
+  const tt = document.getElementById('timeline-tooltip');
+  if (tt) {
+    tt.style.opacity = '0';
+    setTimeout(() => { if(tt.style.opacity === '0') tt.style.display = 'none'; }, 200);
+  }
 }
 
 
