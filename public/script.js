@@ -3043,9 +3043,8 @@ const TL_MIN_LABEL_PX = 40;
 
 const tlEras = [
   { id: 0, name: "Origins", start: "2004-01-01", end: "2007-01-01", color: "era-2" },
-  { id: 1, name: "US Golden", start: "2007-01-01", end: "2010-12-31", color: "era-3" },
-  { id: 2, name: "IT Origins", start: "2008-01-01", end: "2010-12-31", color: "era-4" },
-  { id: 3, name: "IT Golden Era", start: "2011-01-01", end: "2016-12-31", color: "era-5" },
+  { id: 1, name: "US Golden", start: "2007-01-01", end: "2009-12-31", color: "era-3" },
+  { id: 3, name: "IT Golden Era", start: "2010-01-01", end: "2016-12-31", color: "era-5" },
   { id: 4, name: "Adpocalypse", start: "2017-01-01", end: "2022-12-31", color: "era-6" },
   { id: 5, name: "Modern Era", start: "2023-01-01", end: "2026-12-31", color: "era-7" }
 ];
@@ -3302,9 +3301,10 @@ function renderTimelineView() {
     svg.appendChild(rect);
 
     const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    label.setAttribute("x", x1 + 10);
-    label.setAttribute("y", 30);
+    label.setAttribute("x", (x1 + x2) / 2);
+    label.setAttribute("y", 35);
     label.setAttribute("class", "tl-era-label");
+    label.setAttribute("text-anchor", "middle");
     label.textContent = era.name;
     svg.appendChild(label);
   });
@@ -3389,8 +3389,13 @@ function renderTimelineView() {
     const point = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     point.setAttribute("cx", x);
     point.setAttribute("cy", y);
-    const isMilestone = (v.view_count || 0) >= 1_000_000;
-    point.setAttribute("r", isMilestone ? 5 : 3.5);
+    
+    // Scale radius by views (logarithmic)
+    const views = v.view_count || 0;
+    const radius = 3.5 + Math.log10(Math.max(1, views)) * 1.2;
+    const isMilestone = views >= 1_000_000;
+    
+    point.setAttribute("r", radius);
     point.setAttribute("class", `tl-point ${isMilestone ? 'milestone' : ''}`);
     point.setAttribute("fill", isMilestone ? "gold" : "var(--accent)");
 
@@ -3462,12 +3467,9 @@ function showTimelineTooltip(v, e) {
     </div>
   `;
 
-  const container = document.getElementById('timeline-container');
-  const rect = container.getBoundingClientRect();
-
   tt.style.display = 'block';
-  tt.style.left = `${e.clientX - rect.left}px`;
-  tt.style.top = `${e.clientY - rect.top}px`;
+  tt.style.left = `${e.clientX}px`;
+  tt.style.top = `${e.clientY}px`;
   tt.style.opacity = '1';
 }
 

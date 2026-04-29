@@ -3194,8 +3194,8 @@
 
   /* Rich Tooltip */
   .tl-tooltip {
-    position: absolute;
-    z-index: 1000;
+    position: fixed;
+    z-index: 2000;
     width: 280px;
     background: rgba(30, 36, 53, 0.85);
     backdrop-filter: blur(12px);
