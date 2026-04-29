@@ -2171,6 +2171,85 @@ function buildChannelData() {
   return Object.values(map).sort((a, b) => b.videos.length - a.videos.length);
 }
 
+function renderChannelCard(c, mode = 'grid') {
+  const name = typeof c === 'string' ? c : c.name;
+  const avatar = getChannelAvatar(name);
+  
+  let videosCount, viewsCount, url;
+  if (typeof c === 'string') {
+    const ytData = [...allVideos, ...allSources];
+    const chVideos = ytData.filter(v => v.channel_name === name);
+    videosCount = chVideos.length;
+    viewsCount = chVideos.reduce((s, v) => s + (v.view_count || 0), 0);
+    url = (chVideos.length > 0 && chVideos[0].channel_url) ? chVideos[0].channel_url : `https://www.youtube.com/${name.startsWith('@') ? name : '@' + name}`;
+  } else {
+    videosCount = c.videos ? c.videos.length : 0;
+    viewsCount = c.totalViews || 0;
+    url = c.url || `https://www.youtube.com/${name.startsWith('@') ? name : '@' + name}`;
+  }
+
+  const isOld = document.body.classList.contains('theme-old');
+  const isSelected = typeof selectedChannel !== 'undefined' && selectedChannel === name;
+  
+  if (mode === 'search' && !isOld) {
+    return `
+      <div class="channel-card modern-search" onclick="event.stopPropagation(); openProfile('${escAttr(name)}')">
+        <div class="ch-card-main-modern">
+          <img src="${avatar}" class="ch-avatar-modern">
+          <div class="ch-info-modern">
+            <h4 class="ch-name-modern">${escHtml(name)}</h4>
+            <div class="ch-stats-modern">
+              <span>${videosCount} videos</span>
+              <span class="dot-sep">•</span>
+              ${viewsCount ? `<span>${fmtNum(viewsCount)} views</span>` : ''}
+            </div>
+            <div class="ch-desc-modern">Official channel for ${escHtml(name)} archival data.</div>
+            <div class="ch-actions-modern">
+              <button class="btn-subscribe-modern" onclick="event.stopPropagation(); openProfile('${escAttr(name)}')">View Profile</button>
+              <a class="btn-visit-modern" href="${url}" target="_blank" onclick="event.stopPropagation()">YouTube</a>
+            </div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  const cardClass = mode === 'search' ? 'channel-card search-channel-card' : 'channel-card' + (isSelected ? ' selected' : '');
+  const avatarClass = mode === 'search' ? 'ch-card-avatar' : 'ch-card-avatar large';
+
+  return `
+    <div class="${cardClass}" onclick="openProfile('${escAttr(name)}')">
+      <div class="ch-card-main">
+        <img src="${avatar}" class="${avatarClass}">
+        <div style="flex:1; min-width:0;">
+          <h4 style="margin:0; font-size:${mode === 'search' ? '0.9rem' : '1.1rem'}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escHtml(name)}</h4>
+          <div class="ch-stats" style="margin-top:6px;">
+            <span><strong>${videosCount}</strong> videos</span><br>
+            ${viewsCount ? `<span><strong>${fmtNum(viewsCount)}</strong> views</span>` : ''}
+          </div>
+        </div>
+      </div>
+      <div class="ch-actions">
+        <button class="btn-card-action" onclick="event.stopPropagation(); openProfile('${escAttr(name)}')">View</button>
+        <a class="btn-card-action" href="${url}" target="_blank" onclick="event.stopPropagation()">YouTube</a>
+      </div>
+    </div>`;
+}
+
+function toggleSidebar() {
+  if (window.innerWidth <= 1000) {
+    document.body.classList.toggle('sidebar-open');
+    document.body.classList.remove('sidebar-collapsed');
+  } else {
+    document.body.classList.toggle('sidebar-collapsed');
+    document.body.classList.remove('sidebar-open');
+  }
+}
+
+function toggleFilters() {
+  const bar = document.getElementById('search-filter-bar');
+  if (bar) bar.classList.toggle('active');
+}
+
 function renderChannelGrid() {
   const q = (document.getElementById('channel-search').value || '').toLowerCase();
   const minYear = parseInt(document.getElementById('channel-year-min').value) || null;
@@ -3054,7 +3133,7 @@ function renderTimelineView() {
 
 function initDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(dbName, 1);
+    const request = indexedDB.open(dbName, 2);
     request.onupgradeneeded = (e) => {
       db = e.target.result;
       if (!db.objectStoreNames.contains(storeName)) {
@@ -3297,13 +3376,24 @@ async function submitCreatePlaylist() {
   if (type === 'local') {
     const id = 'local_' + Date.now();
     const playlist = { id, name, videoIds: [], created_at: new Date().toISOString() };
-    const transaction = db.transaction([playlistStoreName], 'readwrite');
-    transaction.objectStore(playlistStoreName).add(playlist);
-    transaction.oncomplete = () => {
-      closePlaylistModal('create');
-      if (document.getElementById('page-playlists').classList.contains('active')) renderPlaylistsPage();
-      else alert("Playlist created!");
-    };
+    try {
+      const transaction = db.transaction([playlistStoreName], 'readwrite');
+      transaction.objectStore(playlistStoreName).add(playlist);
+      transaction.oncomplete = async () => {
+        const local = await getLocalPlaylists();
+        allPlaylists.local = local;
+        closePlaylistModal('create');
+        if (document.getElementById('page-playlists').classList.contains('active')) renderPlaylistsPage();
+        else alert("Playlist created!");
+      };
+      transaction.onerror = (e) => {
+        console.error("Transaction error:", e.target.error);
+        alert("Failed to save playlist: " + e.target.error);
+      };
+    } catch (e) {
+      console.error("Local creation failed:", e);
+      alert("Local creation failed. Try refreshing the page or check console.");
+    }
   } else {
     try {
       const r = await fetch('/api/playlists/create', {
@@ -3313,6 +3403,8 @@ async function submitCreatePlaylist() {
       });
       const res = await r.json();
       if (res.success) {
+        const server = await getServerPlaylists();
+        allPlaylists.server = server;
         closePlaylistModal('create');
         if (document.getElementById('page-playlists').classList.contains('active')) renderPlaylistsPage();
         else alert("Server playlist created!");
@@ -3389,8 +3481,12 @@ async function confirmAddToPlaylist(playlistId, type) {
         }
       });
       store.put(p);
-      alert(`Added ${added} videos to playlist "${p.name}".`);
-      closePlaylistModal('add');
+      transaction.oncomplete = async () => {
+        const local = await getLocalPlaylists();
+        allPlaylists.local = local;
+        alert(`Added ${added} videos to playlist "${p.name}".`);
+        closePlaylistModal('add');
+      };
     };
   } else {
     try {
@@ -3401,6 +3497,8 @@ async function confirmAddToPlaylist(playlistId, type) {
       });
       const res = await r.json();
       if (res.success) {
+        const server = await getServerPlaylists();
+        allPlaylists.server = server;
         alert(`Added ${res.addedCount} videos to server playlist.`);
         closePlaylistModal('add');
       } else {

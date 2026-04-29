@@ -371,13 +371,13 @@
     display: flex;
     align-items: center;
     width: 100%;
-    max-width: 600px;
+    max-width: 720px;
   }
 
   .search-term {
     width: 100%;
-    height: 32px;
-    padding: 2px 12px;
+    height: 40px;
+    padding: 2px 20px;
     font-size: 16px;
     border: 1px solid var(--border);
     background: var(--bg);
@@ -395,8 +395,8 @@
   }
 
   .search-button {
-    height: 32px;
-    padding: 0 20px;
+    height: 40px;
+    padding: 0 24px;
     font-weight: bold;
     background-color: var(--surface2);
     border: 1px solid var(--border);
@@ -442,6 +442,47 @@
     max-height: 400px;
     overflow-y: auto;
     display: none;
+  }
+
+  body:not(.theme-old) .search-advanced-filters {
+    display: none;
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+    gap: 15px;
+    border: 1px solid var(--border);
+    box-shadow: var(--shadow);
+  }
+
+  body:not(.theme-old) .search-advanced-filters.active {
+    display: flex;
+  }
+
+  body:not(.theme-old) .filter-group-modern {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 150px;
+  }
+
+  body:not(.theme-old) .filter-group-modern label {
+    font-size: 0.75rem;
+    font-weight: bold;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  body:not(.theme-old) .filter-group-modern select {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 12px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    outline: none;
   }
 
   body.theme-old .search-suggestions {
@@ -641,7 +682,44 @@
     display: flex;
     flex-direction: column;
     z-index: 1001;
-    transition: transform 0.2s;
+    transition: transform 0.2s, width 0.2s;
+  }
+
+  body.sidebar-collapsed:not(.theme-old) #masthead-nav {
+    width: 72px;
+  }
+
+  body.sidebar-collapsed:not(.theme-old) #masthead-nav .nav-tab span,
+  body.sidebar-collapsed:not(.theme-old) #masthead-nav .sidebar-header,
+  body.sidebar-collapsed:not(.theme-old) #masthead-nav .sidebar-section:not(:first-child) {
+    display: none;
+  }
+
+  body.sidebar-collapsed:not(.theme-old) #masthead-nav .nav-icon {
+    margin-right: 0;
+  }
+
+  body.sidebar-collapsed:not(.theme-old) #masthead-nav a.nav-tab {
+    justify-content: center;
+    padding: 12px;
+  }
+
+  body:not(.theme-old) main {
+    transition: margin-left 0.2s;
+  }
+
+  body:not(.theme-old).sidebar-collapsed main {
+    margin-left: 72px;
+  }
+
+  body:not(.theme-old):not(.sidebar-collapsed) main {
+    margin-left: 240px;
+  }
+
+  @media (max-width: 1000px) {
+    body:not(.theme-old) main {
+      margin-left: 0 !important;
+    }
   }
 
   @media (max-width: 1000px) {
@@ -679,7 +757,6 @@
     border-bottom: none;
   }
 
-  /* Modern Top Header UI */
   body:not(.theme-old) #masthead-nav-right {
     position: absolute;
     left: 50%;
@@ -691,6 +768,30 @@
     align-items: center;
     width: auto;
     max-width: 50%;
+  }
+
+  @media (max-width: 768px) {
+    body:not(.theme-old) #masthead {
+      flex-direction: row;
+      flex-wrap: wrap;
+      justify-content: flex-start;
+      height: auto;
+      padding: 10px 16px;
+    }
+    body:not(.theme-old) #masthead #burger-menu {
+      margin-right: 8px;
+    }
+    body:not(.theme-old) #masthead-nav-right {
+      position: static;
+      transform: none;
+      max-width: 100%;
+      width: 100%;
+      margin-top: 10px;
+      order: 3;
+    }
+    body:not(.theme-old) #logo {
+      margin-right: auto;
+    }
   }
 
   body:not(.theme-old) #masthead-search {
@@ -1540,6 +1641,12 @@
     gap: 60px;
     width: 100%;
     padding: 0 40px;
+  }
+
+  #search-channels-results {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 20px;
   }
 
   @media (max-width: 800px) {
@@ -3370,6 +3477,11 @@
     body.theme-old .table-wrap td.title-cell::before {
       display: block;
       margin-bottom: 5px;
+    }
+    body.theme-old #search-channels-results {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 15px;
     }
   }
 

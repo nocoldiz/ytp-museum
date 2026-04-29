@@ -309,7 +309,7 @@
 
         <div class="search-results-main">
           <div id="search-filter-bar" class="search-bar search-advanced-filters">
-            <div class="filter-group-modern theme-old-only">
+            <div class="filter-group-modern">
               <label>Status</label>
               <select id="search-filter-status"
                 onchange="performSearch(document.getElementById('global-search-input').value)">
@@ -319,14 +319,14 @@
                 <option value="unavailable">Unavailable</option>
               </select>
             </div>
-            <div class="filter-group-modern theme-old-only">
+            <div class="filter-group-modern">
               <label>Section</label>
               <select id="search-filter-section"
                 onchange="performSearch(document.getElementById('global-search-input').value)">
                 <option value="">All sections</option>
               </select>
             </div>
-            <div class="filter-group-modern theme-old-only">
+            <div class="filter-group-modern">
               <label>Years</label>
               <div class="range-group" style="display:flex; align-items:center; gap:5px;">
                 <select id="search-filter-year-min"
@@ -340,7 +340,7 @@
                 </select>
               </div>
             </div>
-            <div class="filter-group-modern theme-old-only">
+            <div class="filter-group-modern">
               <label>Language</label>
               <select id="search-filter-language"
                 onchange="performSearch(document.getElementById('global-search-input').value)">
@@ -353,7 +353,7 @@
                 <option value="german">🇩🇪 German</option>
               </select>
             </div>
-            <div class="filter-group-modern theme-old-only" style="margin-left: auto;">
+            <div class="filter-group-modern" style="margin-left: auto;">
               <label>Sort</label>
               <select id="search-sort" onchange="performSearch(document.getElementById('global-search-input').value)">
                 <option value="relevance">Relevance</option>
@@ -361,7 +361,7 @@
                 <option value="view_count">Most Viewed</option>
               </select>
             </div>
-            <div class="filter-group-modern theme-old-only" style="margin-left: 15px;">
+            <div class="filter-group-modern" style="margin-left: 15px;">
               <label>View</label>
               <div class="view-toggle">
                 <button id="btn-search-view-list-old" class="view-btn active" onclick="setSearchViewMode('list')" title="List View">≡</button>
@@ -779,7 +779,6 @@
     </div>
   </div>
 
-  <script src="script_toggle.js"></script>
   <script src="script.js"></script>
 </body>
 
