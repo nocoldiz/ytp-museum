@@ -3285,6 +3285,35 @@
 
   /* ─── END TIMELINE ─────────────────────────────────────────── */
 
+  .tl-tag {
+    background: var(--accent);
+    color: #fff;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    animation: fadeIn 0.2s;
+  }
+
+  .tl-tag-remove {
+    cursor: pointer;
+    font-weight: bold;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+  }
+
+  .tl-tag-remove:hover {
+    opacity: 1;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
   @media (max-width: 900px) {
 
     .charts-row.cols2,

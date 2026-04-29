@@ -3050,6 +3050,49 @@ const tlEras = [
   { id: 5, name: "Modern Era", start: "2023-01-01", end: "2026-12-31", color: "era-7" }
 ];
 
+let timelineSelectedChannels = [];
+
+function handleTimelineFilterKey(e) {
+  if (e.key === 'Enter') {
+    const val = e.target.value.trim();
+    if (val) {
+      addTimelineTag(val);
+      e.target.value = '';
+    }
+  }
+}
+
+function addTimelineTag(channel) {
+  if (!timelineSelectedChannels.includes(channel)) {
+    timelineSelectedChannels.push(channel);
+    renderTimelineTags();
+    scheduleRender();
+  }
+}
+
+function removeTimelineTag(channel) {
+  timelineSelectedChannels = timelineSelectedChannels.filter(c => c !== channel);
+  renderTimelineTags();
+  scheduleRender();
+}
+
+function clearTimelineTags() {
+  timelineSelectedChannels = [];
+  renderTimelineTags();
+  scheduleRender();
+}
+
+function renderTimelineTags() {
+  const container = document.getElementById('timeline-tags-container');
+  if (!container) return;
+  container.innerHTML = timelineSelectedChannels.map(ch => `
+    <div class="tl-tag">
+      ${escHtml(ch)}
+      <span class="tl-tag-remove" onclick="removeTimelineTag('${escHtml(ch).replace(/'/g, "\\'")}')">×</span>
+    </div>
+  `).join('');
+}
+
 let ts = {
   initialized: false,
   msPerPixel: 0,
@@ -3267,47 +3310,64 @@ function renderTimelineView() {
   });
 
   // 3. Render Lanes & Grid
-  const LANE_H = 40;
+  const LANE_H = 50;
   const AXIS_H = 60;
-  const lanesCount = Math.floor((H - AXIS_H) / LANE_H);
+  
+  // Use selected channels for lanes, or empty for "Most Viewed" view
+  const topChannels = [...timelineSelectedChannels];
+  const lanesCount = topChannels.length;
 
-  // Group by channels to define lanes
-  const channelFilter = document.getElementById('timeline-channel-filter')?.value || '';
-  const filtered = allVideos.filter(v => {
-    if (!v.publish_date) return false;
-    if (channelFilter && !(v.channel_name || '').toLowerCase().includes(channelFilter.toLowerCase())) return false;
-    return true;
-  });
+  if (lanesCount > 0) {
+    topChannels.forEach((ch, i) => {
+      const y = i * LANE_H + 100;
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", 0); line.setAttribute("y1", y);
+      line.setAttribute("x2", W); line.setAttribute("y2", y);
+      line.setAttribute("class", "tl-lane-line");
+      svg.appendChild(line);
 
-  // Pick top channels for lanes
-  const counts = {};
-  filtered.forEach(v => counts[v.channel_name] = (counts[v.channel_name] || 0) + 1);
-  const topChannels = Object.entries(counts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, lanesCount)
-    .map(e => e[0]);
-
-  topChannels.forEach((ch, i) => {
-    const y = i * LANE_H + 80;
+      const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
+      label.setAttribute("x", 10);
+      label.setAttribute("y", y - 8);
+      label.setAttribute("fill", "var(--accent)");
+      label.setAttribute("font-weight", "bold");
+      label.setAttribute("font-size", "12px");
+      label.textContent = ch;
+      svg.appendChild(label);
+    });
+  } else {
+    // Single lane for most viewed
+    const y = H / 2;
     const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
     line.setAttribute("x1", 0); line.setAttribute("y1", y);
     line.setAttribute("x2", W); line.setAttribute("y2", y);
     line.setAttribute("class", "tl-lane-line");
+    line.setAttribute("style", "stroke-width: 2px; stroke: var(--accent); opacity: 0.2;");
     svg.appendChild(line);
 
     const label = document.createElementNS("http://www.w3.org/2000/svg", "text");
     label.setAttribute("x", 10);
-    label.setAttribute("y", y - 5);
+    label.setAttribute("y", y - 10);
     label.setAttribute("fill", "var(--text-muted)");
-    label.setAttribute("font-size", "10px");
-    label.textContent = ch;
+    label.setAttribute("font-size", "14px");
+    label.setAttribute("font-weight", "bold");
+    label.textContent = "Most Viewed (Milestones)";
     svg.appendChild(label);
-  });
+  }
 
   // 4. Render Points
-  let visible = filtered.filter(v => {
+  let visible = allVideos.filter(v => {
+    if (!v.publish_date) return false;
     const t = new Date(v.publish_date).getTime();
-    return t >= startT && t <= endT;
+    if (t < startT || t > endT) return false;
+
+    if (lanesCount === 0) {
+      // Only show most viewed (>1M) if no channels selected
+      return (v.view_count || 0) >= 1_000_000;
+    } else {
+      // Show videos from selected channels
+      return timelineSelectedChannels.includes(v.channel_name);
+    }
   });
 
   // Cap points for performance
@@ -3318,16 +3378,12 @@ function renderTimelineView() {
     const t = new Date(v.publish_date).getTime();
     const x = (t - startT) / ts.msPerPixel;
     const laneIdx = topChannels.indexOf(v.channel_name);
+    
     let y;
-    if (laneIdx !== -1) {
-      y = laneIdx * LANE_H + 80;
+    if (lanesCount === 0) {
+      y = H / 2;
     } else {
-      // Deterministic y for non-top channels using a simple hash of channel name
-      let hash = 0;
-      const ch = v.channel_name || '';
-      for (let i = 0; i < ch.length; i++) hash = ((hash << 5) - hash) + ch.charCodeAt(i);
-      const offset = Math.abs(hash) % 60; // 60px spread for community
-      y = H - AXIS_H - 40 - offset;
+      y = laneIdx * LANE_H + 100;
     }
 
     const point = document.createElementNS("http://www.w3.org/2000/svg", "circle");

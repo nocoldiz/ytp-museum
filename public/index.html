@@ -608,12 +608,13 @@
           <h2>Interactive Timeline</h2>
           <span class="count-badge">Scroll to zoom, drag to pan</span>
         </div>
-        <div class="search-bar">
+        <div class="search-bar" id="timeline-filter-container">
+          <div id="timeline-tags-container" style="display: flex; flex-wrap: wrap; gap: 5px; align-items: center;"></div>
           <input type="text" id="timeline-channel-filter" list="timeline-channel-datalist"
-            placeholder="Filter by channel..." oninput="scheduleRender()">
+            placeholder="Add channel..." onkeydown="handleTimelineFilterKey(event)" style="flex: 1; min-width: 150px;">
           <datalist id="timeline-channel-datalist"></datalist>
           <button class="btn-thread"
-            onclick="document.getElementById('timeline-channel-filter').value=''; scheduleRender();">Clear</button>
+            onclick="clearTimelineTags()">Clear All</button>
           
           <div style="margin-left: 20px; display: flex; align-items: center; gap: 8px;">
             <label style="font-size: 12px; color: var(--text-muted);">Jump to:</label>
