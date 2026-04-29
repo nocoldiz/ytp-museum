@@ -310,11 +310,14 @@ function initApp(vRaw, sRaw, pRaw) {
 
   // Restore theme and aspect ratio
   const lastMode = localStorage.getItem('lastThemeMode') || 'old';
-  if (lastMode === 'modern' && document.body.classList.contains('theme-old')) {
-    toggleThemeMode(); // This will also handle aspect ratio restoration
+  const isCurrentlyOld = document.body.classList.contains('theme-old');
+  
+  if (lastMode === 'modern' && isCurrentlyOld) {
+    toggleThemeMode(); // This handles modern switch + ratio restoration
   } else {
-    // Already in old mode, just restore its aspect ratio
-    const ratio = localStorage.getItem('aspectRatioOld') || '4-3';
+    // Mode is already correct (either old or already modern from inline script)
+    const isOld = document.body.classList.contains('theme-old');
+    const ratio = localStorage.getItem(isOld ? 'aspectRatioOld' : 'aspectRatioModern') || (isOld ? '4-3' : '16-9');
     setAspectRatio(ratio, false);
   }
 
@@ -459,6 +462,8 @@ function showPage(name, pushToHistory = true) {
     if (name === 'sources' && oc.includes("'videos'")) t.classList.add('active');
   });
 
+  if (name === 'channels') renderChannelGrid();
+
   document.getElementById('page-' + targetPage).classList.add('active');
 
   // Close sidebar on navigation (mobile)
@@ -512,6 +517,8 @@ function toggleThemeMode() {
   syncSearchLayout();
 
   if (typeof updateVideoLayoutForTheme === 'function') updateVideoLayoutForTheme();
+  
+  handleRouting();
 }
 
 function syncSearchLayout() {
@@ -2107,6 +2114,11 @@ function applyFilters() {
 
   const queryTokens = q ? tokenize(q) : [];
   const hasQuery = queryTokens.length > 0;
+  
+  const hideEmpty = document.getElementById('filter-hide-empty') ? document.getElementById('filter-hide-empty').checked : false;
+  const excludeYTP = document.getElementById('filter-exclude-ytp') ? document.getElementById('filter-exclude-ytp').checked : false;
+  const ytpRegex = /YTP|YTPMV|Collab|Youtube\s+poop|YT\s+Poop|Poop|Speciale '|YTPFR|YTP\s+FR| |YTPH|YTPHSHORT|YTPBR| '|RYTP|РУТП|Поцык|Повар|Сашко|Гамаз|Пенек\) |YTM|YTG|MLG|YTK| Dinner | The king | Harkinian | Impa | Gwonam/i;
+
   // Apply global year limit
   const validData = currentData.filter(v => {
     if (!v.publish_date) return true;
@@ -2125,6 +2137,9 @@ function applyFilters() {
 
   // Apply hard filters
   scored = scored.filter(({ video: v }) => {
+    if (hideEmpty && !v.title && !v.view_count && !v.publish_date) return false;
+    if (excludeYTP && v.title && ytpRegex.test(v.title)) return false;
+
     if (status && v.status !== status) return false;
     if (section && !(v.sections || []).includes(section)) return false;
     if (channel && (!v.channel_name || v.channel_name.toLowerCase() !== channel.toLowerCase())) return false;
@@ -2388,8 +2403,10 @@ function renderChannelCard(c, mode = 'grid') {
             </div>
             <div class="ch-desc-modern">Official channel for ${escHtml(name)} archival data.</div>
             <div class="ch-actions-modern">
-              <button class="btn-subscribe-modern" onclick="event.stopPropagation(); openProfile('${escAttr(name)}')">View Profile</button>
-              <a class="btn-visit-modern" href="${url}" target="_blank" onclick="event.stopPropagation()">YouTube</a>
+              <button class="btn-visit-modern" onclick="event.stopPropagation(); openProfile('${escAttr(name)}')">Profile</button>
+              <button class="btn-visit-modern" onclick="event.stopPropagation(); selectChannel('${escAttr(name)}')">Stats</button>
+              <button class="modern-btn-subscribe ${isSubscribed(name) ? 'subscribed' : ''}" data-channel="${escAttr(name)}" onclick="event.stopPropagation(); toggleSubscription('${escAttr(name)}')">${isSubscribed(name) ? 'Iscritto' : 'Iscriviti'}</button>
+              <a class="btn-visit-modern theme-modern-only" href="${url}" target="_blank" onclick="event.stopPropagation()">YouTube</a>
             </div>
           </div>
         </div>
@@ -2413,6 +2430,8 @@ function renderChannelCard(c, mode = 'grid') {
       </div>
       <div class="ch-actions">
         <button class="btn-card-action" onclick="event.stopPropagation(); openProfile('${escAttr(name)}')">View</button>
+        <button class="btn-card-action" onclick="event.stopPropagation(); selectChannel('${escAttr(name)}')">Stats</button>
+        <button class="btn-card-action modern-btn-subscribe ${isSubscribed(name) ? 'subscribed' : ''}" data-channel="${escAttr(name)}" onclick="event.stopPropagation(); toggleSubscription('${escAttr(name)}')">${isSubscribed(name) ? 'Iscritto' : 'Iscriviti'}</button>
         <a class="btn-card-action" href="${url}" target="_blank" onclick="event.stopPropagation()">YouTube</a>
       </div>
     </div>`;

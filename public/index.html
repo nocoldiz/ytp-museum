@@ -455,11 +455,10 @@
         <div class="section-header">
           <h2>Video Search</h2>
           <span class="count-badge" id="videos-count-label"></span>
-          <div id="management-actions" style="display:none; margin-left: 15px; gap: 8px;">
-            <button class="btn-play" onclick="bulkAction('flag-source')"
-              style="background:var(--accent); padding:5px 12px; font-size:12px">Flag as Source</button>
+          <div id="management-actions" style="display:none; margin-left: 15px; gap: 8px; align-items: center;">
+            <button class="btn-mgmt" onclick="bulkAction('flag-source')">Flag as Source</button>
             <div style="height: 20px; width: 1px; background: var(--border); margin: 0 5px;"></div>
-            <select id="mgmt-lang-select" style="font-size:12px; padding:4px; border-radius:4px; border:1px solid var(--border); background:var(--surface);">
+            <select id="mgmt-lang-select" style="font-size:12px; padding:5px; border-radius:6px; border:1px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer;">
               <option value="">Set Language...</option>
               <option value="english">🇬🇧 English</option>
               <option value="italian">🇮🇹 Italian</option>
@@ -468,13 +467,9 @@
               <option value="french">🇫🇷 French</option>
               <option value="german">🇩🇪 German</option>
             </select>
-            <button class="btn-play" onclick="bulkAction('set-lang')"
-              style="background:var(--accent2); padding:5px 12px; font-size:12px">Apply Lang</button>
-            <button class="btn-play" onclick="openAddToPlaylistModal(true)"
-              style="background:var(--accent2); padding:5px 12px; font-size:12px">Add to Playlist</button>
-            <button class="btn-play" onclick="toggleAllManage(false)"
-              style="background:var(--surface); color:var(--text); border:1px solid var(--border); padding:5px 12px; font-size:12px">Deselect
-              All</button>
+            <button class="btn-mgmt" onclick="bulkAction('set-lang')">Apply Lang</button>
+            <button class="btn-mgmt" onclick="openAddToPlaylistModal(true)">Add to Playlist</button>
+            <button class="btn-mgmt" onclick="toggleAllManage(false)" style="background:var(--surface); opacity:0.8;">Deselect All</button>
           </div>
           <div class="view-toggle" style="margin-left: auto;">
             <button id="btn-view-table" class="view-btn active" onclick="setViewMode('table')"
@@ -524,6 +519,14 @@
             <select id="filter-year-max" onchange="applyFilters()">
               <option value="">Max</option>
             </select>
+          </div>
+          <div style="display:flex; align-items:center; gap:15px; margin-left:10px;">
+            <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:12px;">
+              <input type="checkbox" id="filter-hide-empty" onchange="applyFilters()"> Hide empty entries
+            </label>
+            <label style="display:flex; align-items:center; gap:5px; cursor:pointer; font-size:12px;">
+              <input type="checkbox" id="filter-exclude-ytp" onchange="applyFilters()"> Exclude YTP keywords
+            </label>
           </div>
         </div>
         <div id="video-grid" class="video-grid" style="display:none"></div>

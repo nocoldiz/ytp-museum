@@ -20,12 +20,13 @@ Requirements:
     playwright install chromium
 
 Usage:
-    python scraper.py                     # Scrape all sections
-    python scraper.py --delay 2.0         # Slower
-    python scraper.py --sections 0,1,5    # Specific sections
-    python scraper.py --list              # Show section indices
-    python scraper.py --no-embed-images   # Skip image embedding
-    python scraper.py --embed-css         # Also inline CSS
+    py forum_scraper.py                     # Scrape all sections
+    py forum_scraper.py --delay 2.0         # Slower
+    py forum_scraper.py --sections 0,1,5    # Specific sections
+    py forum_scraper.py --list              # Show section indices
+    py forum_scraper.py --no-embed-images   # Skip image embedding
+    py forum_scraper.py --embed-css         # Also inline CSS
+    py forum_scraper.py --sanity-check      # Verify EVERY page is actually downloaded offline
 """
 
 import os
@@ -241,6 +242,7 @@ class ForumScraper:
         self.embed_images = not args.no_embed_images
         self.embed_css = args.embed_css
         self.thread_url = getattr(args, "thread_url", None)
+        self.sanity_check = getattr(args, "sanity_check", False)
 
         all_names = list(SECTIONS.keys())
         if args.sections is not None:
@@ -688,6 +690,8 @@ class ForumScraper:
         print(f"  Delay:        {self.delay}s")
         print(f"  Embed images: {'yes (base64 in HTML)' if self.embed_images else 'no'}")
         print(f"  Embed CSS:    {'yes' if self.embed_css else 'no'}")
+        if self.sanity_check:
+            print(f"  Sanity Check: enabled (verifying all downloaded pages)")
         if self.thread_url:
             print(f"  Thread URL:   {self.thread_url}")
         print("=" * 70)
@@ -800,10 +804,104 @@ class ForumScraper:
             self.save_state()
             log.info(f"  ✓ Restored {total_restored} thread(s) to fetch queue")
 
+    def _sanity_check_threads(self):
+        """Sanity check: parse the locally saved first page to verify ALL pages exist offline."""
+        print("\n" + "─" * 70)
+        print("  SANITY CHECK: VERIFYING ALL PAGES ARE DOWNLOADED")
+        print("─" * 70)
+        total_restored = 0
+        for sec_name, _ in self.section_list:
+            ss = self.section_state(sec_name)
+            if not ss.get("threads_done"):
+                continue
+            section_dir = os.path.join(self.output_dir, safe_filename(sec_name))
+            title_map = dict(zip(ss["threads_found"][::2], ss["threads_found"][1::2]))
+            
+            missing = []
+            for t_url in list(ss["threads_done"]):  
+                tid = get_thread_id(t_url)
+                title = title_map.get(t_url, f"Thread {tid}")
+                safe_title = safe_filename(title)
+                
+                single_path = os.path.join(section_dir, f"{tid}_{safe_title}.html")
+                multi_dir = os.path.join(section_dir, f"{tid}_{safe_title}")
+                multi_path = os.path.join(multi_dir, "page_1.html")
+                
+                local_html_path = None
+                if os.path.exists(single_path) and os.path.getsize(single_path) > 200:
+                    local_html_path = single_path
+                elif os.path.exists(multi_path) and os.path.getsize(multi_path) > 200:
+                    local_html_path = multi_path
+                
+                # fallback: match by tid prefix in case stored title differs
+                if not local_html_path:
+                    try:
+                        for entry in os.listdir(section_dir):
+                            if entry.startswith(f"{tid}_") or entry == f"{tid}.html":
+                                full = os.path.join(section_dir, entry)
+                                if os.path.isfile(full) and os.path.getsize(full) > 200:
+                                    local_html_path = full
+                                    break
+                                if os.path.isdir(full):
+                                    p1 = os.path.join(full, "page_1.html")
+                                    if os.path.isfile(p1) and os.path.getsize(p1) > 200:
+                                        local_html_path = p1
+                                        break
+                    except OSError:
+                        pass
+
+                if not local_html_path:
+                    missing.append(t_url)
+                    continue
+                    
+                # Read local file to discover offline pages
+                try:
+                    with open(local_html_path, "r", encoding="utf-8") as f:
+                        html = f.read()
+                except Exception:
+                    missing.append(t_url)
+                    continue
+                    
+                thread_pages = self.discover_thread_pages(t_url, html)
+                
+                if len(thread_pages) > 1:
+                    all_present = True
+                    for st_val, pg_url in thread_pages:
+                        pg_num = (st_val // 30) + 1 if st_val > 0 else 1
+                        
+                        if os.path.isfile(local_html_path) and os.path.dirname(local_html_path) == section_dir:
+                            # Thread should have multiple pages, but was saved as single file
+                            all_present = False
+                            break
+                        else:
+                            d = os.path.dirname(local_html_path)
+                            fpath = os.path.join(d, f"page_{pg_num}.html")
+                            if not (os.path.exists(fpath) and os.path.getsize(fpath) > 200):
+                                all_present = False
+                                break
+                                
+                    if not all_present:
+                        missing.append(t_url)
+
+            if missing:
+                log.info(f"  📁 {sec_name}: {len(missing)} incomplete thread(s) found — will re-fetch")
+                for u in missing:
+                    ss["threads_done"].remove(u)
+                total_restored += len(missing)
+            else:
+                log.info(f"  📁 {sec_name}: all done threads verified perfectly")
+
+        if total_restored:
+            self.save_state()
+            log.info(f"  ✓ Restored {total_restored} thread(s) to fetch queue")
+
     def _run_full_mode(self):
         """Full multi-section scrape (original run logic)."""
         # ─── Pre-pass: re-queue threads missing from disk ───
-        self._restore_missing_threads()
+        if self.sanity_check:
+            self._sanity_check_threads()
+        else:
+            self._restore_missing_threads()
 
         # ─── Pass 1: Fetch Threads ───
         print("\n" + "─" * 70)
@@ -900,6 +998,7 @@ def main():
                    help="Comma-separated section indices (e.g. 0,1,5)")
     p.add_argument("--thread-url", default=None,
                    help="Scrape a single thread URL (requires --sections N for target folder)")
+    p.add_argument("--sanity-check", action="store_true", help="Recheck every page of completed threads to ensure they are fully downloaded")
     p.add_argument("--list", action="store_true", help="List sections and exit")
 
     args = p.parse_args()
