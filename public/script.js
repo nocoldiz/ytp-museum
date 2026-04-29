@@ -99,6 +99,43 @@ function setGlobalMaxYear(year) {
 }
 // Manual file loading removed as per user request.
 
+// ─── SUBSCRIPTIONS ───────────────────────────────────────────────────────
+function getSubscriptions() {
+  try {
+    return JSON.parse(localStorage.getItem('ytp-subscriptions') || '[]');
+  } catch (e) {
+    return [];
+  }
+}
+function isSubscribed(channelName) {
+  return getSubscriptions().includes(channelName);
+}
+function toggleSubscription(channelName) {
+  let subs = getSubscriptions();
+  if (subs.includes(channelName)) {
+    subs = subs.filter(s => s !== channelName);
+  } else {
+    subs.push(channelName);
+  }
+  localStorage.setItem('ytp-subscriptions', JSON.stringify(subs));
+  updateSubscriptionButtons(channelName);
+}
+function updateSubscriptionButtons(channelName) {
+  const subbed = isSubscribed(channelName);
+  const text = subbed ? 'Iscritto' : 'Iscriviti';
+  // Profile buttons
+  document.querySelectorAll(`.modern-btn-subscribe[data-channel="${escAttr(channelName)}"]`).forEach(btn => {
+    btn.textContent = text;
+    btn.classList.toggle('subscribed', subbed);
+  });
+  // Video detail buttons
+  document.querySelectorAll(`.btn-watch-subscribe[data-channel="${escAttr(channelName)}"]`).forEach(btn => {
+    btn.textContent = text;
+    btn.classList.toggle('subscribed', subbed);
+  });
+}
+
+
 // loadMultipleFiles removed.
 
 // Auto-load from same directory
@@ -1016,6 +1053,7 @@ async function openVideo(vidId, pushToHistory = true) {
       <div id="watch-channel" style="font-weight:bold; cursor:pointer; font-size:1.1rem" onclick="openProfile('${escAttr(channel)}')">${escHtml(channel)}</div>
       <div id="watch-date" style="font-size:0.85rem; color:var(--text-muted)">${fmtDate(v.publish_date)}</div>
     </div>
+    <button class="btn-watch-subscribe ${isSubscribed(channel) ? 'subscribed' : ''}" data-channel="${escAttr(channel)}" onclick="toggleSubscription('${escAttr(channel)}')">${isSubscribed(channel) ? 'Iscritto' : 'Iscriviti'}</button>
   `;
 
   let desc = v.description || 'No description available.';
@@ -1345,7 +1383,7 @@ async function renderModernProfile(user, activeTab = 'home') {
               <span>${videoCountText}</span>
             </div>
             <div class="modern-channel-bio">${escHtml(pooper.description || 'Nessuna descrizione disponibile.')}</div>
-            <button class="modern-btn-subscribe">Iscritto</button>
+            <button class="modern-btn-subscribe ${isSubscribed(user) ? 'subscribed' : ''}" data-channel="${escAttr(user)}" onclick="toggleSubscription('${escAttr(user)}')">${isSubscribed(user) ? 'Iscritto' : 'Iscriviti'}</button>
           </div>
         </div>
       </div>
@@ -1567,8 +1605,13 @@ function renderModernGrid() {
   let videos;
   if (currentModernTab === 'featured') {
     videos = shuffleArray(validVideos).slice(0, 24);
-  } else if (currentModernTab === 'downloaded') {
-    videos = shuffleArray(validVideos.filter(v => v.status === 'downloaded')).slice(0, 24);
+  } else if (currentModernTab === 'subscribed') {
+    const subs = new Set(getSubscriptions());
+    videos = shuffleArray(validVideos.filter(v => subs.has(v.channel_name))).slice(0, 24);
+    if (videos.length === 0) {
+      modernContainer.innerHTML = '<div class="empty-subs" style="padding:40px; text-align:center; color:var(--text-muted);">Non sei iscritto a nessun canale o i canali a cui sei iscritto non hanno video.</div>';
+      return;
+    }
   } else if (currentModernTab === 'views') {
     videos = [...validVideos].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 24);
   } else if (currentModernTab === 'discussed') {
@@ -1601,8 +1644,13 @@ function setFeaturedTab(tab) {
     videos = [...validVideos].sort((a, b) => (b.comment_count || b.view_count || 0) - (a.comment_count || a.view_count || 0)).slice(0, 8);
   } else if (tab === 'favorited') {
     videos = [...validVideos].sort((a, b) => (b.like_count || 0) - (a.like_count || 0)).slice(0, 8);
-  } else if (tab === 'downloaded') {
-    videos = shuffleArray(validVideos.filter(v => v.status === 'downloaded')).slice(0, 12);
+  } else if (tab === 'subscribed') {
+    const subs = new Set(getSubscriptions());
+    videos = shuffleArray(validVideos.filter(v => subs.has(v.channel_name))).slice(0, 12);
+    if (videos.length === 0) {
+      featuredContainer.innerHTML = '<div class="empty-subs" style="padding:20px; color:var(--text-muted);">Nessun video dai canali seguiti.</div>';
+      return;
+    }
   }
 
   featuredContainer.innerHTML = videos.map(v => renderVideoItem(v, 'list')).join('');

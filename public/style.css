@@ -4176,3 +4176,83 @@ body.theme-old .btn-back {
  position: relative;
 }
 
+
+/* SUBSCRIBE BUTTON STYLES */
+.modern-btn-subscribe, .btn-watch-subscribe {
+    background: var(--text);
+    color: var(--bg);
+    border: none;
+    padding: 10px 16px;
+    border-radius: 20px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s, color 0.2s;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 100px;
+}
+
+.modern-btn-subscribe.subscribed, .btn-watch-subscribe.subscribed {
+    background: var(--surface2);
+    color: var(--text);
+}
+
+.modern-btn-subscribe:hover, .btn-watch-subscribe:hover {
+    opacity: 0.9;
+}
+
+#watch-channel-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+#watch-channel-info img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+}
+
+/* Hide subscribe button in old theme if desired, but here we keep it for functionality */
+body.theme-old .btn-watch-subscribe {
+    padding: 4px 8px;
+    font-size: 11px;
+    height: 24px;
+    min-width: 70px;
+}
+
+.empty-subs {
+    font-family: inherit;
+    font-size: 16px;
+}
+
+
+/* CLASSIC PLAYER FIX */
+body.theme-old #watch-video-container {
+    background: #000;
+    width: 100%;
+    margin-bottom: 15px;
+}
+
+body.theme-old #watch-player {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+}
+
+body.theme-old #watch-player iframe,
+body.theme-old #watch-player video {
+    width: 100% !important;
+    height: 100% !important;
+    display: block;
+}
+
+body.theme-old #watch-title {
+    font-size: 1.6rem;
+    font-weight: bold;
+    margin-bottom: 10px;
+    color: #333;
+}
+
