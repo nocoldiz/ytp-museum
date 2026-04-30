@@ -113,51 +113,73 @@ NOCOLDIZ_BLACKLIST = re.compile(
 
 import re
 
-YTP_KEYWORDS = re.compile(
-    r'(?i)('
-    # 1. Standard YTP, YTPV, & YTPMV
-    r'YTP(?:H|HSHORT|BR|FR|ITA|PL|RU|ES|PT|RO|GR|NL|HU|JP)?|'
-    r'YTPV|YTPMV(?:\s+ITA|BR|RU|PL)?|'
-    
-    # 2. Italian Specific Memes & Series
-    r'san\'itario|s\.itario|'                # Sanitario / S.itario
-    r's\.antonino|'                          # S.antonino
-    r'catena\s+di|CATENA\s+S\.\s+ANTONIO|'   # Catena di / Catena S. Antonio
-    r'Shitstorm\s+Pt\.|'                     # Shitstorm series
-    
-    # 3. Japanese & Music Specifics
-    r'Otomad|音MAD|MAD\s+Movie|YTPM|'
-    
-    # 4. Sports & Collaborative Sub-genres
-    r'YTP\s+(?:Tennis|Soccer|Ping\s+pong)|'
-    r'YTP(?:Tennis|Soccer|Pingpong)|'
-    
-    # 5. Regional Acronyms & Localized Names
-    r'RYTP|STP|Pytp|YouTube\s+Kacke|YouTube\s+Kaka|'
-    r'YTK|YTM|Youtube\s+poop(?:\s+ITA)?'
-    r')'
-)
+YTP_KEYWORDS_LIST = [
+    r'YTP(?:H|HSHORT|BR|FR|ITA|PL|RU|ES|PT|RO|GR|NL|HU|JP)?',
+    r'YTPV', r'YTPMV(?:\s+ITA|BR|RU|PL)?',
+    r'san\'itario', r's\.itario', r's\.antonino',
+    r'catena\s+di', r'CATENA\s+S\.\s+ANTONIO',
+    r'Shitstorm\s+Pt\.', r'Otomad', r'音MAD', r'MAD\s+Movie', r'YTPM',
+    r'YTP\s+(?:Tennis|Soccer|Ping\s+pong)', r'YTP(?:Tennis|Soccer|Pingpong)',
+    r'RYTP', r'STP', r'Pytp', r'YouTube\s+Kacke', r'YouTube\s+Kaka',
+    r'YTK', r'YTM', r'Youtube\s+poop(?:\s+ITA)?'
+]
 
-MEME_KEYWORDS = re.compile(
-    r'(?i)(YTP|YTPMV|Collab|YT\s+Poop|Poop|Speciale'
-    
-    # --- YTPITA (ITALIAN) ---
-    r'|matteo\s+montesi|avventure|Zeb|Collegio|Bigazzi|Soccer|Ganon|Billy\s+Mays|Branduardi|Luigi|Ambrogio|Risotto|ariete|Harry\s+potter|Round|Peppa|Grylls|Tennis|Acid|Favij|Testoh|Pingu'
-    r'|Dipr[eè]|Bello\s+Figo|Germano|Grillo|Gesù|Nabbo|Yotobi|Berlusconi|Muniz|Travaglio|Nemesis|Testo|Papa|Super\s+Quark|Iscritti|YTG|MLG'
-    r'|Sentence\s+Mix|Ear\s?rape|G-Major|Mondo\s+emo|Pubblicità|Spot|Spongebob|Reverse|Masking|Pitch\s+Shift'
-    r'|Mosconi|Benson|Brumotti|Master\s?chef|Mister\s+Lui|Pappalardo|Sgarbi|Razzi|Salvini|Renzi|Rio\s+mare|Gerry\s+Scotti|Fazio'
-    r'|Kabu|Nocoldiz|Poldo|Cloroformio|Giannino|Gianni\s+Morandi|Doraemon|Me\s+cont[ro]o\s+Te'
-    # --- GLOBAL & ENGLISH CLASSICS ---
-    r'|Pingas|CD-i|Morshu|Mah\s+Boi|He[\s-]?Man|Sparta\s+Remix|Scad|Stutter|Patrick|Jack\s+Black|Gourmet|The\s+king|Weegee|Spadinner|Michael\s+Rosen|Viacom|Skooks|Flex\s+Tape|Phil\s+Swift|Slap\s+Chop|Hotel\s+Mario|Hank\s+Hill|King\s+Harkinian|Zelda\s+CD-i'
-    # --- YTPH (SPANISH) ---
-    r'|Chavo\s+del\s+8|Pelea\s+de\s+invalidos|Vete\s+a\s+la\s+Versh|Pooppa[ñn]ol'
-    # --- YTP FR (FRENCH) ---
-    r'|Brocante|Joueur\s+du\s+Grenier|JDG|Koh\s+Lanta|Denis\s+Brogniart|David\s+Goodenough'
-    # --- YTK (GERMAN / YOUTUBE KACKE) ---
-    r'|YouTube\s+Kacke|Marcell\s+D\'Avis|Peter\s+Zwegat|Kinski|Löwenzahn|Peter\s+Lustig|1&1'
-    # --- RYTP (RUSSIAN) ---
-    r'|RYTP|РУТП|Поцык|Повар|Сашко|Гамаз|Пенек)'
-)
+MEME_KEYWORDS_LIST = [
+    # Italian
+    r'matteo\s+montesi', r'avventure', r'Zeb(?:89)?', r'Collegio', r'Bigazzi', 
+    r'Soccer', r'Ganon', r'Billy\s+Mays', r'Branduardi', r'Luigi', r'Ambrogio', 
+    r'Risotto', r'Peppa', r'Grylls', r'Favij', r'Testoh', r'Pingu', 
+    r'Dipr[eè]', r'Bello\s+Figo', r'Germano', r'Grillo', r'Ges[uù]', r'Nabbo', 
+    r'Yotobi', r'Berlusconi', r'Muniz', r'Travaglio', r'Nemesis', r'Testo', r'Papa', 
+    r'Super\s+Quark', r'Sentence\s+Mix', r'Ear\s?rape', r'G-Major', r'Mondo\s+emo', 
+    r'Pubblicit[aà]', r'Spot', r'Spongebob', r'Reverse', r'Masking', r'Pitch\s+Shift', 
+    r'Mosconi', r'Benson', r'Brumotti', r'Master\s?chef', r'Mister\s+Lui', 
+    r'Pappalardo', r'Sgarbi', r'Razzi', r'Salvini', r'Renzi', r'Rio\s+mare', 
+    r'Gerry\s+Scotti', r'Fazio', r'Kabu', r'Nocoldiz', r'Poldo', r'Cloroformio', 
+    r'Game of thrones', r'Re Robert', r'Giannino', r'Gianni\s+Morandi', r'Doraemon', 
+    r'Me\s+cont[ro]o\s+Te', r'Capobastone', r'Croix89', r'Maurizio\s+Mosca', 
+    r'Mike\s+Bongiorno', r'De\s+Sica', r'Boldi', r'Checco\s+Zalone', 
+    r'Aldo\s+Giovanni\s+e\s+Giacomo', r'Maccio\s+Capatonda', r'Magalli', r'Camera\s+Caf[eè]',
+    # Global
+    r'Pingas', r'CD-i', r'Morshu', r'Mah\s+Boi', r'He[\s-]?Man', r'Sparta\s+Remix', 
+    r'Scad', r'Stutter', r'Patrick', r'Jack\s+Black', r'Gourmet', r'The\s+king', 
+    r'Weegee', r'Spadinner', r'Michael\s+Rosen', r'Viacom', r'Skooks', r'Flex\s+Tape', 
+    r'Phil\s+Swift', r'Slap\s+Chop', r'Hotel\s+Mario', r'Hank\s+Hill', r'King\s+Harkinian', 
+    r'Zelda\s+CD-i', r'Shrek', r'Sanic', r'Doge', r'MLG', r'Doritos', r'Mountain\s+Dew', 
+    r'Illuminati', r'Snoop\s+Dogg', r'Rickroll', r'Rick\s+Astley', r'Trollface', 
+    r'Gabe\s+Newell', r'TF2', r'Gmod', r'Fnaf', r'Markiplier', r'Pewdiepie', 
+    r'Asdfmovie', r'Nyan\s+Cat', r'Leeroy\s+Jenkins', r'Chuck\s+Norris', r'Over\s+9000', 
+    r'LazyTown', r'Robbie\s+Rotten', r'We\s+Are\s+Number\s+One', r'Big\s+Chungus', 
+    r'Ugandan\s+Knuckles', r'Thomas\s+the\s+Tank\s+Engine', r'Yee',
+    # Spanish
+    r'Chavo\s+del\s+8', r'Don\s+Ramon', r'Quico', r'Pelea\s+de\s+invalidos', 
+    r'Vete\s+a\s+la\s+Versh', r'Pooppa[ñn]ol', r'El\s+bananero', r'Dross', 
+    r'Edgar\s+se\s+cae', r'Fua', r'Tano\s+Pasman', r'Loquendo', r'El\s+Risitas', 
+    r'Fernanfloo', r'Rubius', r'Vegetta777', r'Caso\s+Cerrado', r'Doctora\s+Polo',
+    # French
+    r'Brocante', r'Joueur\s+du\s+Grenier', r'JDG', r'Koh\s+Lanta', r'Denis\s+Brogniart', 
+    r'David\s+Goodenough', r'Antoine\s+Daniel', r'What\s+The\s+Cut', r'WTC', 
+    r'Mister\s+V', r'Cyprien', r'Norman', r'Squeezie', r'Kaamelott', r'OSS\s+117', 
+    r'Jean\s+Dujardin', r'Baptiste', r'T\'es\s+pas\s+net', r'Morsay', r'Sylvain\s+Durif', 
+    r'Christ\s+Cosmique',
+    # German
+    r'Marcell\s+D\'Avis', r'Peter\s+Zwegat', r'Kinski', r'Löwenzahn', r'Peter\s+Lustig', 
+    r'1&1', r'Andreas\s+Kieling', r'Frauentausch', r'Halt\s+Stop', r'Psycho\s+Andreas', 
+    r'Domian', r'Money\s+Boy', r'Haftbefehl', r'Drachenlord', r'Gronkh', r'Coldmirror', 
+    r'Fresh\s+D',
+    # Russian
+    r'Поцык', r'Повар', r'Сашко', r'Гамаз', r'Пенек', r'Влад\s+Борщ', r'Буйный\s+Славик', 
+    r'Дед\s+Бом-бом', r'Кандибобер', r'Ивангай', r'\+100500', r'Макс\s+Голополосов', 
+    r'This\s+is\s+Хорошо', r'Стас\s+Давыдов', r'Никита\s+Литвинков',
+    # Brazilian
+    r'Bambam', r'Rodrigo\s+Faro', r'Fausto\s+Silva', r'Faust[aã]o', r'Ratinho', 
+    r'Silvio\s+Santos', r'Galo\s+Cego', r'Jailson\s+Mendes', r'Urso\s+Peludo', 
+    r'Paulo\s+Guina', r'Chaves', r'Seu\s+Madruga', r'Away\s+de\s+Petr[oó]polis', 
+    r'Gil\s+Brother', r'Dollynho'
+]
+
+YTP_KEYWORDS = re.compile("|".join(YTP_KEYWORDS_LIST), re.IGNORECASE)
+MEME_KEYWORDS = re.compile("|".join(MEME_KEYWORDS_LIST), re.IGNORECASE)
 
 def get_target_index(title):
     """
@@ -1020,6 +1042,7 @@ def do_update_index(index):
 
     clear_line()
     index.save()
+    sync_ytpoopers_index(index)
 
     st = index.stats()
     print(f"  Done — index updated.")
@@ -1186,23 +1209,29 @@ def do_download(index, video_dir, yt_format, rate_limit, retry_failed):
     print(f"  Index:       {os.path.abspath(index.filepath)}")
 
 
-def do_scrape_search(index):
+def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping", quiet=False):
     """Scrape videos based on YouTube searches."""
-    print("\n--- YouTube Search Scraping ---")
+    if not quiet:
+        print(f"\n--- {title_header} ---")
     
-    # Use keywords from the new YTP_KEYWORDS system as base
-    base_keywords = ["YTPH", "YTPHSHORT", "YTPBR", "YTPFR", "YTK", "Youtube poop", "YTP ITA", "YTM"]
-    
-    extra_keywords = input("Add extra keywords to the search (optional): ").strip()
-    
+    if keywords is None:
+        # Default behavior: ask for base keywords + extra
+        base_keywords = ["YTPH", "YTPHSHORT", "YTPBR", "YTPFR", "YTK", "Youtube poop", "YTP ITA", "YTM"]
+        extra_keywords = input("Add extra keywords to the search (optional): ").strip()
+        search_list = []
+        for kw in base_keywords:
+            if extra_keywords:
+                search_list.append(f"{kw} {extra_keywords}")
+            else:
+                search_list.append(kw)
+    else:
+        search_list = keywords
+        
     total_new = 0
     
-    for kw in base_keywords:
-        search_query = kw
-        if extra_keywords:
-            search_query += f" {extra_keywords}"
-            
-        print(f"\n  Searching for: {search_query}")
+    for search_query in search_list:
+        if not quiet:
+            print(f"\n  Searching for: {search_query}")
         
         try:
             # ytsearch50 gets top 50 results
@@ -1214,7 +1243,7 @@ def do_scrape_search(index):
             
             lines = r.stdout.splitlines()
             if not lines:
-                print("    No results found.")
+                if not quiet: print("    No results found.")
                 continue
                 
             found_in_this_search = 0
@@ -1230,14 +1259,15 @@ def do_scrape_search(index):
                     
                     if not vid:
                         continue
-                        
-                    # 1. Ignore if already in video_index or sources_index or excluded
-                    if vid in index.data or vid in index.sources_data or vid in index.actually_excluded_ids:
-                        continue
                     
                     # 2. Keyword routing logic
                     target = get_target_index(title)
                     if target == "none":
+                        continue
+                    
+                    # 1. Ignore if already in video_index or sources_index or excluded
+                    if vid in index.data or vid in index.sources_data or vid in index.actually_excluded_ids:
+                        if not quiet: print(f"    [Match (Already Indexed)] {title} ({vid})")
                         continue
                     
                     # 3. Add to index
@@ -1258,48 +1288,122 @@ def do_scrape_search(index):
                         channel_url=channel_url
                     )
                     
-                    print(f"    [+] New {target} match: {title} ({vid})")
+                    if not quiet: print(f"    [+] New {target} match: {title} ({vid})")
                     found_in_this_search += 1
                     total_new += 1
                     
                 except json.JSONDecodeError:
                     continue
             
-            if found_in_this_search > 0:
-                print(f"    Added {found_in_this_search} new videos from this search.")
-            else:
-                print("    No new matching videos found in this search.")
+            if not quiet:
+                if found_in_this_search > 0:
+                    print(f"    Added {found_in_this_search} new videos from this search.")
+                else:
+                    print("    No new matching videos found in this search.")
                 
         except subprocess.TimeoutExpired:
-            print("    [!] Search timed out.")
+            if not quiet: print("    [!] Search timed out.")
         except Exception as e:
-            print(f"    [!] Error during search: {e}")
+            if not quiet: print(f"    [!] Error during search: {e}")
 
     if total_new > 0:
         index.save()
         sync_ytpoopers_index(index)
-        print(f"\n--- Done. Added {total_new} total new videos to index. ---")
+        if not quiet:
+            print(f"\n--- Done. Added {total_new} total new videos to index. ---")
     else:
-        print("\n--- Done. No new videos added. ---")
+        if not quiet:
+            print("\n--- Done. No new videos added. ---")
+            
+    return total_new
+
+def do_keyword_search_scraping(index):
+    """Scrapes YouTube for every combination of YTP_KEYWORDS_LIST and MEME_KEYWORDS_LIST."""
+    scrape_log_path = os.path.join(os.path.dirname(index.filepath), "keyword_scrape.json")
+    scraped_queries = set()
+    if os.path.exists(scrape_log_path):
+        try:
+            with open(scrape_log_path, "r", encoding="utf-8") as f:
+                scraped_queries = set(json.load(f))
+        except:
+            pass
+
+    def clean_kw(kw):
+        """Helper to turn regex keywords into plain strings."""
+        # Remove groups like (?:H|...) or (?:89)?
+        clean = re.sub(r'\(\?:\w+(?:\|\w+)*\)\?', '', kw)
+        # Handle custom character classes
+        clean = clean.replace(r'[eè]', 'e').replace(r'[uù]', 'u').replace(r'[aà]', 'a')
+        clean = clean.replace(r'[ñn]', 'n').replace(r'[oó]', 'o').replace(r'[aã]', 'a')
+        # Remove remaining regex chars
+        clean = clean.replace(r'\s+', ' ').replace(r'[\s-]', ' ')
+        clean = clean.replace('\\', '').replace("'", "").replace(".", "").replace("+", "")
+        return clean.strip()
+
+    # Clean the lists
+    ytp_clean = sorted(list(set(clean_kw(k) for k in YTP_KEYWORDS_LIST)))
+    meme_clean = sorted(list(set(clean_kw(k) for k in MEME_KEYWORDS_LIST)))
+    
+    # Generate combinations
+    all_combinations = []
+    for yk in ytp_clean:
+        if not yk: continue
+        for mk in meme_clean:
+            if not mk: continue
+            query = f"{yk} {mk}"
+            if query not in scraped_queries:
+                all_combinations.append(query)
+    
+    if not all_combinations:
+        print("\n  All combinations have already been scraped.")
+        return
+
+    print(f"\n--- Keyword Search Scraping (Combinations) ---")
+    print(f"  Found {len(all_combinations)} new combinations to search.")
+    print(f"  (Total potential: {len(ytp_clean) * len(meme_clean)}, Already scraped: {len(scraped_queries)})")
+    
+    confirm = input(f"  This will perform {len(all_combinations)} searches. Continue? [y/N]: ").strip().lower()
+    if confirm != 'y':
+        return
+
+    # To avoid losing progress, we'll search in batches and save the log
+    batch_size = 5
+    total_added = 0
+    
+    try:
+        for i, query in enumerate(all_combinations, 1):
+            pct = i / len(all_combinations) * 100
+            p_bar = bar(pct, 30)
+            print(f"\r  {p_bar} {i}/{len(all_combinations)}: {query[:30]:<30}", end="", flush=True)
+            
+            # Call search for single query in quiet mode
+            new_vids = do_scrape_search(index, keywords=[query], quiet=True)
+            total_added += new_vids
+            scraped_queries.add(query)
+            
+            # Save progress every batch
+            if i % batch_size == 0 or i == len(all_combinations):
+                with open(scrape_log_path, "w", encoding="utf-8") as f:
+                    json.dump(sorted(list(scraped_queries)), f, indent=2)
+                
+    except KeyboardInterrupt:
+        print("\n  Scraping interrupted. Progress saved.")
+    
+    clear_line()
+    print(f"  Keyword Search Scraping Complete. Added {total_added} new videos.")
 
 
 def do_scrape_channels(index):
-    """Scans channels from docs/channels_to_scrape.txt for new YTP videos matching keywords and logs details with a progress bar."""
+    """Scans channels from ALLOWED_CHANNELS for new YTP videos matching keywords."""
     
-    channels_file = os.path.join(index.docs_dir, "channels_to_scrape.txt")
-    if not os.path.exists(channels_file):
-        print(f"  [!] {channels_file} not found.")
-        return
-        
-    with open(channels_file, "r", encoding="utf-8") as f:
-        channels_to_scrape = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+    channels_to_scrape = ALLOWED_CHANNELS
     
     if not channels_to_scrape:
-        print("  No channels defined to scrape in channels_to_scrape.txt.")
+        print("  No channels defined to scrape in ALLOWED_CHANNELS.")
         return
         
     total_channels = len(channels_to_scrape)
-    print(f"  Found {total_channels} channel(s) to scrape from {channels_file}.")
+    print(f"  Found {total_channels} channel(s) to scrape from ALLOWED_CHANNELS.")
     new_total = 0
     
     for i, ch_url in enumerate(channels_to_scrape, 1):
@@ -1928,28 +2032,61 @@ def sync_ytpoopers_index(index):
         except Exception as e:
             print(f"  [!] Error reading sources_index.json: {e}")
 
-    for d in indices_to_check:
-        for vid_id, entry in d.items():
-            ch_url = entry.get("channel_url")
-            ch_name = entry.get("channel_name")
-            if not ch_url:
-                continue
-            
-            if ch_url not in poopers_data:
-                poopers_data[ch_url] = {
-                    "channel_name": ch_name,
-                    "channel_url": ch_url,
-                    "alias": [],
-                    "description": None,
-                    "subscriber_count": None,
-                    "creation_date": None,
-                    "thumbnail": None,
-                }
-                changes = True
-            elif ch_name and not poopers_data[ch_url].get("channel_name"):
-                # Update name if it was missing in the poopers index
-                poopers_data[ch_url]["channel_name"] = ch_name
-                changes = True
+    for vid_id, entry in index.data.items():
+        ch_url = entry.get("channel_url")
+        ch_name = entry.get("channel_name")
+        if not ch_url: continue
+        
+        if ch_url not in poopers_data:
+            poopers_data[ch_url] = {
+                "channel_name": ch_name,
+                "channel_url": ch_url,
+                "alias": [], "description": None, "subscriber_count": None,
+                "creation_date": None, "thumbnail": None,
+            }
+            changes = True
+        elif ch_name and not poopers_data[ch_url].get("channel_name"):
+            poopers_data[ch_url]["channel_name"] = ch_name
+            changes = True
+
+    # 2. Check sources_index.json - only if title matches YTP_KEYWORDS
+    if os.path.exists(sources_path):
+        try:
+            with open(sources_path, "r", encoding="utf-8") as f:
+                src_data = json.load(f)
+                if isinstance(src_data, dict):
+                    for vid_id, entry in src_data.items():
+                        title = entry.get("title") or ""
+                        if YTP_KEYWORDS.search(title):
+                            ch_url = entry.get("channel_url")
+                            ch_name = entry.get("channel_name")
+                            if not ch_url: continue
+                            
+                            if ch_url not in poopers_data:
+                                poopers_data[ch_url] = {
+                                    "channel_name": ch_name,
+                                    "channel_url": ch_url,
+                                    "alias": [], "description": None, "subscriber_count": None,
+                                    "creation_date": None, "thumbnail": None,
+                                }
+                                changes = True
+                            elif ch_name and not poopers_data[ch_url].get("channel_name"):
+                                poopers_data[ch_url]["channel_name"] = ch_name
+                                changes = True
+        except Exception as e:
+            print(f"  [!] Error reading sources_index.json: {e}")
+
+    # 3. Include all channels from channels_by_language.md (ALLOWED_CHANNELS)
+    # These are potential poopers we want to track/scrape
+    for ch_url in ALLOWED_CHANNELS:
+        if ch_url not in poopers_data:
+            poopers_data[ch_url] = {
+                "channel_name": None,  # Will be tagged by URL or scraped later
+                "channel_url": ch_url,
+                "alias": [], "description": None, "subscriber_count": None,
+                "creation_date": None, "thumbnail": None,
+            }
+            changes = True
                 
     if changes:
         try:
@@ -2398,6 +2535,8 @@ def do_scrape_sources_metadata(index):
     clear_line()
     with open(src_path, "w", encoding="utf-8") as f:
         json.dump(sources_data, f, separators=(',', ':'), ensure_ascii=False)
+    
+    sync_ytpoopers_index(index)
 
     print(f"  Done — sources_index.json metadata updated.")
 
@@ -2650,7 +2789,7 @@ def main():
     print("       Fetch comments for every indexed video in sources_index.json.")
     print()
     print("  7  Scrape thumbnails and tag missing profiles")
-    print("       Download profile pictures for channels in ytpoopers_index.json")
+    print("       Download profile pictures for channels in ytpoopers_index.json and channels_by_language.md")
     print()
     print("  8  Auto languages")
     print("       Automatically tag languages for all videos.")
@@ -2660,6 +2799,9 @@ def main():
     print()
     print("  10 YouTube Search Scraping")
     print("       Scrape videos based on YouTube searches.")
+    print()
+    print("  11 Keyword Search Scraping")
+    print("       Scrape videos based on all MEME_KEYWORDS.")
     print()
     print("  f  Forum Scrape")
     print("       Analyze every folder in site_mirror to find YouTube videos.")
@@ -2767,6 +2909,9 @@ def main():
 
     if choice == "10":
         do_scrape_search(index)
+
+    if choice == "11":
+        do_keyword_search_scraping(index)
 
     if choice == "f":
         do_forum_scrape(index, args.site_dir)
