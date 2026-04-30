@@ -121,7 +121,7 @@ YTP_KEYWORDS_LIST = [
     r'Shitstorm\s+Pt\.', r'Otomad', r'音MAD', r'MAD\s+Movie', r'YTPM',
     r'YTP\s+(?:Tennis|Soccer|Ping\s+pong)', r'YTP(?:Tennis|Soccer|Pingpong)',
     r'RYTP', r'STP', r'Pytp', r'YouTube\s+Kacke', r'YouTube\s+Kaka',
-    r'YTK', r'YTM', r'Youtube\s+poop(?:\s+ITA)?'
+    r'YTK', r'Sparta remix',  r'WEEGEE',r'YTM',r'You tube poop', r'Youtube\s+poop(?:\s+ITA)?'
 ]
 
 MEME_KEYWORDS_IT = [
@@ -370,8 +370,11 @@ def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, 
                             print(f"    [LOG] Auto-saved index ({new_entries} new matches found so far)")
         except Exception as e:
             print(f"    [!] Error scraping {chan_url}: {e}")
+        
+        # Save after each channel
+        if new_entries > 0:
+            index.save()
 
-    index.save()
     print(f"\n>>> Scraping complete. {new_entries} total matches added.")
 
     # Removed automatic download:
@@ -844,12 +847,14 @@ class Scanner:
 
                 ids, nickname = self.scan_file(fpath)
                 new_this_file = 0
-                for vid in ids:
-                    was_new = vid not in index.data
-                    index.add_video(vid, sec, rel, thread_title, nickname=nickname)
-                    if was_new:
-                        new_found += 1
-                        new_this_file += 1
+                target = get_target_index(thread_title)
+                if target != "none":
+                    for vid in ids:
+                        was_new = vid not in index.data and vid not in index.sources_data
+                        index.add_video(vid, sec, rel, thread_title, nickname=nickname, target=target)
+                        if was_new:
+                            new_found += 1
+                            new_this_file += 1
 
                 if scan_cache:
                     scan_cache.mark_scanned(rel, ids, new_this_file)
@@ -1322,6 +1327,11 @@ def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping
             if not quiet: print("    [!] Search timed out.")
         except Exception as e:
             if not quiet: print(f"    [!] Error during search: {e}")
+            
+        # Save after each search query
+        if total_new > 0:
+            index.save()
+            sync_ytpoopers_index(index)
 
     if total_new > 0:
         index.save()
@@ -1453,16 +1463,27 @@ def do_keyword_search_scraping(index):
 
 
 def do_scrape_channels(index):
-    """Scans channels from ALLOWED_CHANNELS for new YTP videos matching keywords."""
+    """Scans channels from ALLOWED_CHANNELS and ytpoopers_index.json for new YTP videos matching keywords."""
     
-    channels_to_scrape = ALLOWED_CHANNELS
+    poopers_path = os.path.join(index.docs_dir, "ytpoopers_index.json")
+    channels_to_scrape = set(ALLOWED_CHANNELS)
+    
+    if os.path.exists(poopers_path):
+        try:
+            with open(poopers_path, "r", encoding="utf-8") as f:
+                poopers_data = json.load(f)
+                channels_to_scrape.update(poopers_data.keys())
+        except Exception as e:
+            print(f"  [!] Error loading {poopers_path}: {e}")
+    
+    channels_to_scrape = sorted(list(channels_to_scrape))
     
     if not channels_to_scrape:
-        print("  No channels defined to scrape in ALLOWED_CHANNELS.")
+        print("  No channels defined to scrape.")
         return
         
     total_channels = len(channels_to_scrape)
-    print(f"  Found {total_channels} channel(s) to scrape from ALLOWED_CHANNELS.")
+    print(f"  Found {total_channels} channel(s) to scrape (ALLOWED_CHANNELS + pooper registry).")
     new_total = 0
     
     for i, ch_url in enumerate(channels_to_scrape, 1):
@@ -1494,12 +1515,14 @@ def do_scrape_channels(index):
                         title = d.get("title", "")
                         
                         # Match logic based on get_target_index or NOCOLDIZ_BLACKLIST
-                        target = "none"
-                        if nocoldiz:
-                            if not NOCOLDIZ_BLACKLIST.search(title):
+                        target = get_target_index(title)
+                        
+                        if nocoldiz and target == "none":
+                            # For nocoldiz, if it wasn't caught by YTP/Meme/Non-YTP keywords,
+                            # we still include it if it's not explicitly in the nocoldiz blacklist
+                            # and doesn't match the general non-YTP filter.
+                            if not NOCOLDIZ_BLACKLIST.search(title) and not NON_YTP_KEYWORDS.search(title):
                                 target = "video"
-                        else:
-                            target = get_target_index(title)
 
                         # If it matches and is not already in the index (and not excluded), log and add it
                         if target != "none" and vid and vid not in index.data and vid not in index.sources_data and vid not in index.actually_excluded_ids:
@@ -1514,6 +1537,11 @@ def do_scrape_channels(index):
                         
                 clear_line()
                 print(f"    Done scanning {total_videos} videos.")
+                
+                # Save periodically after each channel
+                if new_total > 0:
+                    index.save()
+                    sync_ytpoopers_index(index)
             else:
                 clear_line()
                 print(f"    [!] No videos found or yt-dlp returned an error for {ch_url}")
@@ -1525,11 +1553,6 @@ def do_scrape_channels(index):
             clear_line()
             print(f"    [!] Error scraping {ch_url}: {e}")
 
-    # Save all new entries to the index
-    if new_total > 0:
-        index.save()
-        sync_ytpoopers_index(index)
-        
     print(f"\n  Finished scraping channels. Added {new_total} new videos to the index.")
 def do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, limit_channels=None, language_filter=None):
     if retry_failed:
@@ -2412,13 +2435,18 @@ def do_scrape_profiles(index, docs_dir):
         except Exception:
             existing = {}
 
-    # Map for processing loop (needs both existing and current index)
+    # Map for processing loop (needs both existing, current index, and pooper registry)
     channel_map = {}
     for e in index.data.values():
         ch_url = e.get("channel_url")
         ch_name = e.get("channel_name")
         if ch_url and ch_url not in channel_map:
             channel_map[ch_url] = ch_name or existing.get(ch_url, {}).get("channel_name")
+
+    # Ensure all channels from ytpoopers_index.json are included
+    for ch_url, info in existing.items():
+        if ch_url not in channel_map:
+            channel_map[ch_url] = info.get("channel_name")
 
     thumb_dir = os.path.join(docs_dir, "profile_thumbnails")
     os.makedirs(thumb_dir, exist_ok=True)
@@ -2694,8 +2722,8 @@ def do_full_scrape_run(index, args):
     do_scrape_sources_metadata(index)
     create_progressive_backup(index, "step2_metadata")
     
-    print("\nStep 3: Scrape Thumbnails and Tag Missing Profiles (Option 7)")
-    do_scrape_thumbnails(index, args.docs_dir)
+    print("\nStep 3: Scrape Channel Profiles and Thumbnails (Option 7)")
+    do_scrape_profiles(index, args.docs_dir)
     create_progressive_backup(index, "step3_thumbnails")
     
     print("\nStep 4: Scrape Comments (Option 6)")
@@ -2975,7 +3003,7 @@ def main():
         do_scrape_comments(index, args.docs_dir)
 
     if choice == "7":
-        do_scrape_thumbnails(index, args.docs_dir)
+        do_scrape_profiles(index, args.docs_dir)
 
     if choice == "8":
         do_auto_languages(index)

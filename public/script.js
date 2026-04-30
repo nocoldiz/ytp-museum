@@ -202,10 +202,10 @@ function initApp() {
   renderYearGrid();
   buildFirstUploadCache();
 
-  const yearSelector = document.getElementById('global-year-selector');
-  if (yearSelector) {
-    const minYearRes = queryDB("SELECT MIN(substr(publish_date, 1, 4)) as m FROM videos WHERE publish_date IS NOT NULL");
-    const minYear = parseInt(minYearRes[0].m) || 2005;
+  const yearSelectors = [document.getElementById('global-year-selector'), document.getElementById('modern-global-year-selector')];
+  if (yearSelectors[0] || yearSelectors[1]) {
+    const minYearRes = queryDB("SELECT MIN(CAST(substr(publish_date, 1, 4) AS INTEGER)) as m FROM videos WHERE publish_date IS NOT NULL");
+    const minYear = (minYearRes && minYearRes[0] && minYearRes[0].m) ? parseInt(minYearRes[0].m) : 2005;
     const currentYear = new Date().getFullYear();
     globalMaxYear = currentYear;
 
@@ -213,8 +213,14 @@ function initApp() {
     for (let y = currentYear; y >= minYear; y--) {
       optionsHtml += `<option value="${y}">${y}</option>`;
     }
-    yearSelector.innerHTML = optionsHtml;
-    yearSelector.value = globalMaxYear;
+    optionsHtml += `<option value="9999">All time</option>`;
+    
+    yearSelectors.forEach(sel => {
+      if (sel) {
+        sel.innerHTML = optionsHtml;
+        sel.value = globalMaxYear;
+      }
+    });
   }
   if (appMode === 'videos') {
     renderHomePage();
@@ -1401,6 +1407,11 @@ function toggleVideoMode() {
 function setGlobalMaxYear(year) {
   globalMaxYear = parseInt(year);
 
+  // Sync all year selectors
+  [document.getElementById('global-year-selector'), document.getElementById('modern-global-year-selector')].forEach(sel => {
+    if (sel) sel.value = year;
+  });
+
   // Re-render active views
   if (document.getElementById('page-youtube').classList.contains('active')) renderHomePage();
   if (document.getElementById('page-videos').classList.contains('active')) applyFilters();
@@ -2319,7 +2330,7 @@ function buildChannelData() {
       SUM(like_count) as totalLikes,
       MIN(substr(publish_date, 1, 4)) as firstYear
     FROM videos 
-    WHERE (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL)
+    WHERE channel_name IS NOT NULL AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL)
     GROUP BY channel_name 
     ORDER BY videoCount DESC
   `;
@@ -2331,7 +2342,7 @@ function buildChannelData() {
 }
 
 function renderChannelCard(c, mode = 'grid') {
-  const name = typeof c === 'string' ? c : c.name;
+  const name = (typeof c === 'string' ? c : c.name) || 'Unknown Channel';
   const avatar = getChannelAvatar(name);
 
   let videosCount, viewsCount, url;
@@ -2340,11 +2351,11 @@ function renderChannelCard(c, mode = 'grid') {
     const chVideos = ytData.filter(v => v.channel_name === name);
     videosCount = chVideos.length;
     viewsCount = chVideos.reduce((s, v) => s + (v.view_count || 0), 0);
-    url = (chVideos.length > 0 && chVideos[0].channel_url) ? chVideos[0].channel_url : `https://www.youtube.com/${name.startsWith('@') ? name : '@' + name}`;
+    url = (chVideos.length > 0 && chVideos[0].channel_url) ? chVideos[0].channel_url : `https://www.youtube.com/${name && name.startsWith('@') ? name : '@' + name}`;
   } else {
     videosCount = c.videos ? c.videos.length : 0;
     viewsCount = c.totalViews || 0;
-    url = c.url || `https://www.youtube.com/${name.startsWith('@') ? name : '@' + name}`;
+    url = c.url || `https://www.youtube.com/${name && name.startsWith('@') ? name : '@' + name}`;
   }
 
   const isOld = document.body.classList.contains('theme-old');
