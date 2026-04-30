@@ -1,0 +1,213 @@
+import sqlite3
+import json
+import sys
+import os
+
+DB_PATH = 'public/museum.db'
+
+def get_conn():
+    return sqlite3.connect(DB_PATH)
+
+def ban_videos(video_ids):
+    conn = get_conn()
+    cursor = conn.cursor()
+    deleted = []
+    skipped = []
+    
+    for vid_id in video_ids:
+        cursor.execute("SELECT local_file FROM videos WHERE id = ?", (vid_id,))
+        row = cursor.fetchone()
+        if not row:
+            skipped.append(vid_id)
+            continue
+            
+        local_file = row[0]
+        if local_file:
+            abs_path = os.path.join(os.getcwd(), local_file)
+            if os.path.exists(abs_path):
+                try:
+                    os.remove(abs_path)
+                except Exception as e:
+                    print(f"Error removing {abs_path}: {e}", file=sys.stderr)
+                    
+        cursor.execute("UPDATE videos SET status = 'banned', local_file = NULL WHERE id = ?", (vid_id,))
+        deleted.append(vid_id)
+        
+    conn.commit()
+    conn.close()
+    return {"success": True, "results": {"deleted": deleted, "skipped": skipped}}
+
+def flag_as_source(video_ids):
+    conn = get_conn()
+    cursor = conn.cursor()
+    moved = []
+    skipped = []
+    
+    sources_dir = 'sources'
+    if not os.path.exists(sources_dir):
+        os.makedirs(sources_dir)
+        
+    for vid_id in video_ids:
+        cursor.execute("SELECT local_file FROM videos WHERE id = ?", (vid_id,))
+        row = cursor.fetchone()
+        if not row:
+            skipped.append(vid_id)
+            continue
+            
+        local_file = row[0]
+        new_rel_path = local_file
+        
+        if local_file and not local_file.startswith('sources/'):
+            old_path = os.path.join(os.getcwd(), local_file)
+            file_name = os.path.basename(local_file)
+            new_rel_path = f"sources/{file_name}"
+            new_path = os.path.join(os.getcwd(), new_rel_path)
+            
+            if os.path.exists(old_path):
+                try:
+                    os.rename(old_path, new_path)
+                except Exception as e:
+                    print(f"Error moving {old_path}: {e}", file=sys.stderr)
+                    
+        cursor.execute("UPDATE videos SET is_source = 1, local_file = ? WHERE id = ?", (new_rel_path, vid_id))
+        moved.append(vid_id)
+        
+    conn.commit()
+    conn.close()
+    return {"success": True, "results": {"moved": moved, "skipped": skipped}}
+
+def import_videos(urls, target):
+    conn = get_conn()
+    cursor = conn.cursor()
+    added = []
+    skipped = []
+    
+    import re
+    yt_regex = re.compile(r"(?:v=|vi/|shorts/|be/|embed/|watch\?v=|youtu\.be/)([a-zA-Z0-9_-]{11})")
+    
+    for url in urls:
+        url = url.strip()
+        if not url: continue
+        
+        match = yt_regex.search(url)
+        if not match:
+            skipped.append(url)
+            continue
+            
+        vid_id = match.group(1)
+        cursor.execute("SELECT id FROM videos WHERE id = ?", (vid_id,))
+        if cursor.fetchone():
+            skipped.append(url)
+            continue
+            
+        cursor.execute("INSERT INTO videos (id, url, status, is_source) VALUES (?, ?, 'available', ?)",
+                       (vid_id, f"https://www.youtube.com/watch?v={vid_id}", 1 if target == 'sources' else 0))
+        added.append(vid_id)
+        
+    conn.commit()
+    conn.close()
+    return {"success": True, "results": {"added": added, "skipped": skipped}}
+
+def set_language(video_ids, language):
+    conn = get_conn()
+    cursor = conn.cursor()
+    updated = []
+    skipped = []
+    
+    for vid_id in video_ids:
+        cursor.execute("UPDATE videos SET language = ? WHERE id = ?", (language, vid_id))
+        if cursor.rowcount > 0:
+            updated.append(vid_id)
+        else:
+            skipped.append(vid_id)
+            
+    conn.commit()
+    conn.close()
+    return {"success": True, "results": {"updated": updated, "skipped": skipped}}
+
+def add_upload_metadata(id, title, channel_name, channel_url, publish_date, language, is_source, local_file, tags):
+    conn = get_conn()
+    cursor = conn.cursor()
+    
+    cursor.execute("""
+        INSERT INTO videos (id, title, channel_name, channel_url, publish_date, language, status, is_source, local_file, view_count, like_count)
+        VALUES (?, ?, ?, ?, ?, ?, 'downloaded', ?, ?, 0, 0)
+    """, (id, title, channel_name, channel_url, publish_date, language, is_source, local_file))
+    
+    for tag_name in tags:
+        cursor.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag_name,))
+        cursor.execute("SELECT id FROM tags WHERE name = ?", (tag_name,))
+        tag_id = cursor.fetchone()[0]
+        cursor.execute("INSERT OR IGNORE INTO video_tags (video_id, tag_id) VALUES (?, ?)", (id, tag_id))
+        
+    conn.commit()
+    conn.close()
+    return {"success": True, "id": id}
+
+def create_playlist(name, pl_id):
+    conn = get_conn()
+    cursor = conn.cursor()
+    from datetime import datetime
+    created_at = datetime.now().isoformat()
+    cursor.execute("INSERT INTO playlists (id, name, created_at) VALUES (?, ?, ?)", (pl_id, name, created_at))
+    conn.commit()
+    conn.close()
+    return {"success": True, "playlist": {"id": pl_id, "name": name, "videoIds": []}}
+
+def add_videos_to_playlist(playlist_id, video_ids):
+    conn = get_conn()
+    cursor = conn.cursor()
+    added = 0
+    for vid_id in video_ids:
+        cursor.execute("INSERT OR IGNORE INTO playlist_videos (playlist_id, video_id) VALUES (?, ?)", (playlist_id, vid_id))
+        added += cursor.rowcount
+    conn.commit()
+    conn.close()
+    return {"success": True, "addedCount": added}
+
+def get_playlists():
+    conn = get_conn()
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM playlists")
+    rows = cursor.fetchall()
+    playlists = {}
+    for row in rows:
+        pl_id = row['id']
+        cursor.execute("SELECT video_id FROM playlist_videos WHERE playlist_id = ?", (pl_id,))
+        video_ids = [r[0] for r in cursor.fetchall()]
+        d = dict(row)
+        d['videoIds'] = video_ids
+        playlists[pl_id] = d
+    conn.close()
+    return {"success": True, "playlists": playlists}
+
+if __name__ == "__main__":
+    try:
+        command = sys.argv[1]
+        args = json.loads(sys.argv[2])
+        
+        if command == "ban":
+            print(json.dumps(ban_videos(args['videoIds'])))
+        elif command == "flag-source":
+            print(json.dumps(flag_as_source(args['videoIds'])))
+        elif command == "import":
+            print(json.dumps(import_videos(args['urls'], args['target'])))
+        elif command == "set-lang":
+            print(json.dumps(set_language(args['videoIds'], args['language'])))
+        elif command == "upload":
+            print(json.dumps(add_upload_metadata(
+                args['id'], args['title'], args['channel_name'], args['channel_url'],
+                args['publish_date'], args['language'], args['is_source'], 
+                args['local_file'], args['tags']
+            )))
+        elif command == "create-playlist":
+            print(json.dumps(create_playlist(args['name'], args['id'])))
+        elif command == "add-to-playlist":
+            print(json.dumps(add_videos_to_playlist(args['playlistId'], args['videoIds'])))
+        elif command == "get-playlists":
+            print(json.dumps(get_playlists()))
+        else:
+            print(json.dumps({"success": False, "error": f"Unknown command: {command}"}))
+    except Exception as e:
+        print(json.dumps({"success": False, "error": str(e)}))

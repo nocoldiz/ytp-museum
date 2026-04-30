@@ -1,9 +1,9 @@
-let allVideos = [];       // from video_index.json
-let allSources = [];      // from sources_index.json
-let allPoopers = {};      // from ytpoopers_index.json
-let pooperMap = {};       // channel_name -> pooper data
+let allVideos = [];       // Cache for currently filtered view
+let allSources = [];
+let allPoopers = {};
+let pooperMap = {};
 let filteredVideos = [];
-let appMode = 'videos';   // 'videos' or 'sources'
+let appMode = 'videos';
 let isServerMode = false;
 let currentPage = 1;
 const PAGE_SIZE = 50;
@@ -11,95 +11,54 @@ let selectedChannel = null;
 let selectedSection = null;
 let charts = {};
 let globalMaxYear = new Date().getFullYear();
-let currentVideoMode = "all"; // "all", "ytp", "sources"
+let currentVideoMode = "all";
 let sourceChannels = new Set();
-let allSearchIndex = [];    // [id, title, channel, year, views, dur, desc]
-let playbackMode = localStorage.getItem('ytp-playback-mode') || 'youtube'; 
-
-// DB Constants (Must be at top for initialization)
-const dbName = 'YTPArchiveDB';
-const storeName = 'savedVideos';
-const playlistStoreName = 'playlists';
-let db;
-
-function toggleVideoMode() {
-  if (currentVideoMode === "all") currentVideoMode = "ytp";
-  else if (currentVideoMode === "ytp") currentVideoMode = "sources";
-  else currentVideoMode = "all";
-
-  const txt = currentVideoMode === "all" ? "Show all videos" :
-    currentVideoMode === "ytp" ? "Show YTP videos" :
-      "Show other videos";
-
-  document.querySelectorAll('.btn-video-mode').forEach(btn => btn.textContent = txt);
-
-  if (document.getElementById('page-youtube').classList.contains('active')) {
-    renderHomePage();
-  }
-  const q = document.getElementById('global-search-input').value.trim();
-  if (q && document.getElementById('page-search').classList.contains('active')) {
-    performSearch(q);
-  }
-}
-
-function getActiveVideos(forHome = false) {
-  const all = [...allVideos, ...allSources];
-  if (currentVideoMode === "all") return forHome ? allVideos : all;
-
-  if (currentVideoMode === "ytp") {
-    return allVideos.filter(v => !v.channel_name || !sourceChannels.has(v.channel_name));
-  }
-
-  const currentYear = new Date().getFullYear();
-
-  // Apply global year limit strictly
-  return baseList.filter(v => {
-    if (!v.publish_date) {
-      // Only allow videos with unknown dates if the filter is set to the present year
-      return globalMaxYear === currentYear;
-    }
-    return parseInt(v.publish_date.slice(0, 4)) <= globalMaxYear;
-  });
-}
-
+let playbackMode = localStorage.getItem('ytp-playback-mode') || 'youtube';
 let renderedHomeVideoIds = new Set();
 let isFetchingMoreHome = false;
 let currentModernTab = 'featured';
 
-function shuffleArray(array) {
-  const arr = [...array];
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-  return arr;
+// DB Constants
+const dbName = 'YTPArchiveDB';
+const storeName = 'savedVideos';
+const playlistStoreName = 'playlists';
+let idb; // IndexedDB
+let sqlDB; // SQLite DB
+
+// ─── SQLITE INITIALIZATION ────────────────────────────────────────────────
+async function initSQLite() {
+  const config = {
+    locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${file}`
+  };
+  const SQL = await initSqlJs(config);
+
+  const response = await fetch('public/museum.db');
+  const arrayBuffer = await response.arrayBuffer();
+  const uInt8Array = new Uint8Array(arrayBuffer);
+  sqlDB = new SQL.Database(uInt8Array);
+  console.log("SQLite database loaded successfully.");
+  return sqlDB;
 }
-function setGlobalMaxYear(year) {
-  globalMaxYear = parseInt(year);
 
-  // Re-render active views
-  if (document.getElementById('page-youtube').classList.contains('active')) renderHomePage();
-  if (document.getElementById('page-videos').classList.contains('active')) applyFilters();
-  if (document.getElementById('page-search').classList.contains('active')) {
-    const q = document.getElementById('global-search-input').value.trim();
-    if (q) performSearch(q);
-  }
-  if (document.getElementById('page-channels').classList.contains('active')) renderChannelGrid();
-
-  // Reload profile if open
-  if (document.getElementById('page-profile').classList.contains('active')) {
-    const url = new URL(window.location);
-    let user = url.searchParams.get('user') || url.searchParams.get('c') || url.searchParams.get('channel');
-    if (!user && url.pathname.startsWith('/@')) user = url.pathname.slice(2);
-    if (!user && (url.pathname.startsWith('/user/') || url.pathname.startsWith('/c/') || url.pathname.startsWith('/channel/'))) {
-      user = url.pathname.split('/')[2];
+function queryDB(sql, params = []) {
+  if (!sqlDB) return [];
+  try {
+    const stmt = sqlDB.prepare(sql);
+    stmt.bind(params);
+    const results = [];
+    while (stmt.step()) {
+      results.push(stmt.getAsObject());
     }
-    if (user) openProfile(decodeURIComponent(user), false);
+    stmt.free();
+    return results;
+  } catch (e) {
+    console.error('[queryDB] Error executing SQL:', sql, 'Params:', params, 'Error:', e);
+    return [];
   }
 }
-// Manual file loading removed as per user request.
 
 // ─── SUBSCRIPTIONS ───────────────────────────────────────────────────────
+// (kept as is)
 function getSubscriptions() {
   try {
     return JSON.parse(localStorage.getItem('ytp-subscriptions') || '[]');
@@ -123,57 +82,39 @@ function toggleSubscription(channelName) {
 function updateSubscriptionButtons(channelName) {
   const subbed = isSubscribed(channelName);
   const text = subbed ? 'Iscritto' : 'Iscriviti';
-  // Profile buttons
   document.querySelectorAll(`.modern-btn-subscribe[data-channel="${escAttr(channelName)}"]`).forEach(btn => {
     btn.textContent = text;
     btn.classList.toggle('subscribed', subbed);
   });
-  // Video detail buttons
   document.querySelectorAll(`.btn-watch-subscribe[data-channel="${escAttr(channelName)}"]`).forEach(btn => {
     btn.textContent = text;
     btn.classList.toggle('subscribed', subbed);
   });
 }
 
-
-// loadMultipleFiles removed.
-
-// Auto-load from same directory
+// Auto-load logic
 async function autoLoad() {
   const isHttp = window.location.protocol.startsWith('http');
-  if (isHttp) {
-    // App auto-loads data from server
+
+  try {
+    await initSQLite();
+  } catch (e) {
+    console.error("Failed to load SQLite DB:", e);
+    alert("Errore nel caricamento del database. Ricarica la pagina.");
+    return;
   }
 
-  let vData = null;
-  let sData = null;
-  let pData = null;
-  try {
-    const rv = await fetch('db/video_index.json');
-    if (rv.ok) vData = await rv.json();
-    else {
-      // Fallback to the old big index if the lite one doesn't exist yet
-      const rv2 = await fetch('db/video_index.json');
-      if (rv2.ok) vData = await rv2.json();
-    }
-  } catch (e) { }
-  try {
-    const rs = await fetch('db/sources_index.json');
-    if (rs.ok) sData = await rs.json();
-    else {
-      const rs2 = await fetch('db/sources_index.json');
-      if (rs2.ok) sData = await rs2.json();
-    }
-  } catch (e) { }
-  try {
-    const rp = await fetch('db/ytpoopers_index.json');
-    if (rp.ok) pData = await rp.json();
+  // Load essential metadata for app init
+  const channels = queryDB("SELECT * FROM channels");
+  pooperMap = {};
+  channels.forEach(p => {
+    if (p.channel_name) pooperMap[p.channel_name] = p;
+  });
 
-    const rsi = await fetch('db/search_index.json');
-    if (rsi.ok) allSearchIndex = await rsi.json();
-  } catch (e) { }
+  const sources = queryDB("SELECT DISTINCT channel_name FROM videos WHERE is_source = 1");
+  sourceChannels = new Set(sources.map(s => s.channel_name));
 
-  initApp(vData, sData, pData);
+  initApp();
 
   // Detect server mode for management features
   if (isHttp) {
@@ -185,17 +126,13 @@ async function autoLoad() {
         const ma = document.getElementById('management-actions');
         if (ma) ma.style.display = 'flex';
 
-        // Show import button and hide help
         const importBtn = document.getElementById('btn-import');
         const helpBtn = document.getElementById('btn-help');
         if (importBtn) importBtn.style.display = 'inline-block';
         if (helpBtn) helpBtn.style.display = 'none';
 
-        // Show playback source toggle
         const ps = document.getElementById('playback-source-container');
-        const psm = document.querySelector('.playback-source-container-modern');
         if (ps) ps.style.display = 'inline-block';
-        if (psm) psm.style.display = 'inline-block';
         updatePlaybackToggleUI();
       }
     } catch (e) { }
@@ -205,21 +142,19 @@ async function autoLoad() {
 // Start app
 (async () => {
   try {
-    await initDB();
-    console.log("Database initialized.");
+    await initIndexedDB(); // Renamed from initDB to avoid confusion with sqlDB
+    console.log("IndexedDB initialized.");
   } catch (e) {
-    console.error("Database initialization failed:", e);
+    console.error("IndexedDB initialization failed:", e);
   }
   await autoLoad();
-  
-  // Initial playlist load
+
   try {
     const local = await getLocalPlaylists();
     const server = await getServerPlaylists();
     allPlaylists = { local, server };
   } catch (e) { }
 })();
-
 
 // ─── INIT ─────────────────────────────────────────────────────────────────
 const ALLOWED_SECTIONS = new Set(["YTP nostrane", "YTP fai da te", "YTPMV dimportazione", "YTP da internet", "Internet", "Youtube", "Scraped Channel"]);
@@ -235,32 +170,9 @@ function resetFilters() {
   if (langSel) langSel.value = 'any';
 }
 
-function initApp(vRaw, sRaw, pRaw) {
+function initApp() {
   resetFilters();
   syncSearchLayout();
-  if (vRaw) {
-    allVideos = Object.entries(vRaw).map(([id, v]) => {
-      const sections = (v.sections && v.sections.length > 0) ? v.sections : ["Youtube"];
-      return { id, ...v, sections };
-    }).filter(v => v.sections.some(s => ALLOWED_SECTIONS.has(s)));
-  }
-  if (sRaw) {
-    allSources = Object.entries(sRaw).map(([id, v]) => ({ id, ...v }));
-    sourceChannels = new Set(allSources.map(v => v.channel_name).filter(Boolean));
-  }
-  if (pRaw) {
-    allPoopers = pRaw;
-    pooperMap = {};
-    Object.values(pRaw).forEach(p => {
-      if (p.channel_name) {
-        pooperMap[p.channel_name] = p;
-      }
-    });
-  }
-
-  if (!vRaw && !sRaw) {
-    return;
-  }
 
   document.getElementById('app').style.display = 'block';
 
@@ -269,20 +181,19 @@ function initApp(vRaw, sRaw, pRaw) {
   document.querySelectorAll('.page-loader').forEach(el => el.style.display = 'none');
 
   // badges
-  const totalVideos = allVideos.length;
-  const channels = new Set(allVideos.map(v => v.channel_name).filter(Boolean));
-  const sections = new Set(allVideos.flatMap(v => v.sections || []));
+  const totalVideos = queryDB("SELECT COUNT(*) as c FROM videos WHERE is_source = 0")[0].c;
+  const totalSources = queryDB("SELECT COUNT(*) as c FROM videos WHERE is_source = 1")[0].c;
+  const totalChannels = queryDB("SELECT COUNT(*) as c FROM channels")[0].c;
+  const totalYears = queryDB("SELECT COUNT(DISTINCT substr(publish_date, 1, 4)) as c FROM videos WHERE publish_date IS NOT NULL")[0].c;
 
   const bV = document.getElementById('badge-videos');
   if (bV) bV.textContent = totalVideos;
   const bS = document.getElementById('badge-sources');
-  if (bS) bS.textContent = allSources.length;
+  if (bS) bS.textContent = totalSources;
   const bC = document.getElementById('badge-channels');
-  if (bC) bC.textContent = channels.size;
-
-  const years = new Set(allVideos.map(v => v.publish_date ? v.publish_date.slice(0, 4) : null).filter(Boolean));
+  if (bC) bC.textContent = totalChannels;
   const bY = document.getElementById('badge-years');
-  if (bY) bY.textContent = years.size;
+  if (bY) bY.textContent = totalYears;
 
   buildFilterOptions();
   buildOverview();
@@ -290,10 +201,11 @@ function initApp(vRaw, sRaw, pRaw) {
   renderChannelGrid();
   renderYearGrid();
   buildFirstUploadCache();
+
   const yearSelector = document.getElementById('global-year-selector');
   if (yearSelector) {
-    const yearsSet = new Set([...(allVideos || []), ...(allSources || [])].map(v => v.publish_date ? parseInt(v.publish_date.slice(0, 4)) : null).filter(Boolean));
-    const minYear = Math.min(...Array.from(yearsSet)) || 2005;
+    const minYearRes = queryDB("SELECT MIN(substr(publish_date, 1, 4)) as m FROM videos WHERE publish_date IS NOT NULL");
+    const minYear = parseInt(minYearRes[0].m) || 2005;
     const currentYear = new Date().getFullYear();
     globalMaxYear = currentYear;
 
@@ -311,11 +223,10 @@ function initApp(vRaw, sRaw, pRaw) {
   // Restore theme and aspect ratio
   const lastMode = localStorage.getItem('lastThemeMode') || 'old';
   const isCurrentlyOld = document.body.classList.contains('theme-old');
-  
+
   if (lastMode === 'modern' && isCurrentlyOld) {
-    toggleThemeMode(); // This handles modern switch + ratio restoration
+    toggleThemeMode();
   } else {
-    // Mode is already correct (either old or already modern from inline script)
     const isOld = document.body.classList.contains('theme-old');
     const ratio = localStorage.getItem(isOld ? 'aspectRatioOld' : 'aspectRatioModern') || (isOld ? '4-3' : '16-9');
     setAspectRatio(ratio, false);
@@ -402,12 +313,12 @@ function togglePlaybackMode() {
   playbackMode = (playbackMode === 'youtube') ? 'mirror' : 'youtube';
   localStorage.setItem('ytp-playback-mode', playbackMode);
   updatePlaybackToggleUI();
-  
+
   // If we are currently watching a video, reload the player
   const url = new URL(window.location);
   const vidId = url.searchParams.get('v');
   if (vidId && document.getElementById('page-video').classList.contains('active')) {
-      openVideo(vidId, false);
+    openVideo(vidId, false);
   }
 }
 
@@ -487,7 +398,7 @@ function showPage(name, pushToHistory = true) {
 function setAspectRatio(ratio, save = true) {
   document.body.classList.remove('aspect-ratio-4-3', 'aspect-ratio-16-9');
   document.body.classList.add('aspect-ratio-' + ratio);
-  
+
   // Sync all selectors
   document.querySelectorAll('.aspect-ratio-selector').forEach(sel => {
     sel.value = ratio;
@@ -496,7 +407,7 @@ function setAspectRatio(ratio, save = true) {
   if (save) {
     const isOld = document.body.classList.contains('theme-old');
     localStorage.setItem(isOld ? 'aspectRatioOld' : 'aspectRatioModern', ratio);
-    
+
     // Re-render the current view to apply structural layout changes
     handleRouting();
   }
@@ -517,7 +428,7 @@ function toggleThemeMode() {
   syncSearchLayout();
 
   if (typeof updateVideoLayoutForTheme === 'function') updateVideoLayoutForTheme();
-  
+
   handleRouting();
 }
 
@@ -556,52 +467,18 @@ function onGlobalSearchInput() {
 
   clearTimeout(searchDebounceTimer);
   searchDebounceTimer = setTimeout(() => {
-    const queryTokens = tokenize(q);
-    if (queryTokens.length === 0) return;
+    const qp = `%${q}%`;
 
-    // Search titles and channel names for suggestions using the index if available
-    const isUsingIndex = allSearchIndex.length > 0;
-    const data = isUsingIndex ? allSearchIndex : getActiveVideos(false);
+    // Search channels
+    const channels = queryDB("SELECT channel_name as text FROM channels WHERE channel_name LIKE ? LIMIT 5", [qp]);
 
-    // Get unique titles and channel names that match
-    const titleMatches = [];
-    const channelMatches = new Set();
-
-    for (const item of data) {
-      const title = isUsingIndex ? item[1] : item.title;
-      const channel = isUsingIndex ? item[2] : item.channel_name;
-
-      if (title && scoreField(title, queryTokens).score > 0) {
-        titleMatches.push({ text: title, type: 'video' });
-      }
-      if (channel && scoreField(channel, queryTokens).score > 0) {
-        channelMatches.add(channel);
-      }
-      // Stop scanning once we have enough for a good suggestion list
-      if (titleMatches.length > 30 && channelMatches.size > 5) break; 
-    }
+    // Search video titles
+    const videos = queryDB("SELECT title as text FROM videos WHERE title LIKE ? LIMIT 10", [qp]);
 
     let results = [
-      ...Array.from(channelMatches).map(c => ({ text: c, type: 'channel' })),
-      ...titleMatches
+      ...channels.map(c => ({ ...c, type: 'channel' })),
+      ...videos.map(v => ({ ...v, type: 'video' }))
     ];
-
-    // Remove duplicates
-    const seen = new Set();
-    results = results.filter(r => {
-      const k = r.text.toLowerCase() + r.type;
-      if (seen.has(k)) return false;
-      seen.add(k);
-      return true;
-    });
-
-    // Sort: channels first, then by match score/length
-    results.sort((a, b) => {
-      if (a.type !== b.type) return a.type === 'channel' ? -1 : 1;
-      return a.text.length - b.text.length;
-    });
-
-    results = results.slice(0, 10);
 
     if (results.length > 0) {
       selectedSuggestionIndex = -1;
@@ -843,7 +720,6 @@ function performSearch(query) {
   const suggestionsBox = document.getElementById('search-suggestions');
   if (suggestionsBox) suggestionsBox.style.display = 'none';
 
-  // Only switch page if we aren't already on the search results page
   const searchPage = document.getElementById('page-search');
   if (searchPage && !searchPage.classList.contains('active')) {
     showPage('search');
@@ -851,7 +727,6 @@ function performSearch(query) {
 
   document.getElementById('search-query-display').textContent = query;
 
-  // Read advanced filters
   const fStatus = document.getElementById('search-filter-status')?.value || '';
   const fSection = document.getElementById('search-filter-section')?.value || '';
   const fYearMin = document.getElementById('search-filter-year-min')?.value || '';
@@ -859,98 +734,70 @@ function performSearch(query) {
   const fLang = document.getElementById('search-filter-language')?.value || 'any';
   const fSort = document.getElementById('search-sort')?.value || 'relevance';
 
-  const ytData = getActiveVideos(false);
-  const queryTokens = tokenize(query);
-  if (queryTokens.length === 0) return;
+  const qp = `%${query}%`;
 
   // ── Search Channels ──────────────────────────────────────────────────
-  const allChannels = [...new Set(ytData.map(v => v.channel_name).filter(Boolean))];
-  const scoredChannels = allChannels
-    .map(c => ({ name: c, score: scoreChannel(c, queryTokens) }))
-    .filter(c => c.score > 0.1) // Lower threshold to allow valid matches to show up
-    .sort((a, b) => b.score - a.score);
-
+  const scoredChannels = queryDB("SELECT channel_name as name FROM channels WHERE channel_name LIKE ? LIMIT 3", [qp]);
   const channelsSection = document.getElementById('search-channels-section');
   const channelsContainer = document.getElementById('search-channels-results');
   if (scoredChannels.length === 0) {
     if (channelsSection) channelsSection.style.display = 'none';
   } else {
     if (channelsSection) channelsSection.style.display = 'block';
-    channelsContainer.innerHTML = scoredChannels.slice(0, 3).map(({ name: c }) => renderChannelCard(c, 'search')).join('');
+    channelsContainer.innerHTML = scoredChannels.map(({ name: c }) => renderChannelCard(c, 'search')).join('');
   }
 
   // ── Search Playlists ──────────────────────────────────────────────────
+  // For playlists, we still use the in-memory allPlaylists as they are small and can be local-only
   const playlists = [...allPlaylists.local, ...allPlaylists.server];
   const scoredPlaylists = playlists
-    .map(p => {
-      let score = 0;
-      const pTokens = tokenize(p.name);
-      queryTokens.forEach(t => {
-        if (pTokens.some(pt => pt.includes(t))) score += 1;
-      });
-      return { ...p, score };
-    })
-    .filter(p => p.score > 0)
-    .sort((a, b) => b.score - a.score);
+    .filter(p => p.name.toLowerCase().includes(query.toLowerCase()))
+    .slice(0, 4);
 
   const playlistsSection = document.getElementById('search-playlists-section');
   const playlistsContainer = document.getElementById('search-playlists-results');
+  const isOld = document.body.classList.contains('theme-old');
+
   if (scoredPlaylists.length === 0) {
     if (playlistsSection) playlistsSection.style.display = 'none';
   } else {
     if (playlistsSection) playlistsSection.style.display = 'block';
     playlistsContainer.innerHTML = scoredPlaylists.map(p => {
       const type = allPlaylists.local.some(lp => lp.id === p.id) ? 'local' : 'server';
-      return renderPlaylistCard(p, type);
+      return renderPlaylistCard(p, type, isOld ? 'list' : 'grid');
     }).join('');
   }
 
   // ── Search Videos ────────────────────────────────────────────────────
-  let scoredVideos = [];
-  
-  if (allSearchIndex.length > 0 && !fStatus && !fSection && fLang === 'any') {
-    // Fast path: use minified search index if no complex filters are active
-    scoredVideos = allSearchIndex
-      .map(entry => {
-        const v = {
-            id: entry[0], title: entry[1], channel_name: entry[2], 
-            publish_date: entry[3] ? entry[3] + '-01-01' : '',
-            view_count: entry[4], duration: entry[5], description: entry[6],
-            status: 'downloaded'
-        };
-        return { video: v, score: scoreVideo(v, queryTokens) };
-      })
-      .filter(r => r.score > 0);
-  } else {
-    // Fallback to full data search for complex filters
-    scoredVideos = ytData
-      .map(v => ({ video: v, score: scoreVideo(v, queryTokens) }))
-      .filter(r => r.score > 0);
+  let whereClauses = ["(title LIKE ? OR channel_name LIKE ? OR description LIKE ? OR id LIKE ?)"];
+  let params = [qp, qp, qp, qp];
 
-    // Apply filters
-    scoredVideos = scoredVideos.filter(({ video: v }) => {
-      if (fStatus && v.status !== fStatus) return false;
-      if (fSection && !(v.sections || []).includes(fSection)) return false;
-
-      const y = v.publish_date ? parseInt(v.publish_date.slice(0, 4)) : null;
-      if (fYearMin && (!y || y < parseInt(fYearMin))) return false;
-      if (fYearMax && (!y || y > parseInt(fYearMax))) return false;
-
-      if (fLang !== 'any' && (v.language || '').toLowerCase() !== fLang) return false;
-      return true;
-    });
+  if (fStatus) { whereClauses.push("status = ?"); params.push(fStatus); }
+  if (fSection) {
+    whereClauses.push("id IN (SELECT video_id FROM video_sections vs JOIN sections s ON vs.section_id = s.id WHERE s.name = ?)");
+    params.push(fSection);
   }
+  if (fYearMin) { whereClauses.push("substr(publish_date, 1, 4) >= ?"); params.push(fYearMin); }
+  if (fYearMax) { whereClauses.push("substr(publish_date, 1, 4) <= ?"); params.push(fYearMax); }
+  if (fLang !== 'any') { whereClauses.push("language = ?"); params.push(fLang); }
 
-  // Sort
+  // Global year limit
+  whereClauses.push("(substr(publish_date, 1, 4) <= ? OR publish_date IS NULL)");
+  params.push(globalMaxYear);
+
+  let sql = "SELECT * FROM videos WHERE " + whereClauses.join(" AND ");
+
   if (fSort === 'relevance') {
-    scoredVideos.sort((a, b) => b.score - a.score);
+    // Simple relevance approximation: Title match > Channel match > Description match
+    sql += " ORDER BY (CASE WHEN title LIKE ? THEN 10 WHEN channel_name LIKE ? THEN 5 ELSE 1 END) DESC, view_count DESC";
+    params.push(qp, qp);
   } else if (fSort === 'publish_date') {
-    scoredVideos.sort((a, b) => (b.video.publish_date || '').localeCompare(a.video.publish_date || ''));
+    sql += " ORDER BY publish_date DESC";
   } else if (fSort === 'view_count') {
-    scoredVideos.sort((a, b) => (b.video.view_count || 0) - (a.video.view_count || 0));
+    sql += " ORDER BY view_count DESC";
   }
 
-  filteredVideos = scoredVideos.map(r => r.video);
+  filteredVideos = queryDB(sql, params);
   currentPage = 1;
   renderSearchVideos(false);
   setupSearchScrollObserver();
@@ -978,7 +825,7 @@ function renderSearchVideos(append = false) {
   const total = filteredVideos.length;
   const countLabel = document.getElementById('search-count-label');
   if (countLabel) countLabel.textContent = `${total} videos found`;
-  
+
   const isModern = !document.body.classList.contains('theme-old');
   if (searchViewMode === 'grid') {
     container.className = isModern ? 'modern-videos-grid-search' : 'video-grid';
@@ -1014,36 +861,17 @@ async function openVideo(vidId, pushToHistory = true) {
   window.scrollTo(0, 0);
   showPage('video', false);
   if (typeof updateVideoLayoutForTheme === 'function') updateVideoLayoutForTheme();
-  const ytData = [...allVideos, ...allSources];
-  const v = ytData.find(x => x.id === vidId);
-  if (!v) {
+
+  const vRes = queryDB("SELECT * FROM videos WHERE id = ?", [vidId]);
+  if (vRes.length === 0) {
     document.getElementById('watch-title').textContent = "Video not found";
     return false;
   }
+  const v = vRes[0];
 
-  // If detailed fields are missing, fetch the full JSON
-  if (v.description === undefined) {
-    document.getElementById('watch-title').textContent = "Loading...";
-    document.getElementById('watch-description').textContent = "Fetching metadata...";
-    try {
-      // Try videos folder first
-      let resp = await fetch(`db/videos/${vidId}.json`);
-      if (!resp.ok) {
-        // Try sources folder next
-        resp = await fetch(`db/sources/${vidId}.json`);
-      }
-
-      if (resp.ok) {
-        const fullData = await resp.json();
-        Object.assign(v, fullData);
-      } else {
-        v.description = 'Metadata not found.';
-      }
-    } catch (e) {
-      console.error("Error loading video details:", e);
-      v.description = 'No metadata avaliable.';
-    }
-  }
+  // Fetch tags and sections
+  v.tags = queryDB("SELECT t.name FROM tags t JOIN video_tags vt ON t.id = vt.tag_id WHERE vt.video_id = ?", [vidId]).map(r => r.name);
+  v.sections = queryDB("SELECT s.name FROM sections s JOIN video_sections vs ON s.id = vs.section_id WHERE vs.video_id = ?", [vidId]).map(r => r.name);
 
   const title = v.title || v.id;
   const channel = v.channel_name || 'Unknown Channel';
@@ -1091,8 +919,8 @@ async function openVideo(vidId, pushToHistory = true) {
 
   function renderLocal(isFallback = false) {
     if (!hasLocal) {
-        if (isFallback) return renderError();
-        return renderYoutube(true);
+      if (isFallback) return renderError();
+      return renderYoutube(true);
     }
     const src = getLocalVideoPath(v);
     playerContainer.innerHTML = `<video id="video-player-element" controls autoplay style="width:100%; height:100%; background:#000;">
@@ -1100,15 +928,15 @@ async function openVideo(vidId, pushToHistory = true) {
     </video>`;
     const vid = document.getElementById('video-player-element');
     vid.onerror = () => {
-        console.warn("Local playback failed, trying YouTube...");
-        renderYoutube(true);
+      console.warn("Local playback failed, trying YouTube...");
+      renderYoutube(true);
     };
   }
 
   function renderYoutube(isFallback = false) {
     if (isYoutubeDead) {
-        if (isFallback) return renderError();
-        return renderLocal(true);
+      if (isFallback) return renderError();
+      return renderLocal(true);
     }
     playerContainer.innerHTML = `<iframe width="100%" height="100%" src="https://www.youtube.com/embed/${v.id}?autoplay=1" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen></iframe>`;
   }
@@ -1153,8 +981,7 @@ function loadVideoResponses(video) {
     return;
   }
 
-  const ytData = [...allVideos, ...allSources];
-  const matched = filteredIds.map(id => ytData.find(v => v.id === id)).filter(Boolean);
+  const matched = queryDB("SELECT * FROM videos WHERE id IN (" + filteredIds.map(() => "?").join(",") + ")", filteredIds);
 
   if (matched.length === 0) {
     section.style.display = 'none';
@@ -1174,41 +1001,38 @@ function loadRelatedVideos(video) {
   const container = document.getElementById('related-videos');
   if (!container) return;
 
-  const ytData = [...allVideos, ...allSources];
-  const videoTags = new Set(video.tags || []);
-  const videoSections = new Set(video.sections || []);
+  const videoTags = video.tags || [];
+  const videoSections = video.sections || [];
 
-  // Score based on shared sections and tags
-  const scored = ytData
-    .filter(v => v.id !== video.id)
-    .map(v => {
-      let score = 0;
-      if (v.sections) {
-        v.sections.forEach(s => {
-          if (videoSections.has(s)) score += 5;
-        });
-      }
-      if (v.tags) {
-        v.tags.forEach(t => {
-          if (videoTags.has(t)) score += 2;
-        });
-      }
-      // Boost same channel slightly but not too much as they are already in "More from channel"
-      if (v.channel_name === video.channel_name) score += 1;
+  if (videoTags.length === 0 && videoSections.length === 0) {
+    document.getElementById('related-videos-box').style.display = 'none';
+    return;
+  }
 
-      return { video: v, score };
-    })
-    .filter(r => r.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 10);
+  // Find videos with at least one shared tag or section
+  let sql = `
+    SELECT v.*, COUNT(*) as score
+    FROM videos v
+    LEFT JOIN video_tags vt ON v.id = vt.video_id
+    LEFT JOIN tags t ON vt.tag_id = t.id
+    LEFT JOIN video_sections vs ON v.id = vs.video_id
+    LEFT JOIN sections s ON vs.section_id = s.id
+    WHERE v.id != ? AND (t.name IN (${videoTags.map(() => "?").join(",")}) OR s.name IN (${videoSections.map(() => "?").join(",")}))
+    GROUP BY v.id
+    ORDER BY score DESC
+    LIMIT 10
+  `;
 
-  if (scored.length === 0) {
+  const params = [video.id, ...videoTags, ...videoSections];
+  const matched = queryDB(sql, params);
+
+  if (matched.length === 0) {
     document.getElementById('related-videos-box').style.display = 'none';
     return;
   }
 
   document.getElementById('related-videos-box').style.display = 'block';
-  container.innerHTML = scored.map(r => renderVideoItem(r.video, 'grid')).join('');
+  container.innerHTML = matched.map(v => renderVideoItem(v, 'grid')).join('');
 }
 
 async function loadComments(vidId) {
@@ -1307,17 +1131,10 @@ function openProfile(user, pushToHistory = true) {
   }
 
   showPage('profile', false);
-  const ytData = [...allVideos, ...allSources];
+  const vRes = queryDB("SELECT * FROM videos WHERE channel_name = ? AND (substr(publish_date, 1, 4) <= ? OR publish_date IS NULL) ORDER BY publish_date DESC", [user, globalMaxYear]);
   const avatar = getChannelAvatar(user);
-  let userVideos = ytData.filter(v => v.channel_name === user);
-  // Apply global year limit
-  userVideos = userVideos.filter(v => {
-    if (!v.publish_date) return true;
-    return parseInt(v.publish_date.slice(0, 4)) <= globalMaxYear;
-  });
-  const sorted = [...userVideos].sort((a, b) => {
-    return (b.publish_date || '').localeCompare(a.publish_date || '');
-  });
+  const userVideos = vRes;
+  const sorted = [...userVideos];
 
   document.getElementById('profile-header').innerHTML = `
     <div style="display:flex; align-items:center; gap:24px;">
@@ -1366,10 +1183,10 @@ async function renderModernProfile(user, activeTab = 'home') {
   }
 
   const avatar = getChannelAvatar(user);
-  const pooper = Object.values(pooperMap).find(x => x.channel_name === user) || { channel_name: user };
-  const ytData = [...allVideos, ...allSources];
-  const videos = ytData.filter(v => v.channel_name === user);
-  
+  const pooperRes = queryDB("SELECT * FROM channels WHERE channel_name = ?", [user]);
+  const pooper = pooperRes.length > 0 ? pooperRes[0] : { channel_name: user };
+  const videos = queryDB("SELECT * FROM videos WHERE channel_name = ? AND (substr(publish_date, 1, 4) <= ? OR publish_date IS NULL)", [user, globalMaxYear]);
+
   const subCount = pooper.subscriber_count ? fmtNum(pooper.subscriber_count) + ' iscritti' : videos.length + ' video';
   const videoCountText = videos.length + ' video';
   const handle = pooper.channel_url ? '@' + pooper.channel_url.split('/').pop() : '@' + user.replace(/\s+/g, '').toLowerCase();
@@ -1426,15 +1243,14 @@ function renderModernProfileTabContent(user, tab) {
   const container = document.getElementById('modern-profile-content');
   if (!container) return;
 
-  const ytData = [...allVideos, ...allSources];
-  const videos = ytData.filter(v => v.channel_name === user);
+  const videos = queryDB("SELECT * FROM videos WHERE channel_name = ? AND (substr(publish_date, 1, 4) <= ? OR publish_date IS NULL)", [user, globalMaxYear]);
 
   if (tab === 'home') {
     renderModernChannelHome(user, container, videos);
   } else if (tab === 'videos') {
     container.innerHTML = `
       <div class="modern-videos-grid">
-        ${videos.sort((a,b) => (b.publish_date||'').localeCompare(a.publish_date||'')).map(v => renderModernHomeCard(v)).join('')}
+        ${videos.sort((a, b) => (b.publish_date || '').localeCompare(a.publish_date || '')).map(v => renderModernHomeCard(v)).join('')}
       </div>
     `;
   }
@@ -1443,7 +1259,7 @@ function renderModernProfileTabContent(user, tab) {
 function renderModernChannelHome(user, container, channelVideos) {
   container.innerHTML = '';
   const channelVideoIds = new Set(channelVideos.map(v => v.id));
-  
+
   // 1. Find relevant playlists
   const relevantPlaylists = [];
   [...allPlaylists.local, ...allPlaylists.server].forEach(p => {
@@ -1457,7 +1273,7 @@ function renderModernChannelHome(user, container, channelVideos) {
     const pVideos = p.videoIds
       .map(id => channelVideos.find(v => v.id === id))
       .filter(Boolean);
-    
+
     if (pVideos.length === 0) return;
 
     const section = document.createElement('div');
@@ -1472,7 +1288,7 @@ function renderModernChannelHome(user, container, channelVideos) {
   });
 
   // 3. Popular Videos Section
-  const popularVideos = [...channelVideos].sort((a,b) => (b.view_count||0) - (a.view_count||0)).slice(0, 10);
+  const popularVideos = [...channelVideos].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 10);
   if (popularVideos.length > 0) {
     const section = document.createElement('div');
     section.className = 'modern-section';
@@ -1486,7 +1302,7 @@ function renderModernChannelHome(user, container, channelVideos) {
   }
 
   // 4. Recent Videos Section
-  const recentVideos = [...channelVideos].sort((a,b) => (b.publish_date||'').localeCompare(a.publish_date||'')).slice(0, 10);
+  const recentVideos = [...channelVideos].sort((a, b) => (b.publish_date || '').localeCompare(a.publish_date || '')).slice(0, 10);
   if (recentVideos.length > 0) {
     const section = document.createElement('div');
     section.className = 'modern-section';
@@ -1562,16 +1378,107 @@ function updateVideoLayoutForTheme() {
   }
 }
 
+function toggleVideoMode() {
+  if (currentVideoMode === "all") currentVideoMode = "ytp";
+  else if (currentVideoMode === "ytp") currentVideoMode = "sources";
+  else currentVideoMode = "all";
+
+  const txt = currentVideoMode === "all" ? "Show all videos" :
+    currentVideoMode === "ytp" ? "Show YTP videos" :
+      "Show other videos";
+
+  document.querySelectorAll('.btn-video-mode').forEach(btn => btn.textContent = txt);
+
+  if (document.getElementById('page-youtube').classList.contains('active')) {
+    renderHomePage();
+  }
+  const q = document.getElementById('global-search-input').value.trim();
+  if (q && document.getElementById('page-search').classList.contains('active')) {
+    performSearch(q);
+  }
+}
+
+function setGlobalMaxYear(year) {
+  globalMaxYear = parseInt(year);
+
+  // Re-render active views
+  if (document.getElementById('page-youtube').classList.contains('active')) renderHomePage();
+  if (document.getElementById('page-videos').classList.contains('active')) applyFilters();
+  if (document.getElementById('page-search').classList.contains('active')) {
+    const q = document.getElementById('global-search-input').value.trim();
+    if (q) performSearch(q);
+  }
+  if (document.getElementById('page-channels').classList.contains('active')) renderChannelGrid();
+
+  // Reload profile if open
+  if (document.getElementById('page-profile').classList.contains('active')) {
+    const url = new URL(window.location);
+    let user = url.searchParams.get('user') || url.searchParams.get('c') || url.searchParams.get('channel');
+    if (!user && url.pathname.startsWith('/@')) user = url.pathname.slice(2);
+    if (!user && (url.pathname.startsWith('/user/') || url.pathname.startsWith('/c/') || url.pathname.startsWith('/channel/'))) {
+      user = url.pathname.split('/')[2];
+    }
+    if (user) openProfile(decodeURIComponent(user), false);
+  }
+}
+
+function getActiveVideos(forHome = false) {
+  let whereClauses = [];
+  let params = [];
+
+  if (currentVideoMode === "ytp") {
+    // Exclude source channels
+    whereClauses.push("is_source = 0");
+  } else if (currentVideoMode === "sources") {
+    whereClauses.push("is_source = 1");
+  } else {
+    // all
+    if (forHome) {
+      whereClauses.push("is_source = 0");
+    }
+  }
+
+  // Global year limit
+  whereClauses.push("(substr(publish_date, 1, 4) <= ? OR publish_date IS NULL)");
+  params.push(globalMaxYear);
+
+  let sql = "SELECT * FROM videos";
+  if (whereClauses.length > 0) {
+    sql += " WHERE " + whereClauses.join(" AND ");
+  }
+
+  const results = queryDB(sql, params);
+  return results;
+}
+
 function renderHomePage() {
   renderedHomeVideoIds.clear();
   const ytData = getActiveVideos(true);
   const featuredContainer = document.getElementById('featured-videos');
   const popularContainer = document.getElementById('popular-videos');
   const modernContainer = document.getElementById('modern-videos-grid');
+  const classicLayout = document.getElementById('youtube-classic-layout');
+  const modernLayout = document.getElementById('youtube-modern-layout');
+  const isOld = document.body.classList.contains('theme-old');
+
+  if (classicLayout && modernLayout) {
+    if (isOld) {
+      classicLayout.style.display = 'block';
+      modernLayout.style.display = 'none';
+    } else {
+      classicLayout.style.display = 'none';
+      modernLayout.style.display = 'block';
+    }
+  }
+
   if (!featuredContainer || !popularContainer) return;
 
   const validVideos = ytData.filter(v => v.status === 'downloaded' || v.status === 'available');
-  if (validVideos.length === 0) return;
+  if (validVideos.length === 0) {
+    featuredContainer.innerHTML = '<div class="empty" style="padding:40px; text-align:center; color:var(--text-muted);">Nessun video trovato.</div>';
+    if (modernContainer) modernContainer.innerHTML = '<div class="empty" style="padding:40px; text-align:center; color:var(--text-muted);">Nessun video trovato.</div>';
+    return;
+  }
 
   // Randomize featured videos
   const shuffledFeatured = shuffleArray(validVideos);
@@ -1586,7 +1493,7 @@ function renderHomePage() {
   featuredContainer.innerHTML = featuredVideos.map(v => renderVideoItem(v, 'list')).join('');
   popularContainer.innerHTML = popularVideos.map(v => renderVideoItem(v, 'grid')).join('');
 
-  if (modernContainer) {
+  if (modernContainer && !isOld) {
     renderModernGrid();
   }
 }
@@ -1627,7 +1534,12 @@ function renderModernGrid() {
     videos = [...validVideos].sort((a, b) => (b.like_count || 0) - (a.like_count || 0)).slice(0, 24);
   }
 
-  modernContainer.innerHTML = videos.map(v => renderModernHomeCard(v)).join('');
+  if (!videos) {
+    console.error('[renderModernGrid] No videos to display for tab:', currentModernTab);
+    return;
+  }
+  const mHtml = videos.map(v => renderModernHomeCard(v)).join('');
+  modernContainer.innerHTML = mHtml;
 }
 
 function setFeaturedTab(tab) {
@@ -1748,7 +1660,7 @@ function openImportModal() {
   if (modal) {
     modal.style.display = 'flex';
     toggleImportMode('mass'); // Reset to mass by default
-    
+
     // Populate uploader datalist
     const uploaderDl = document.getElementById('uploader-channel-datalist');
     const mainDl = document.getElementById('channel-datalist');
@@ -1761,7 +1673,7 @@ function openImportModal() {
 function closeImportModal() {
   const modal = document.getElementById('import-modal');
   if (modal) modal.style.display = 'none';
-  
+
   // Reset progress
   document.getElementById('upload-progress-container').style.display = 'none';
   document.getElementById('upload-progress-bar').style.width = '0%';
@@ -2018,28 +1930,32 @@ function buildFilterOptions() {
   const yearMinSelSearch = document.getElementById('search-filter-year-min');
   const yearMaxSelSearch = document.getElementById('search-filter-year-max');
 
-  const currentData = appMode === 'sources' ? allSources : allVideos;
+  const isSource = appMode === 'sources' ? 1 : 0;
 
   // 1. Build Sections
-  const sections = [...new Set(
-    currentData.flatMap(v => v.sections || [])
-      .map(s => s === 'Scraped Channel' ? 'Youtube' : s)
-  )]
-    .filter(s => s !== 'Risorse' || appMode === 'sources')
-    .sort();
+  const sectionsRes = queryDB(`
+    SELECT DISTINCT s.name 
+    FROM sections s
+    JOIN video_sections vs ON s.id = vs.section_id
+    JOIN videos v ON vs.video_id = v.id
+    WHERE v.is_source = ?
+    ORDER BY s.name ASC
+  `, [isSource]);
 
-  const secHtml = '<option value="">All Sections</option>' + sections.map(s => `<option value="${s}">${s}</option>`).join('');
+  const sections = sectionsRes.map(r => r.name === 'Scraped Channel' ? 'Youtube' : r.name);
+  const secHtml = '<option value="">All Sections</option>' + [...new Set(sections)].map(s => `<option value="${s}">${s}</option>`).join('');
   if (sectionSel) sectionSel.innerHTML = secHtml;
   if (sectionSelSearch) sectionSelSearch.innerHTML = secHtml;
 
   // 2. Build Channels
-  const channels = [...new Set(currentData.map(v => v.channel_name).filter(Boolean))].sort();
+  const channelsRes = queryDB("SELECT DISTINCT channel_name FROM videos WHERE is_source = ? AND channel_name IS NOT NULL ORDER BY channel_name ASC", [isSource]);
   if (channelDatalist) {
-    channelDatalist.innerHTML = channels.map(c => `<option value="${c}">`).join('');
+    channelDatalist.innerHTML = channelsRes.map(r => `<option value="${escAttr(r.channel_name)}">`).join('');
   }
 
   // 3. Build Years
-  const years = [...new Set(currentData.map(v => v.publish_date ? v.publish_date.slice(0, 4) : null).filter(Boolean))].sort();
+  const yearsRes = queryDB("SELECT DISTINCT substr(publish_date, 1, 4) as y FROM videos WHERE is_source = ? AND publish_date IS NOT NULL ORDER BY y ASC", [isSource]);
+  const years = yearsRes.map(r => r.y);
 
   const minYearHtml = '<option value="">Min</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
   const maxYearHtml = '<option value="">Max</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
@@ -2111,76 +2027,91 @@ function applyFilters() {
   const yearMax = document.getElementById('filter-year-max').value;
   const langSelect = document.getElementById('filter-language');
   const selectedLangs = Array.from(langSelect.selectedOptions).map(opt => opt.value.toLowerCase());
-  const currentData = appMode === 'sources' ? allSources : allVideos;
 
-  const queryTokens = q ? tokenize(q) : [];
-  const hasQuery = queryTokens.length > 0;
-  
+  const isSource = appMode === 'sources' ? 1 : 0;
   const hideEmpty = document.getElementById('filter-hide-empty') ? document.getElementById('filter-hide-empty').checked : false;
   const excludeYTP = document.getElementById('filter-exclude-ytp') ? document.getElementById('filter-exclude-ytp').checked : false;
   showVideoEmbed = document.getElementById('filter-show-embed') ? document.getElementById('filter-show-embed').checked : false;
-  
-  const ytpRegex = /YTP|YTPMV|Collab|Youtube\s+poop|YT\s+Poop|Poop|Speciale '|YTPFR|YTP\s+FR| |YTPH|YTPHSHORT|YTPBR| '|RYTP|РУТП|Поцык|Повар|Сашко|Гамаз|Пенек\) |YTM|YTG|MLG|YTK| Dinner | The king | Harkinian | Impa | Gwonam/i;
 
-  // Apply global year limit
-  const validData = currentData.filter(v => {
-    if (!v.publish_date) return true;
-    return parseInt(v.publish_date.slice(0, 4)) <= globalMaxYear;
-  });
-  // Score all videos if there's a query, then apply hard filters
-  let scored = currentData.map(v => ({
-    video: v,
-    score: hasQuery ? scoreVideo(v, queryTokens) : 1
-  }));
+  let whereClauses = ["is_source = ?"];
+  let params = [isSource];
 
-  // Filter out non-matching search results
-  if (hasQuery) {
-    scored = scored.filter(r => r.score > 0);
+  if (q) {
+    whereClauses.push("(title LIKE ? OR channel_name LIKE ? OR description LIKE ? OR id LIKE ?)");
+    const qp = `%${q}%`;
+    params.push(qp, qp, qp, qp);
   }
 
-  // Apply hard filters
-  scored = scored.filter(({ video: v }) => {
-    if (hideEmpty && !v.title && !v.view_count && !v.publish_date) return false;
-    
-    // Exclude YTP keywords also excludes entries with no title
-    if (excludeYTP) {
-        if (!v.title || ytpRegex.test(v.title)) return false;
-    }
-
-    if (status && v.status !== status) return false;
-    if (section && !(v.sections || []).includes(section)) return false;
-    if (channel && (!v.channel_name || v.channel_name.toLowerCase() !== channel.toLowerCase())) return false;
-    if (viewsMin && (v.view_count || 0) < viewsMin) return false;
-    if (likesMin && (v.like_count || 0) < likesMin) return false;
-
-    const y = v.publish_date ? parseInt(v.publish_date.slice(0, 4)) : null;
-    if (yearMin && (!y || y < parseInt(yearMin))) return false;
-    if (yearMax && (!y || y > parseInt(yearMax))) return false;
-
-    if (selectedLangs.length > 0 && !selectedLangs.includes("Any".toLocaleLowerCase())) {
-      const vidLang = (v.language || "").toLowerCase();
-      if (!selectedLangs.includes(vidLang)) return false;
-    }
-    return true;
-  });
-
-  // Sort by relevance when searching, otherwise by the chosen column
-  if (hasQuery) {
-    scored.sort((a, b) => b.score - a.score);
-  } else {
-    scored.sort((a, b) => {
-      let av = a.video[sortField] || '';
-      let bv = b.video[sortField] || '';
-      if (typeof av === 'string') av = av.toLowerCase();
-      if (typeof bv === 'string') bv = bv.toLowerCase();
-      if (av > bv) return sortDir;
-      if (av < bv) return -sortDir;
-      return 0;
-    });
+  if (status) {
+    whereClauses.push("status = ?");
+    params.push(status);
   }
 
-  filteredVideos = scored.map(r => r.video);
+  if (section) {
+    whereClauses.push("id IN (SELECT video_id FROM video_sections vs JOIN sections s ON vs.section_id = s.id WHERE s.name = ?)");
+    params.push(section);
+  }
 
+  if (channel) {
+    whereClauses.push("channel_name = ?");
+    params.push(channel);
+  }
+
+  if (viewsMin) {
+    whereClauses.push("view_count >= ?");
+    params.push(viewsMin);
+  }
+
+  if (likesMin) {
+    whereClauses.push("like_count >= ?");
+    params.push(likesMin);
+  }
+
+  if (yearMin) {
+    whereClauses.push("substr(publish_date, 1, 4) >= ?");
+    params.push(yearMin);
+  }
+
+  if (yearMax) {
+    whereClauses.push("substr(publish_date, 1, 4) <= ?");
+    params.push(yearMax);
+  }
+
+  if (selectedLangs.length > 0 && !selectedLangs.includes("any")) {
+    whereClauses.push("language IN (" + selectedLangs.map(() => "?").join(",") + ")");
+    params.push(...selectedLangs);
+  }
+
+  if (hideEmpty) {
+    whereClauses.push("(title IS NOT NULL OR view_count > 0 OR publish_date IS NOT NULL)");
+  }
+
+  if (excludeYTP) {
+    const ytpKeywords = ["YTP", "YTPMV", "Collab", "Youtube poop", "Poop", "RYTP", "РУТП"];
+    whereClauses.push("NOT (" + ytpKeywords.map(() => "title LIKE ?").join(" OR ") + ")");
+    ytpKeywords.forEach(k => params.push(`%${k}%`));
+  }
+
+  // Global year limit
+  whereClauses.push("(substr(publish_date, 1, 4) <= ? OR publish_date IS NULL)");
+  params.push(globalMaxYear);
+
+  let sql = "SELECT * FROM videos WHERE " + whereClauses.join(" AND ");
+
+  // Sorting
+  const sortMap = {
+    'publish_date': 'publish_date',
+    'title': 'title',
+    'channel_name': 'channel_name',
+    'view_count': 'view_count',
+    'like_count': 'like_count',
+    'status': 'status',
+    'language': 'language'
+  };
+  const orderCol = sortMap[sortField] || 'publish_date';
+  sql += ` ORDER BY ${orderCol} ${sortDir === 1 ? 'ASC' : 'DESC'}`;
+
+  filteredVideos = queryDB(sql, params);
   currentPage = 1;
   renderTable(false);
   setupScrollObserver();
@@ -2235,18 +2166,18 @@ function setupScrollObserver() {
 }
 
 function getEmbedHtml(v) {
-    const isDownloaded = v.status === 'downloaded' && v.local_file;
-    if (isDownloaded) {
-        const localPath = getLocalVideoPath(v);
-        return `<video controls preload="metadata" style="width:240px; aspect-ratio:16/9; display:block; margin-top:8px; border-radius:4px; background:#000;">
+  const isDownloaded = v.status === 'downloaded' && v.local_file;
+  if (isDownloaded) {
+    const localPath = getLocalVideoPath(v);
+    return `<video controls preload="metadata" style="width:240px; aspect-ratio:16/9; display:block; margin-top:8px; border-radius:4px; background:#000;">
             <source src="${localPath}" type="video/mp4">
             Your browser does not support the video tag.
         </video>`;
-    } else {
-        return `<iframe src="https://www.youtube-nocookie.com/embed/${v.id}" 
+  } else {
+    return `<iframe src="https://www.youtube-nocookie.com/embed/${v.id}" 
             style="width:240px; aspect-ratio:16/9; display:block; margin-top:8px; border-radius:4px; border:none;" 
             allowfullscreen></iframe>`;
-    }
+  }
 }
 
 function renderTable(append = false) {
@@ -2278,7 +2209,7 @@ function renderTable(append = false) {
 
       // Add embed if requested
       if (showVideoEmbed) {
-          titleContent += getEmbedHtml(v);
+        titleContent += getEmbedHtml(v);
       }
 
       const playAction = (v.status === 'downloaded' && v.local_file)
@@ -2379,27 +2310,30 @@ function renderPagination(total) {
 
 // ─── CHANNELS ─────────────────────────────────────────────────────────────
 function buildChannelData() {
-  const map = {};
-  allVideos.forEach(v => {
-    if (v.publish_date && parseInt(v.publish_date.slice(0, 4)) > globalMaxYear) return; // Ignore future videos
-    const ch = v.channel_name;
-    if (!ch) return;
-    if (!map[ch]) map[ch] = { name: ch, url: v.channel_url, videos: [], totalViews: 0, totalLikes: 0, firstYear: null };
-    map[ch].videos.push(v);
-    map[ch].totalViews += v.view_count || 0;
-    map[ch].totalLikes += v.like_count || 0;
-    const y = v.publish_date ? parseInt(v.publish_date.slice(0, 4)) : null;
-    if (y) {
-      if (!map[ch].firstYear || y < map[ch].firstYear) map[ch].firstYear = y;
-    }
-  });
-  return Object.values(map).sort((a, b) => b.videos.length - a.videos.length);
+  const sql = `
+    SELECT 
+      channel_name as name, 
+      channel_url as url, 
+      COUNT(*) as videoCount, 
+      SUM(view_count) as totalViews, 
+      SUM(like_count) as totalLikes,
+      MIN(substr(publish_date, 1, 4)) as firstYear
+    FROM videos 
+    WHERE (substr(publish_date, 1, 4) <= ? OR publish_date IS NULL)
+    GROUP BY channel_name 
+    ORDER BY videoCount DESC
+  `;
+  const res = queryDB(sql, [globalMaxYear]);
+  return res.map(r => ({
+    ...r,
+    videos: { length: r.videoCount } // Mock for backward compatibility
+  }));
 }
 
 function renderChannelCard(c, mode = 'grid') {
   const name = typeof c === 'string' ? c : c.name;
   const avatar = getChannelAvatar(name);
-  
+
   let videosCount, viewsCount, url;
   if (typeof c === 'string') {
     const ytData = [...allVideos, ...allSources];
@@ -2415,7 +2349,7 @@ function renderChannelCard(c, mode = 'grid') {
 
   const isOld = document.body.classList.contains('theme-old');
   const isSelected = typeof selectedChannel !== 'undefined' && selectedChannel === name;
-  
+
   if (mode === 'search' && !isOld) {
     return `
       <div class="channel-card modern-search" onclick="event.stopPropagation(); openProfile('${escAttr(name)}')">
@@ -2508,22 +2442,16 @@ function selectChannel(name) {
   if (!ch) return;
 
   // Videos by year
+  const byYearRes = queryDB("SELECT substr(publish_date, 1, 4) as y, COUNT(*) as c FROM videos WHERE channel_name = ? GROUP BY y", [name]);
   const byYear = {};
-  ch.videos.forEach(v => {
-    const y = v.publish_date ? v.publish_date.slice(0, 4) : 'Unknown';
-    byYear[y] = (byYear[y] || 0) + 1;
-  });
+  byYearRes.forEach(r => byYear[r.y || 'Unknown'] = r.c);
   const years = Object.keys(byYear).sort();
 
+  const statusCountRes = queryDB("SELECT status, COUNT(*) as c FROM videos WHERE channel_name = ? GROUP BY status", [name]);
   const statusCount = {};
-  ch.videos.forEach(v => { statusCount[v.status || 'unknown'] = (statusCount[v.status || 'unknown'] || 0) + 1; });
+  statusCountRes.forEach(r => statusCount[r.status || 'unknown'] = r.c);
 
-  // Sort videos by date (oldest first)
-  const sortedVideos = [...ch.videos].sort((a, b) => {
-    const da = a.publish_date || '';
-    const db = b.publish_date || '';
-    return da.localeCompare(db);
-  });
+  const sortedVideos = queryDB("SELECT * FROM videos WHERE channel_name = ? ORDER BY publish_date ASC", [name]);
 
   // Build video list HTML
   const videoListHtml = sortedVideos.map(v => {
@@ -2600,16 +2528,22 @@ function selectChannel(name) {
 let selectedYear = null;
 
 function buildYearData() {
-  const map = {};
-  allVideos.forEach(v => {
-    const y = v.publish_date ? v.publish_date.slice(0, 4) : null;
-    if (!y) return;
-    if (!map[y]) map[y] = { year: y, videos: [], totalViews: 0, totalLikes: 0 };
-    map[y].videos.push(v);
-    map[y].totalViews += v.view_count || 0;
-    map[y].totalLikes += v.like_count || 0;
-  });
-  return Object.values(map).sort((a, b) => a.year.localeCompare(b.year));
+  const sql = `
+    SELECT 
+      substr(publish_date, 1, 4) as year, 
+      COUNT(*) as videoCount, 
+      SUM(view_count) as totalViews, 
+      SUM(like_count) as totalLikes
+    FROM videos 
+    WHERE publish_date IS NOT NULL AND substr(publish_date, 1, 4) <= ?
+    GROUP BY year 
+    ORDER BY year ASC
+  `;
+  const res = queryDB(sql, [globalMaxYear]);
+  return res.map(r => ({
+    ...r,
+    videos: { length: r.videoCount } // Mock for backward compatibility
+  }));
 }
 
 function renderYearGrid() {
@@ -2636,45 +2570,53 @@ function selectYear(year) {
   const yd = allYears.find(y => y.year === year);
   if (!yd) return;
 
+  const videosRes = queryDB("SELECT * FROM videos WHERE substr(publish_date, 1, 4) = ?", [year]);
+  const videos = videosRes;
+
   // Most prolific creator
-  const crCounts = {};
-  yd.videos.forEach(v => { if (v.channel_name) crCounts[v.channel_name] = (crCounts[v.channel_name] || 0) + 1; });
-  const topCreators = Object.entries(crCounts).sort((a, b) => b[1] - a[1]);
+  const topCreatorsRes = queryDB("SELECT channel_name, COUNT(*) as c FROM videos WHERE substr(publish_date, 1, 4) = ? GROUP BY channel_name ORDER BY c DESC LIMIT 10", [year]);
+  const topCreators = topCreatorsRes.map(r => [r.channel_name, r.c]);
   const topCreator = topCreators[0];
 
   // Tag frequency
+  const tagCountsRes = queryDB(`
+    SELECT t.name, COUNT(*) as c 
+    FROM tags t 
+    JOIN video_tags vt ON t.id = vt.tag_id 
+    JOIN videos v ON vt.video_id = v.id 
+    WHERE substr(v.publish_date, 1, 4) = ? 
+    GROUP BY t.name 
+    ORDER BY c DESC 
+    LIMIT 60
+  `, [year]);
   const TAG_BLOCKLIST = new Set(["poop", "youtube", "ytp", "ita", "merda", "youtube merda", "ytp ita", "ytpmv", "youtube merda"]);
-  const tagCounts = {};
-  yd.videos.forEach(v => (v.tags || []).forEach(t => {
-    const tl = t.toLowerCase();
-    if (!TAG_BLOCKLIST.has(tl)) tagCounts[tl] = (tagCounts[tl] || 0) + 1;
-  }));
-  const topTags = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]).slice(0, 60);
+  const topTags = tagCountsRes.filter(r => !TAG_BLOCKLIST.has(r.name.toLowerCase())).map(r => [r.name, r.c]);
 
   // Status counts
+  const statusCountRes = queryDB("SELECT status, COUNT(*) as c FROM videos WHERE substr(publish_date, 1, 4) = ? GROUP BY status", [year]);
   const statusCount = {};
-  yd.videos.forEach(v => { const s = v.status || 'unknown'; statusCount[s] = (statusCount[s] || 0) + 1; });
+  statusCountRes.forEach(r => statusCount[r.status || 'unknown'] = r.c);
 
   // Monthly breakdown
+  const byMonthRes = queryDB("SELECT substr(publish_date, 6, 2) as m, COUNT(*) as c FROM videos WHERE substr(publish_date, 1, 4) = ? GROUP BY m", [year]);
   const byMonth = Array(12).fill(0);
-  yd.videos.forEach(v => {
-    if (v.publish_date && v.publish_date.length >= 7) {
-      const m = parseInt(v.publish_date.slice(5, 7), 10);
-      if (m >= 1 && m <= 12) byMonth[m - 1]++;
-    }
+  byMonthRes.forEach(r => {
+    const m = parseInt(r.m, 10);
+    if (m >= 1 && m <= 12) byMonth[m - 1] = r.c;
   });
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-  // Top videos by views & likes (full sorted lists stored for expand)
-  const allByViews = [...yd.videos].filter(v => v.view_count).sort((a, b) => b.view_count - a.view_count);
-  const allByLikes = [...yd.videos].filter(v => v.like_count).sort((a, b) => b.like_count - a.like_count);
+  // Top videos by views & likes
+  const allByViews = queryDB("SELECT * FROM videos WHERE substr(publish_date, 1, 4) = ? AND view_count IS NOT NULL ORDER BY view_count DESC", [year]);
+  const allByLikes = queryDB("SELECT * FROM videos WHERE substr(publish_date, 1, 4) = ? AND like_count IS NOT NULL ORDER BY like_count DESC", [year]);
   window._yrViews = allByViews;
   window._yrLikes = allByLikes;
   const topByViews = allByViews.slice(0, 5);
   const topByLikes = allByLikes.slice(0, 5);
 
   // Unique channels
-  const uniqCh = new Set(yd.videos.map(v => v.channel_name).filter(Boolean)).size;
+  const uniqChRes = queryDB("SELECT COUNT(DISTINCT channel_name) as c FROM videos WHERE substr(publish_date, 1, 4) = ?", [year]);
+  const uniqCh = uniqChRes[0].c;
 
   panel.style.display = 'block';
   panel.innerHTML = `
@@ -2815,75 +2757,81 @@ const PALETTE = ['#6c63ff', '#ff6584', '#43e97b', '#f7971e', '#38f9d7', '#fa709a
 const STATUS_COLORS = { available: '#43e97b', unavailable: '#ff6584', pending: '#f7971e', unknown: '#888' };
 
 function buildOverview() {
-  // Stat cards
-  const total = allVideos.length;
-  const withTitle = allVideos.filter(v => v.title).length;
-  const withViews = allVideos.filter(v => v.view_count != null);
-  const totalViews = withViews.reduce((s, v) => s + v.view_count, 0);
-  const totalLikes = allVideos.reduce((s, v) => s + (v.like_count || 0), 0);
-  const channels = new Set(allVideos.map(v => v.channel_name).filter(Boolean));
-  const sections = new Set(allVideos.flatMap(v => v.sections || []));
-  const available = allVideos.filter(v => v.status === 'available').length;
+  const stats = queryDB(`
+    SELECT 
+      COUNT(*) as total,
+      SUM(CASE WHEN title IS NOT NULL THEN 1 ELSE 0 END) as withTitle,
+      SUM(CASE WHEN view_count IS NOT NULL THEN 1 ELSE 0 END) as withViewsCount,
+      SUM(view_count) as totalViews,
+      SUM(like_count) as totalLikes,
+      SUM(CASE WHEN status = 'available' THEN 1 ELSE 0 END) as available
+    FROM videos WHERE is_source = 0
+  `)[0];
+
+  const total = stats.total || 1;
+  const withTitle = stats.withTitle || 0;
+  const withViewsCount = stats.withViewsCount || 0;
+  const totalViews = stats.totalViews || 0;
+  const totalLikes = stats.totalLikes || 0;
+  const available = stats.available || 0;
+
+  const channelsCount = queryDB("SELECT COUNT(DISTINCT channel_name) as c FROM videos WHERE is_source = 0")[0].c;
+  const sectionsCount = queryDB("SELECT COUNT(*) as c FROM sections")[0].c;
 
   document.getElementById('overview-stats').innerHTML = [
     { label: 'Total Videos', value: fmtNum(total), sub: `${withTitle} with metadata` },
-    { label: 'Unique Channels', value: fmtNum(channels.size), sub: `across ${sections.size} sections` },
-    { label: 'Total Views', value: fmtBig(totalViews), sub: `${withViews.length} videos with data` },
+    { label: 'Unique Channels', value: fmtNum(channelsCount), sub: `across archive` },
+    { label: 'Total Views', value: fmtBig(totalViews), sub: `${withViewsCount} videos with data` },
     { label: 'Total Likes', value: fmtBig(totalLikes), sub: '' },
     { label: 'Available', value: fmtNum(available), sub: `${Math.round(available / total * 100)}% of archive` },
-    { label: 'Avg Views', value: withViews.length ? fmtBig(Math.round(totalViews / withViews.length)) : '-', sub: 'per video (w/ data)' },
+    { label: 'Avg Views', value: withViewsCount ? fmtBig(Math.round(totalViews / withViewsCount)) : '-', sub: 'per video (w/ data)' },
   ].map(c => `<div class="stat-card"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`).join('');
 
   // Videos by year
-  const byYear = {};
-  allVideos.forEach(v => {
-    if (v.publish_date) { const y = v.publish_date.slice(0, 4); byYear[y] = (byYear[y] || 0) + 1; }
-  });
-  const years = Object.keys(byYear).sort();
+  const yearRes = queryDB("SELECT substr(publish_date, 1, 4) as y, COUNT(*) as c FROM videos WHERE is_source = 0 AND publish_date IS NOT NULL GROUP BY y ORDER BY y ASC");
+  const years = yearRes.map(r => r.y);
   makeChart('chart-year', 'bar', years, [{
-    label: 'Videos', data: years.map(y => byYear[y]),
+    label: 'Videos', data: yearRes.map(r => r.c),
     backgroundColor: years.map((_, i) => PALETTE[i % PALETTE.length] + 'bb'),
     borderRadius: 6
   }], chartOpts(''));
 
   // Status doughnut
-  const statusCount = {};
-  allVideos.forEach(v => { const s = v.status || 'unknown'; statusCount[s] = (statusCount[s] || 0) + 1; });
+  const statusRes = queryDB("SELECT status, COUNT(*) as c FROM videos WHERE is_source = 0 GROUP BY status");
+  const statusLabels = statusRes.map(r => r.status || 'unknown');
   makeChart('chart-status', 'doughnut',
-    Object.keys(statusCount),
-    [{ data: Object.values(statusCount), backgroundColor: Object.keys(statusCount).map(s => STATUS_COLORS[s] || '#888'), borderWidth: 0 }],
+    statusLabels,
+    [{ data: statusRes.map(r => r.c), backgroundColor: statusLabels.map(s => STATUS_COLORS[s] || '#888'), borderWidth: 0 }],
     pieOpts());
 
   // Top channels
-  const chCounts = {};
-  allVideos.forEach(v => { if (v.channel_name) chCounts[v.channel_name] = (chCounts[v.channel_name] || 0) + 1; });
-  const topCh = Object.entries(chCounts).sort((a, b) => b[1] - a[1]).slice(0, 15);
-  makeChart('chart-top-channels', 'bar', topCh.map(c => c[0]), [{
-    label: 'Videos', data: topCh.map(c => c[1]),
+  const topChRes = queryDB("SELECT channel_name, COUNT(*) as c FROM videos WHERE is_source = 0 GROUP BY channel_name ORDER BY c DESC LIMIT 15");
+  makeChart('chart-top-channels', 'bar', topChRes.map(c => c.channel_name), [{
+    label: 'Videos', data: topChRes.map(c => c.c),
     backgroundColor: PALETTE[0] + 'bb', borderRadius: 4
   }], { ...chartOpts(''), indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: gridScales().x, y: { ...gridScales().y, ticks: { color: '#8892b0', font: { size: 10 } } } } });
 
   // Sections bar
-  const secCounts = {};
-  allVideos.forEach(v => (v.sections || []).forEach(s => { secCounts[s] = (secCounts[s] || 0) + 1; }));
-  const topSec = Object.entries(secCounts).sort((a, b) => b[1] - a[1]);
-  makeChart('chart-sections', 'bar', topSec.map(s => s[0]), [{
-    label: 'Videos', data: topSec.map(s => s[1]),
+  const topSecRes = queryDB("SELECT s.name, COUNT(*) as c FROM sections s JOIN video_sections vs ON s.id = vs.section_id JOIN videos v ON vs.video_id = v.id WHERE v.is_source = 0 GROUP BY s.name ORDER BY c DESC");
+  makeChart('chart-sections', 'bar', topSecRes.map(s => s.name), [{
+    label: 'Videos', data: topSecRes.map(s => s.c),
     backgroundColor: PALETTE[1] + 'bb', borderRadius: 4
   }], { ...chartOpts(''), indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: gridScales().x, y: { ...gridScales().y, ticks: { color: '#8892b0', font: { size: 10 } } } } });
 
-  // Views distribution (log buckets)
-  const buckets = { '0': 0, '1-100': 0, '100-1K': 0, '1K-10K': 0, '10K-100K': 0, '100K-1M': 0, '1M+': 0 };
-  allVideos.forEach(v => {
-    const c = v.view_count;
-    if (c == null) buckets['0']++;
-    else if (c < 100) buckets['1-100']++;
-    else if (c < 1000) buckets['100-1K']++;
-    else if (c < 10000) buckets['1K-10K']++;
-    else if (c < 100000) buckets['10K-100K']++;
-    else if (c < 1000000) buckets['100K-1M']++;
-    else buckets['1M+']++;
-  });
+  // Views distribution
+  const distRes = queryDB(`
+    SELECT 
+      SUM(CASE WHEN view_count IS NULL THEN 1 ELSE 0 END) as v0,
+      SUM(CASE WHEN view_count < 100 THEN 1 ELSE 0 END) as v100,
+      SUM(CASE WHEN view_count >= 100 AND view_count < 1000 THEN 1 ELSE 0 END) as v1k,
+      SUM(CASE WHEN view_count >= 1000 AND view_count < 10000 THEN 1 ELSE 0 END) as v10k,
+      SUM(CASE WHEN view_count >= 10000 AND view_count < 100000 THEN 1 ELSE 0 END) as v100k,
+      SUM(CASE WHEN view_count >= 100000 AND view_count < 1000000 THEN 1 ELSE 0 END) as v1m,
+      SUM(CASE WHEN view_count >= 1000000 THEN 1 ELSE 0 END) as v1mp
+    FROM videos WHERE is_source = 0
+  `)[0];
+  const buckets = { '0': distRes.v0, '1-100': distRes.v100, '100-1K': distRes.v1k, '1K-10K': distRes.v10k, '10K-100K': distRes.v100k, '100K-1M': distRes.v1m, '1M+': distRes.v1mp };
+
   makeChart('chart-views-dist', 'doughnut', Object.keys(buckets), [{
     data: Object.values(buckets),
     backgroundColor: PALETTE, borderWidth: 0
@@ -3042,6 +2990,14 @@ function linkify(text) {
   });
 }
 function escAttr(s) { return String(s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+function shuffleArray(array) {
+  const newArr = [...array];
+  for (let i = newArr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+  }
+  return newArr;
+}
 
 function downloadFile(url, filename) {
   if (event) event.preventDefault();
@@ -3138,15 +3094,8 @@ let ts = {
 };
 
 function buildFirstUploadCache() {
-  window.channelFirstUploadIds = new Set();
-  const firsts = {};
-  allVideos.forEach(v => {
-    if (!v.channel_name || !v.publish_date) return;
-    if (!firsts[v.channel_name] || v.publish_date < firsts[v.channel_name].date) {
-      firsts[v.channel_name] = { date: v.publish_date, id: v.id };
-    }
-  });
-  Object.values(firsts).forEach(f => window.channelFirstUploadIds.add(f.id));
+  const res = queryDB("SELECT id FROM (SELECT id, channel_name, MIN(publish_date) FROM videos WHERE publish_date IS NOT NULL AND channel_name IS NOT NULL GROUP BY channel_name)");
+  window.channelFirstUploadIds = new Set(res.map(r => r.id));
 }
 
 function initTimeline() {
@@ -3347,7 +3296,7 @@ function renderTimelineView() {
   // 3. Render Lanes & Grid
   const LANE_H = 50;
   const AXIS_H = 60;
-  
+
   // Use selected channels for lanes, or empty for "Most Viewed" view
   const topChannels = [...timelineSelectedChannels];
   const lanesCount = topChannels.length;
@@ -3391,9 +3340,9 @@ function renderTimelineView() {
   }
 
   // 4. Render Points
-  const baseList = timelineVideoType === 'ytp' ? allVideos : 
-                   timelineVideoType === 'sources' ? allSources : 
-                   [...allVideos, ...allSources];
+  const baseList = timelineVideoType === 'ytp' ? allVideos :
+    timelineVideoType === 'sources' ? allSources :
+      [...allVideos, ...allSources];
 
   let visible = baseList.filter(v => {
     if (!v.publish_date) return false;
@@ -3417,7 +3366,7 @@ function renderTimelineView() {
     const t = new Date(v.publish_date).getTime();
     const x = (t - startT) / ts.msPerPixel;
     const laneIdx = topChannels.indexOf(v.channel_name);
-    
+
     let y;
     if (lanesCount === 0) {
       y = H / 2;
@@ -3428,12 +3377,12 @@ function renderTimelineView() {
     const point = document.createElementNS("http://www.w3.org/2000/svg", "circle");
     point.setAttribute("cx", x);
     point.setAttribute("cy", y);
-    
+
     // Scale radius by views (logarithmic)
     const views = v.view_count || 0;
     const radius = 3.5 + Math.log10(Math.max(1, views)) * 1.2;
     const isMilestone = views >= 1_000_000;
-    
+
     point.setAttribute("r", radius);
     point.setAttribute("class", `tl-point ${isMilestone ? 'milestone' : ''}`);
     point.setAttribute("fill", isMilestone ? "gold" : "var(--accent)");
@@ -3516,14 +3465,14 @@ function hideTimelineTooltip() {
   const tt = document.getElementById('timeline-tooltip');
   if (tt) {
     tt.style.opacity = '0';
-    setTimeout(() => { if(tt.style.opacity === '0') tt.style.display = 'none'; }, 200);
+    setTimeout(() => { if (tt.style.opacity === '0') tt.style.display = 'none'; }, 200);
   }
 }
 
 
 // ─── SAVED VIDEOS (IndexedDB) ──────────────────────────────────────────────
 
-function initDB() {
+function initIndexedDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(dbName, 2);
     request.onupgradeneeded = (e) => {
@@ -3691,8 +3640,30 @@ async function renderPlaylistsPage() {
   }
 }
 
-function renderPlaylistCard(p, type) {
+function renderPlaylistCard(p, type, mode = 'grid') {
   const count = p.videoIds ? p.videoIds.length : 0;
+  const isOld = document.body.classList.contains('theme-old');
+
+  if (isOld && mode === 'list') {
+    return `
+      <div class="video-item list" onclick="openPlaylistDetail('${p.id}', '${type}')" style="cursor:pointer; margin-bottom: 12px; border-bottom: 1px solid var(--border); padding-bottom: 12px;">
+        <div class="yt-list-thumb" style="background:var(--surface2); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:4px;">
+          <svg style="width:32px; height:32px; fill:var(--text-muted);" viewBox="0 0 24 24">
+            <path d="M4 10h12v2H4zm0-4h12v2H4zm0 8h8v2H4zm10 0v6l5-3-5-3z" />
+          </svg>
+          <span style="font-size:0.75rem; font-weight:bold; color:var(--text-muted);">${count} videos</span>
+        </div>
+        <div class="yt-list-info">
+          <div class="yt-list-title" style="font-size:1.1rem; font-weight:bold; color:var(--link-color);">Playlist: ${escHtml(p.name)}</div>
+          <div class="yt-list-meta" style="margin-top:4px;">
+            <span class="status-badge" style="background:${type === 'server' ? 'var(--accent)' : 'var(--surface2)'}; color:#fff; padding:2px 6px; border-radius:4px; font-size:0.7rem;">${type.toUpperCase()}</span>
+            <span style="margin-left:8px; font-size:0.8rem; color:var(--text-muted);">Collection of curated videos</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   return `
     <div class="vid-card" onclick="openPlaylistDetail('${p.id}', '${type}')">
       <div class="yt-facade" style="background:var(--surface2); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:10px;">

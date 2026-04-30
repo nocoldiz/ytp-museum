@@ -127,12 +127,12 @@ YTP_KEYWORDS_LIST = [
 MEME_KEYWORDS_IT = [
     r'matteo\s+montesi', r'avventure', r'Zeb(?:89)?', r'Collegio', r'Bigazzi', 
     r'Soccer', r'Ganon', r'Billy\s+Mays', r'Branduardi', r'Luigi', r'Ambrogio', 
-    r'Risotto', r'Peppa', r'Grylls', r'Favij', r'Testoh', r'Pingu', 
+    r'Risotto', r'Peppa', r'Ascanio', r'Grylls', r'Favij', r'Testoh', r'Pingu', 
     r'Dipr[eè]', r'Bello\s+Figo', r'Germano', r'Grillo', r'Ges[uù]', r'Nabbo', 
     r'Yotobi', r'Berlusconi', r'Muniz', r'Travaglio', r'Nemesis', r'Testo', r'Papa', 
     r'Super\s+Quark', r'Sentence\s+Mix', r'Ear\s?rape', r'G-Major', r'Mondo\s+emo', 
     r'Pubblicit[aà]', r'Spot', r'Spongebob', r'Reverse', r'Masking', r'Pitch\s+Shift', 
-    r'Mosconi', r'Benson', r'Brumotti', r'Master\s?chef', r'Mister\s+Lui', 
+    r'Mosconi', r'Benson',r'Canzone iraniana', r'Brumotti', r'Sottotitolato',r'Canzone italianizzata', r'Master\s?chef', r'Mister\s+Lui', 
     r'Pappalardo', r'Sgarbi', r'Razzi', r'Salvini', r'Renzi', r'Rio\s+mare', 
     r'Gerry\s+Scotti', r'Fazio', r'Kabu', r'Nocoldiz', r'Poldo', r'Cloroformio', 
     r'Game of thrones', r'Re Robert', r'Giannino', r'Gianni\s+Morandi', r'Doraemon', 
@@ -1304,7 +1304,8 @@ def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping
                         channel_url=channel_url
                     )
                     
-                    if not quiet: print(f"    [+] New {target} match: {title} ({vid})")
+                    # Always log new matches regardless of quiet mode
+                    print(f"    [+] New {target} match: {title} ({vid})")
                     found_in_this_search += 1
                     total_new += 1
                     
@@ -1356,12 +1357,51 @@ def do_keyword_search_scraping(index):
         clean = clean.replace('\\', '').replace("'", "").replace(".", "").replace("+", "")
         return clean.strip()
 
+    print("\nSelect language for Meme Keywords:")
+    print("1. Italian (IT)")
+    print("2. English/Global (INT)")
+    print("3. Spanish (ES)")
+    print("4. French (FR)")
+    print("5. German (DE)")
+    print("6. Russian (RU)")
+    print("7. Brazilian (BR)")
+    print("8. All")
+    
+    lang_choice = ask("Choice [1-8]: ", {"1","2","3","4","5","6","7","8"})
+    
+    meme_source = []
+    lang_label = "ALL"
+    if lang_choice == "1": 
+        meme_source = MEME_KEYWORDS_IT
+        lang_label = "Italian"
+    elif lang_choice == "2": 
+        meme_source = MEME_KEYWORDS_INT
+        lang_label = "Global/English"
+    elif lang_choice == "3": 
+        meme_source = MEME_KEYWORDS_ES
+        lang_label = "Spanish"
+    elif lang_choice == "4": 
+        meme_source = MEME_KEYWORDS_FR
+        lang_label = "French"
+    elif lang_choice == "5": 
+        meme_source = MEME_KEYWORDS_DE
+        lang_label = "German"
+    elif lang_choice == "6": 
+        meme_source = MEME_KEYWORDS_RU
+        lang_label = "Russian"
+    elif lang_choice == "7": 
+        meme_source = MEME_KEYWORDS_BR
+        lang_label = "Brazilian"
+    else: 
+        meme_source = MEME_KEYWORDS_LIST
+        lang_label = "All Languages"
+
     # Clean the lists
     # Deep Keyword Discovery uses a specific limited selection for the YTP base
-    ytp_search_base = ["YTPM", "YTM", "Youtube poop", "YTP", "YTP ITA", "YTK", "Youtube merda"]
+    ytp_search_base = ["YTP", "YTP ITA", "Youtube poop", "YTPMV", "Youtube merda"]
     ytp_clean = sorted(list(set(ytp_search_base)))
     
-    meme_clean = sorted(list(set(clean_kw(k) for k in MEME_KEYWORDS_LIST)))
+    meme_clean = sorted(list(set(clean_kw(k) for k in meme_source)))
     
     # Generate combinations
     all_combinations = []
@@ -1374,10 +1414,10 @@ def do_keyword_search_scraping(index):
                 all_combinations.append(query)
     
     if not all_combinations:
-        print("\n  All combinations have already been scraped.")
+        print(f"\n  All combinations for {lang_label} have already been scraped.")
         return
 
-    print(f"\n--- Keyword Search Scraping (Combinations) ---")
+    print(f"\n--- Keyword Search Scraping ({lang_label}) ---")
     print(f"  Found {len(all_combinations)} new combinations to search.")
     print(f"  (Total potential: {len(ytp_clean) * len(meme_clean)}, Already scraped: {len(scraped_queries)})")
     

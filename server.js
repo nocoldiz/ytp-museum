@@ -2,7 +2,9 @@
 /**
  * YTP Archive Dashboard Server
  *
- * Serves the main archive dashboard (docs/index.html) and local video files.
+ * Serves the main archive dashboard (public/index.html) and local video files.
+ * Now using Python (scripts/db_manager.py) for all SQLite write operations
+ * to keep Node.js dependencies minimal.
  */
 
 'use strict';
@@ -17,318 +19,27 @@ const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
 const crypto = require('crypto');
+const { execSync } = require('child_process');
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DB_DIR = path.join(__dirname, 'db');
 const VIDEOS_DIR = path.join(DB_DIR, 'videos');
-const VIDEO_INDEX = path.join(DB_DIR, 'video_index.json');
-const EXCLUDED_VIDEOS = path.join(DB_DIR, 'excluded_videos.json');
-const SOURCES_INDEX = path.join(DB_DIR, 'sources_index.json');
-const YT_POOPERS_INDEX = path.join(DB_DIR, 'ytpoopers_index.json');
-const PLAYLISTS_FILE = path.join(DB_DIR, 'playlists.json');
+const DB_PATH = path.join(PUBLIC_DIR, 'museum.db');
 const SOURCES_DIR = path.join(__dirname, 'sources');
-
-
-// ─── Video Management Logic ──────────────────────────────────────────────────
+const DB_MANAGER = path.join(__dirname, 'scripts', 'db_manager.py');
 
 /**
- * Bans a list of videos:
- * 1. Removes local files.
- * 2. Adds to excluded_videos.json.
- * 3. Removes from video_index.json.
+ * Helper to run DB commands via Python
  */
-function banVideos(videoIds, videoIndexPath, excludedVideosPath, videosDir) {
-  let index = {};
-  try { index = JSON.parse(fs.readFileSync(videoIndexPath, 'utf8')); } catch (err) {
-    return { success: false, error: 'Failed to read video index' };
-  }
-
-  let excluded = {};
+function runDbCommand(command, args) {
   try {
-    if (fs.existsSync(excludedVideosPath)) {
-      excluded = JSON.parse(fs.readFileSync(excludedVideosPath, 'utf8'));
-    }
-  } catch (err) { }
-
-  const results = { deleted: [], failed: [], skipped: [] };
-
-  for (const id of videoIds) {
-    if (!index[id]) { results.skipped.push(id); continue; }
-    const entry = index[id];
-
-    if (entry.local_file) {
-      const filePath = path.join(__dirname, entry.local_file);
-      try {
-        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-      } catch (err) { }
-    }
-
-    excluded[id] = entry;
-    delete index[id];
-    results.deleted.push(id);
-  }
-
-  try {
-    fs.writeFileSync(videoIndexPath, JSON.stringify(index));
-    fs.writeFileSync(excludedVideosPath, JSON.stringify(excluded));
-    return { success: true, results };
+    const argsJson = JSON.stringify(args);
+    const output = execSync(`python "${DB_MANAGER}" "${command}" '${argsJson.replace(/'/g, "'\\''")}'`, { encoding: 'utf8' });
+    return JSON.parse(output);
   } catch (err) {
-    return { success: false, error: 'Failed to save changes' };
-  }
-}
-
-/**
- * Flags a list of videos as sources:
- * 1. Moves from video_index.json to sources_index.json.
- */
-function flagAsSource(videoIds, videoIndexPath, sourcesIndexPath) {
-  let index = {};
-  try { index = JSON.parse(fs.readFileSync(videoIndexPath, 'utf8')); } catch (err) {
-    return { success: false, error: 'Failed to read video index' };
-  }
-
-  let sources = {};
-  try {
-    if (fs.existsSync(sourcesIndexPath)) {
-      sources = JSON.parse(fs.readFileSync(sourcesIndexPath, 'utf8'));
-    }
-  } catch (err) { }
-
-  const results = { moved: [], skipped: [] };
-
-  for (const id of videoIds) {
-    if (!index[id]) { results.skipped.push(id); continue; }
-    const entry = index[id];
-
-    if (entry.local_file) {
-      const oldPath = path.join(__dirname, entry.local_file);
-      const fileName = path.basename(entry.local_file);
-      const newRelPath = path.join('sources', fileName);
-      const newPath = path.join(__dirname, newRelPath);
-
-      try {
-        if (!fs.existsSync(SOURCES_DIR)) fs.mkdirSync(SOURCES_DIR, { recursive: true });
-        if (fs.existsSync(oldPath)) {
-          fs.renameSync(oldPath, newPath);
-          entry.local_file = newRelPath.replace(/\\/g, '/');
-        }
-      } catch (err) {
-        console.error(`Failed to move file for ${id}:`, err);
-      }
-    }
-
-    // Move individual metadata JSON from docs/videos to docs/sources
-    const oldJsonPath = path.join(DB_DIR, 'videos', `${id}.json`);
-    const newJsonPath = path.join(DB_DIR, 'sources', `${id}.json`);
-    try {
-      const sourcesJsonDir = path.join(DB_DIR, 'sources');
-      if (!fs.existsSync(sourcesJsonDir)) fs.mkdirSync(sourcesJsonDir, { recursive: true });
-      if (fs.existsSync(oldJsonPath)) {
-        fs.renameSync(oldJsonPath, newJsonPath);
-      }
-    } catch (err) {
-      console.error(`Failed to move JSON metadata for ${id}:`, err);
-    }
-
-    sources[id] = entry;
-    delete index[id];
-    results.moved.push(id);
-  }
-
-  try {
-    fs.writeFileSync(videoIndexPath, JSON.stringify(index));
-    fs.writeFileSync(sourcesIndexPath, JSON.stringify(sources));
-    return { success: true, results };
-  } catch (err) {
-    return { success: false, error: 'Failed to save changes' };
-  }
-}
-
-/**
- * Imports a list of YT URLs into the specified index.
- */
-function importVideos(urls, target, videoIndexPath, sourcesIndexPath) {
-  const filePath = target === 'sources' ? sourcesIndexPath : videoIndexPath;
-  let index = {};
-  try {
-    if (fs.existsSync(filePath)) {
-      index = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    }
-  } catch (err) {
-    return { success: false, error: 'Failed to read index' };
-  }
-
-  const results = { added: [], skipped: [] };
-
-  for (let url of urls) {
-    url = url.trim();
-    if (!url) continue;
-
-    // Extract ID from YT URL
-    const match = url.match(/(?:v=|vi\/|shorts\/|be\/|embed\/|watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-    if (!match) {
-      results.skipped.push(url);
-      continue;
-    }
-
-    const id = match[1];
-    if (index[id]) {
-      results.skipped.push(url);
-      continue;
-    }
-
-    index[id] = {
-      id: id,
-      url: `https://www.youtube.com/watch?v=${id}`,
-      status: 'available',
-      sections: ['Imported']
-    };
-    results.added.push(id);
-  }
-
-  try {
-    fs.writeFileSync(filePath, JSON.stringify(index));
-    return { success: true, results };
-  } catch (err) {
-    return { success: false, error: 'Failed to save changes' };
-  }
-}
-
-/**
- * Sets the language for a list of videos.
- */
-function setLanguage(videoIds, language, videoIndexPath, sourcesIndexPath) {
-  let vIndex = {};
-  let sIndex = {};
-  try { if (fs.existsSync(videoIndexPath)) vIndex = JSON.parse(fs.readFileSync(videoIndexPath, 'utf8')); } catch (err) { }
-  try { if (fs.existsSync(sourcesIndexPath)) sIndex = JSON.parse(fs.readFileSync(sourcesIndexPath, 'utf8')); } catch (err) { }
-
-  const results = { updated: [], skipped: [] };
-
-  for (const id of videoIds) {
-    if (vIndex[id]) {
-      vIndex[id].language = language;
-      results.updated.push(id);
-    } else if (sIndex[id]) {
-      sIndex[id].language = language;
-      results.updated.push(id);
-    } else {
-      results.skipped.push(id);
-    }
-  }
-
-  try {
-    fs.writeFileSync(videoIndexPath, JSON.stringify(vIndex));
-    fs.writeFileSync(sourcesIndexPath, JSON.stringify(sIndex));
-    return { success: true, results };
-  } catch (err) {
-    return { success: false, error: 'Failed to save changes' };
-  }
-}
-
-/**
- * Gets all server-defined playlists.
- */
-function getPlaylists(playlistsPath) {
-  try {
-    if (fs.existsSync(playlistsPath)) {
-      return JSON.parse(fs.readFileSync(playlistsPath, 'utf8'));
-    }
-    return {};
-  } catch (err) {
-    return {};
-  }
-}
-
-/**
- * Creates a new server playlist.
- */
-function createPlaylist(name, playlistsPath) {
-  let playlists = getPlaylists(playlistsPath);
-  const id = 'pl_' + crypto.randomBytes(6).toString('hex');
-  playlists[id] = {
-    id,
-    name,
-    videoIds: [],
-    created_at: new Date().toISOString()
-  };
-  try {
-    fs.writeFileSync(playlistsPath, JSON.stringify(playlists));
-    return { success: true, playlist: playlists[id] };
-  } catch (err) {
-    return { success: false, error: 'Failed to save playlist' };
-  }
-}
-
-/**
- * Adds videos to a server playlist.
- */
-function addVideosToPlaylist(playlistId, videoIds, playlistsPath) {
-  let playlists = getPlaylists(playlistsPath);
-  if (!playlists[playlistId]) {
-    return { success: false, error: 'Playlist not found' };
-  }
-  
-  const existingIds = new Set(playlists[playlistId].videoIds);
-  const added = [];
-  for (const id of videoIds) {
-    if (!existingIds.has(id)) {
-      playlists[playlistId].videoIds.push(id);
-      added.push(id);
-    }
-  }
-  
-  try {
-    fs.writeFileSync(playlistsPath, JSON.stringify(playlists));
-    return { success: true, addedCount: added.length };
-  } catch (err) {
-    return { success: false, error: 'Failed to update playlist' };
-  }
-}
-
-const MIME_TYPES = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'application/javascript',
-  '.css': 'text/css',
-  '.json': 'application/json',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.webp': 'image/webp',
-  '.webm': 'video/webm',
-  '.mp4': 'video/mp4',
-  '.ico': 'image/x-icon',
-};
-
-// ─── Local video file serving (with range-request support for seeking) ────────
-
-function serveLocalVideo(filePath, req, res) {
-  let stat;
-  try { stat = fs.statSync(filePath); } catch {
-    res.writeHead(404); res.end('Not found'); return;
-  }
-
-  const total = stat.size;
-  const range = req.headers['range'];
-
-  if (range) {
-    const [, s, e] = range.replace(/bytes=/, '').match(/^(\d*)-(\d*)$/) || [];
-    const start = s ? parseInt(s, 10) : 0;
-    const end = e ? parseInt(e, 10) : total - 1;
-    res.writeHead(206, {
-      'Content-Range': `bytes ${start}-${end}/${total}`,
-      'Accept-Ranges': 'bytes',
-      'Content-Length': end - start + 1,
-      'Content-Type': 'video/mp4',
-    });
-    fs.createReadStream(filePath, { start, end }).pipe(res);
-  } else {
-    res.writeHead(200, {
-      'Content-Length': total,
-      'Content-Type': 'video/mp4',
-      'Accept-Ranges': 'bytes',
-    });
-    fs.createReadStream(filePath).pipe(res);
+    console.error(`DB Command Error (${command}):`, err);
+    return { success: false, error: err.message };
   }
 }
 
@@ -355,7 +66,7 @@ function onRequest(req, res) {
     req.on('end', () => {
       try {
         const { videoIds } = JSON.parse(body);
-        const result = banVideos(videoIds, VIDEO_INDEX, EXCLUDED_VIDEOS, VIDEOS_DIR);
+        const result = runDbCommand('ban', { videoIds });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } catch (err) {
@@ -373,7 +84,7 @@ function onRequest(req, res) {
     req.on('end', () => {
       try {
         const { videoIds } = JSON.parse(body);
-        const result = flagAsSource(videoIds, VIDEO_INDEX, SOURCES_INDEX);
+        const result = runDbCommand('flag-source', { videoIds });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } catch (err) {
@@ -395,21 +106,18 @@ function onRequest(req, res) {
     const language = req.headers['x-video-lang'] || '';
     const tagsStr = decodeURIComponent(req.headers['x-video-tags'] || '[]');
     const originalFileName = decodeURIComponent(req.headers['x-file-name'] || 'video.mp4');
-    
+
     let tags = [];
-    try { tags = JSON.parse(tagsStr); } catch (e) {}
+    try { tags = JSON.parse(tagsStr); } catch (e) { }
 
     if (!id) {
-      // YouTube IDs are always 11 characters. 
-      // We use 'loc_' prefix + 12 base64url chars to avoid collisions while keeping a similar style.
       id = 'loc_' + crypto.randomBytes(9).toString('base64url');
     }
 
     const baseDir = videoType === 'ytp' ? VIDEOS_DIR : SOURCES_DIR;
-    // Sanitize channel name for directory
     const safeChannelName = channelName.replace(/[<>:"/\\|?*]/g, '_').trim() || 'Unknown';
     const channelDir = path.join(baseDir, safeChannelName);
-    
+
     if (!fs.existsSync(channelDir)) {
       fs.mkdirSync(channelDir, { recursive: true });
     }
@@ -422,35 +130,20 @@ function onRequest(req, res) {
     req.pipe(writeStream);
 
     writeStream.on('finish', () => {
-      // Update Index
-      const indexPath = videoType === 'ytp' ? VIDEO_INDEX : SOURCES_INDEX;
-      let index = {};
-      try {
-        if (fs.existsSync(indexPath)) {
-          index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
-        }
-      } catch (err) {}
+      const result = runDbCommand('upload', {
+        id, title, channel_name: channelName, channel_url: channelUrl,
+        publish_date: publishDate, language,
+        is_source: videoType === 'ytp' ? 0 : 1,
+        local_file: path.relative(__dirname, savePath).replace(/\\/g, '/'),
+        tags
+      });
 
-      index[id] = {
-        title,
-        channel_name: channelName,
-        channel_url: channelUrl,
-        publish_date: publishDate,
-        tags,
-        language,
-        view_count: 0,
-        like_count: 0,
-        status: 'downloaded',
-        local_file: path.relative(baseDir, savePath).replace(/\\/g, '/')
-      };
-
-      try {
-        fs.writeFileSync(indexPath, JSON.stringify(index));
+      if (result.success) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, id }));
-      } catch (err) {
+      } else {
         res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: 'Failed to update index' }));
+        res.end(JSON.stringify(result));
       }
     });
 
@@ -469,7 +162,7 @@ function onRequest(req, res) {
     req.on('end', () => {
       try {
         const { urls, target } = JSON.parse(body);
-        const result = importVideos(urls, target, VIDEO_INDEX, SOURCES_INDEX);
+        const result = runDbCommand('import', { urls, target });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } catch (err) {
@@ -486,7 +179,7 @@ function onRequest(req, res) {
     req.on('end', () => {
       try {
         const { videoIds, language } = JSON.parse(body);
-        const result = setLanguage(videoIds, language, VIDEO_INDEX, SOURCES_INDEX);
+        const result = runDbCommand('set-lang', { videoIds, language });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } catch (err) {
@@ -499,9 +192,13 @@ function onRequest(req, res) {
 
   // ── API: Playlists ───────────────────────────────────────────────────────
   if (pathname === '/api/playlists' && req.method === 'GET') {
-    const playlists = getPlaylists(PLAYLISTS_FILE);
+    // For GET playlists, we can still use a shell command or just serve a JSON if we had it.
+    // Let's use the Python manager to get them.
+    // Actually, I'll add a 'get-playlists' command to the manager.
+    // For now, let's just return empty or implement it.
+    const result = runDbCommand('get-playlists', {});
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, playlists }));
+    res.end(JSON.stringify(result));
     return;
   }
 
@@ -512,7 +209,8 @@ function onRequest(req, res) {
       try {
         const { name } = JSON.parse(body);
         if (!name) throw new Error("Name is required");
-        const result = createPlaylist(name, PLAYLISTS_FILE);
+        const id = 'pl_' + crypto.randomBytes(6).toString('hex');
+        const result = runDbCommand('create-playlist', { name, id });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } catch (err) {
@@ -529,10 +227,7 @@ function onRequest(req, res) {
     req.on('end', () => {
       try {
         const { playlistId, videoIds } = JSON.parse(body);
-        if (!playlistId || !videoIds || !Array.isArray(videoIds)) {
-          throw new Error("Invalid request data");
-        }
-        const result = addVideosToPlaylist(playlistId, videoIds, PLAYLISTS_FILE);
+        const result = runDbCommand('add-to-playlist', { playlistId, videoIds });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } catch (err) {
@@ -592,22 +287,53 @@ function onRequest(req, res) {
   res.end('Not Found');
 }
 
-// ─── Start server ─────────────────────────────────────────────────────────────
-if (fs.existsSync(VIDEO_INDEX)) {
-  try {
-    fs.copyFileSync(VIDEO_INDEX, VIDEO_INDEX + '.bak');
-    // console.log(`  Backup:   ${VIDEO_INDEX}.bak created`);
-  } catch (err) {
-    console.error(`  [!] Failed to create backup:`, err.message);
+function serveLocalVideo(filePath, req, res) {
+  let stat;
+  try { stat = fs.statSync(filePath); } catch {
+    res.writeHead(404); res.end('Not found'); return;
+  }
+  const total = stat.size;
+  const range = req.headers['range'];
+  if (range) {
+    const [, s, e] = range.replace(/bytes=/, '').match(/^(\d*)-(\d*)$/) || [];
+    const start = s ? parseInt(s, 10) : 0;
+    const end = e ? parseInt(e, 10) : total - 1;
+    res.writeHead(206, {
+      'Content-Range': `bytes ${start}-${end}/${total}`,
+      'Accept-Ranges': 'bytes',
+      'Content-Length': end - start + 1,
+      'Content-Type': 'video/mp4',
+    });
+    fs.createReadStream(filePath, { start, end }).pipe(res);
+  } else {
+    res.writeHead(200, {
+      'Content-Length': total,
+      'Content-Type': 'video/mp4',
+      'Accept-Ranges': 'bytes',
+    });
+    fs.createReadStream(filePath).pipe(res);
   }
 }
 
-const server = http.createServer(onRequest);
+const MIME_TYPES = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.webm': 'video/webm',
+  '.mp4': 'video/mp4',
+  '.ico': 'image/x-icon',
+};
 
+// ─── Start server ─────────────────────────────────────────────────────────────
+const server = http.createServer(onRequest);
 server.listen(PORT, () => {
-  console.log(`\nYTP Archive Dashboard — server avviato`);
+  console.log(`\nYTP Archive Dashboard — server avviato (Python-Manager Mode)`);
   console.log(`  URL:      http://localhost:${PORT}`);
   console.log(`  Public:   ${PUBLIC_DIR}`);
-  console.log(`  DB:       ${DB_DIR}`);
+  console.log(`  DB:       ${DB_PATH}`);
   console.log();
 });
