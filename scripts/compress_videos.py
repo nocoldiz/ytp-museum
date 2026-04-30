@@ -9,7 +9,7 @@ from threading import Lock
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 VIDEO_DIR = PROJECT_ROOT / "db" / "videos"
-CACHE_FILE = SCRIPT_DIR / "converted_cache.json"
+CACHE_FILE = SCRIPT_DIR / "db/converted_cache.json"
 MAX_WORKERS = 2 
 
 # FFmpeg settings for Maximum NVENC Compression

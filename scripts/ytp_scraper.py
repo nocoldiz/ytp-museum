@@ -32,7 +32,7 @@ PROJECT_ROOT = SCRIPT_PATH.parent.parent if SCRIPT_PATH.parent.name == "scripts"
 
 DEFAULT_VIDEO_DIR = str(PROJECT_ROOT / "videos")
 DEFAULT_SITE_DIR = str(PROJECT_ROOT / "site_mirror")
-DEFAULT_DOCS_DIR = str(PROJECT_ROOT / "db")
+DEFAULT_DOCS_DIR = str(PROJECT_ROOT / "scripts/db")
 DEFAULT_SOURCES_DIR = str(PROJECT_ROOT / "sources")
 DEFAULT_FORMAT = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
 
@@ -2754,6 +2754,20 @@ def ask(prompt, choices):
         print(f"  Please enter one of: {' / '.join(choices)}")
 
 
+def run_migration():
+    """Calls migrate_to_sqlite.py to sync JSON data to the SQLite database."""
+    print("\n[Sync] Running database migration...")
+    migration_script = os.path.join(os.path.dirname(__file__), "migrate_to_sqlite.py")
+    if os.path.exists(migration_script):
+        try:
+            subprocess.run([sys.executable, migration_script], check=True)
+            print("[Sync] Migration completed successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"[Sync] Error during migration: {e}")
+    else:
+        print(f"[Sync] Migration script not found: {migration_script}")
+
+
 def print_header():
     print()
     print("╔══════════════════════════════════════════════════╗")
@@ -2818,6 +2832,11 @@ def main():
             do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, ITALIAN_CHANNELS, "italian", year_limit=args.year_limit, skip_scan=False)
         if args.forum_scrape:
             do_forum_scrape(index, args.site_dir)
+        
+        # Call migration after operations that change data
+        if not (args.stats or args.chronology or args.dump_poopers):
+            run_migration()
+            
         return
 
     print_header()
@@ -2984,7 +3003,9 @@ def main():
         do_full_scrape_run(index, args)
         do_full_download_parallel()
 
-
+    # Call migration after any operation (unless it's just stats or quit)
+    if choice not in ("9", "q"):
+        run_migration()
 
     print()
 

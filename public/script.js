@@ -32,7 +32,7 @@ async function initSQLite() {
   };
   const SQL = await initSqlJs(config);
 
-  const response = await fetch('public/museum.db');
+  const response = await fetch('museum.db');
   const arrayBuffer = await response.arrayBuffer();
   const uInt8Array = new Uint8Array(arrayBuffer);
   sqlDB = new SQL.Database(uInt8Array);
