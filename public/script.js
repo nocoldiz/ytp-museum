@@ -1439,7 +1439,7 @@ function getActiveVideos(forHome = false) {
   }
 
   // Global year limit
-  whereClauses.push("(substr(publish_date, 1, 4) <= ? OR publish_date IS NULL)");
+  whereClauses.push("(CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL)");
   params.push(globalMaxYear);
 
   let sql = "SELECT * FROM videos";
@@ -2068,12 +2068,12 @@ function applyFilters() {
   }
 
   if (yearMin) {
-    whereClauses.push("substr(publish_date, 1, 4) >= ?");
+    whereClauses.push("CAST(substr(publish_date, 1, 4) AS INTEGER) >= ?");
     params.push(yearMin);
   }
 
   if (yearMax) {
-    whereClauses.push("substr(publish_date, 1, 4) <= ?");
+    whereClauses.push("CAST(substr(publish_date, 1, 4) AS INTEGER) <= ?");
     params.push(yearMax);
   }
 
@@ -2093,7 +2093,7 @@ function applyFilters() {
   }
 
   // Global year limit
-  whereClauses.push("(substr(publish_date, 1, 4) <= ? OR publish_date IS NULL)");
+  whereClauses.push("(CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL)");
   params.push(globalMaxYear);
 
   let sql = "SELECT * FROM videos WHERE " + whereClauses.join(" AND ");
@@ -2319,7 +2319,7 @@ function buildChannelData() {
       SUM(like_count) as totalLikes,
       MIN(substr(publish_date, 1, 4)) as firstYear
     FROM videos 
-    WHERE (substr(publish_date, 1, 4) <= ? OR publish_date IS NULL)
+    WHERE (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL)
     GROUP BY channel_name 
     ORDER BY videoCount DESC
   `;
@@ -2535,7 +2535,7 @@ function buildYearData() {
       SUM(view_count) as totalViews, 
       SUM(like_count) as totalLikes
     FROM videos 
-    WHERE publish_date IS NOT NULL AND substr(publish_date, 1, 4) <= ?
+    WHERE publish_date IS NOT NULL AND CAST(substr(publish_date, 1, 4) AS INTEGER) <= ?
     GROUP BY year 
     ORDER BY year ASC
   `;
