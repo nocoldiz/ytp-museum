@@ -124,8 +124,7 @@ YTP_KEYWORDS_LIST = [
     r'YTK', r'YTM', r'Youtube\s+poop(?:\s+ITA)?'
 ]
 
-MEME_KEYWORDS_LIST = [
-    # Italian
+MEME_KEYWORDS_IT = [
     r'matteo\s+montesi', r'avventure', r'Zeb(?:89)?', r'Collegio', r'Bigazzi', 
     r'Soccer', r'Ganon', r'Billy\s+Mays', r'Branduardi', r'Luigi', r'Ambrogio', 
     r'Risotto', r'Peppa', r'Grylls', r'Favij', r'Testoh', r'Pingu', 
@@ -139,8 +138,10 @@ MEME_KEYWORDS_LIST = [
     r'Game of thrones', r'Re Robert', r'Giannino', r'Gianni\s+Morandi', r'Doraemon', 
     r'Me\s+cont[ro]o\s+Te', r'Capobastone', r'Croix89', r'Maurizio\s+Mosca', 
     r'Mike\s+Bongiorno', r'De\s+Sica', r'Boldi', r'Checco\s+Zalone', 
-    r'Aldo\s+Giovanni\s+e\s+Giacomo', r'Maccio\s+Capatonda', r'Magalli', r'Camera\s+Caf[eè]',
-    # Global
+    r'Aldo\s+Giovanni\s+e\s+Giacomo', r'Maccio\s+Capatonda', r'Magalli', r'Camera\s+Caf[eè]'
+]
+
+MEME_KEYWORDS_INT = [
     r'Pingas', r'CD-i', r'Morshu', r'Mah\s+Boi', r'He[\s-]?Man', r'Sparta\s+Remix', 
     r'Scad', r'Stutter', r'Patrick', r'Jack\s+Black', r'Gourmet', r'The\s+king', 
     r'Weegee', r'Spadinner', r'Michael\s+Rosen', r'Viacom', r'Skooks', r'Flex\s+Tape', 
@@ -150,33 +151,48 @@ MEME_KEYWORDS_LIST = [
     r'Gabe\s+Newell', r'TF2', r'Gmod', r'Fnaf', r'Markiplier', r'Pewdiepie', 
     r'Asdfmovie', r'Nyan\s+Cat', r'Leeroy\s+Jenkins', r'Chuck\s+Norris', r'Over\s+9000', 
     r'LazyTown', r'Robbie\s+Rotten', r'We\s+Are\s+Number\s+One', r'Big\s+Chungus', 
-    r'Ugandan\s+Knuckles', r'Thomas\s+the\s+Tank\s+Engine', r'Yee',
-    # Spanish
+    r'Ugandan\s+Knuckles', r'Thomas\s+the\s+Tank\s+Engine', r'Yee'
+]
+
+MEME_KEYWORDS_ES = [
     r'Chavo\s+del\s+8', r'Don\s+Ramon', r'Quico', r'Pelea\s+de\s+invalidos', 
     r'Vete\s+a\s+la\s+Versh', r'Pooppa[ñn]ol', r'El\s+bananero', r'Dross', 
     r'Edgar\s+se\s+cae', r'Fua', r'Tano\s+Pasman', r'Loquendo', r'El\s+Risitas', 
-    r'Fernanfloo', r'Rubius', r'Vegetta777', r'Caso\s+Cerrado', r'Doctora\s+Polo',
-    # French
+    r'Fernanfloo', r'Rubius', r'Vegetta777', r'Caso\s+Cerrado', r'Doctora\s+Polo'
+]
+
+MEME_KEYWORDS_FR = [
     r'Brocante', r'Joueur\s+du\s+Grenier', r'JDG', r'Koh\s+Lanta', r'Denis\s+Brogniart', 
     r'David\s+Goodenough', r'Antoine\s+Daniel', r'What\s+The\s+Cut', r'WTC', 
     r'Mister\s+V', r'Cyprien', r'Norman', r'Squeezie', r'Kaamelott', r'OSS\s+117', 
     r'Jean\s+Dujardin', r'Baptiste', r'T\'es\s+pas\s+net', r'Morsay', r'Sylvain\s+Durif', 
-    r'Christ\s+Cosmique',
-    # German
+    r'Christ\s+Cosmique'
+]
+
+MEME_KEYWORDS_DE = [
     r'Marcell\s+D\'Avis', r'Peter\s+Zwegat', r'Kinski', r'Löwenzahn', r'Peter\s+Lustig', 
     r'1&1', r'Andreas\s+Kieling', r'Frauentausch', r'Halt\s+Stop', r'Psycho\s+Andreas', 
     r'Domian', r'Money\s+Boy', r'Haftbefehl', r'Drachenlord', r'Gronkh', r'Coldmirror', 
-    r'Fresh\s+D',
-    # Russian
+    r'Fresh\s+D'
+]
+
+MEME_KEYWORDS_RU = [
     r'Поцык', r'Повар', r'Сашко', r'Гамаз', r'Пенек', r'Влад\s+Борщ', r'Буйный\s+Славик', 
     r'Дед\s+Бом-бом', r'Кандибобер', r'Ивангай', r'\+100500', r'Макс\s+Голополосов', 
-    r'This\s+is\s+Хорошо', r'Стас\s+Давыдов', r'Никита\s+Литвинков',
-    # Brazilian
+    r'This\s+is\s+Хорошо', r'Стас\s+Давыдов', r'Никита\s+Литвинков'
+]
+
+MEME_KEYWORDS_BR = [
     r'Bambam', r'Rodrigo\s+Faro', r'Fausto\s+Silva', r'Faust[aã]o', r'Ratinho', 
     r'Silvio\s+Santos', r'Galo\s+Cego', r'Jailson\s+Mendes', r'Urso\s+Peludo', 
     r'Paulo\s+Guina', r'Chaves', r'Seu\s+Madruga', r'Away\s+de\s+Petr[oó]polis', 
     r'Gil\s+Brother', r'Dollynho'
 ]
+
+MEME_KEYWORDS_LIST = (
+    MEME_KEYWORDS_IT + MEME_KEYWORDS_INT + MEME_KEYWORDS_ES + 
+    MEME_KEYWORDS_FR + MEME_KEYWORDS_DE + MEME_KEYWORDS_RU + MEME_KEYWORDS_BR
+)
 
 YTP_KEYWORDS = re.compile("|".join(YTP_KEYWORDS_LIST), re.IGNORECASE)
 MEME_KEYWORDS = re.compile("|".join(MEME_KEYWORDS_LIST), re.IGNORECASE)
@@ -1341,7 +1357,10 @@ def do_keyword_search_scraping(index):
         return clean.strip()
 
     # Clean the lists
-    ytp_clean = sorted(list(set(clean_kw(k) for k in YTP_KEYWORDS_LIST)))
+    # Deep Keyword Discovery uses a specific limited selection for the YTP base
+    ytp_search_base = ["YTPM", "YTM", "Youtube poop", "YTP", "YTP ITA", "YTK", "Youtube merda"]
+    ytp_clean = sorted(list(set(ytp_search_base)))
+    
     meme_clean = sorted(list(set(clean_kw(k) for k in MEME_KEYWORDS_LIST)))
     
     # Generate combinations
@@ -2770,55 +2789,54 @@ def main():
     print("  What do you want to do?")
     print()
     print("  1  Fetch missing metadata")
-    print("       Fetch missing metadata. Will NOT fetch new videos.")
+    print("       Update titles, descriptions, and channel info for indexed videos.")
     print()
     print("  2  Download indexed videos")
-    print("       Download pending videos.")
+    print("       Download pending video files for both YTP and Sources.")
     print()
-    print("  3  Scrape channels")
-    print("       Scrape all index channels + allowed-channel list;")
-    print("       add YTP matches to 'Youtube' section.")
+    print("  3  Scrape channels (Discover New)")
+    print("       Scan channels in channels_by_language.md for new content.")
     print()
-    print("  4  Download YTPs from selected language")
-    print("       Download videos from ALLOWED_CHANNELS, 'YTP nostrane', or 'YTP fai da te'.")
+    print("  4  Language-Specific Download")
+    print("       Batch download videos for a specific language (e.g. Italian).")
     print()
-    print("  5  Find mirror videos")
-    print("       Search YouTube for reuploads of unavailable videos.")
+    print("  5  Find Mirror Videos")
+    print("       Search for reuploads of unavailable or deleted videos.")
     print()
-    print("  6  Scrape comments")
-    print("       Fetch comments for every indexed video in sources_index.json.")
+    print("  6  Scrape Comments")
+    print("       Archival: Fetch and save YouTube comments for indexed sources.")
     print()
-    print("  7  Scrape thumbnails and tag missing profiles")
-    print("       Download profile pictures for channels in ytpoopers_index.json and channels_by_language.md")
+    print("  7  Scrape Profiles & Thumbnails")
+    print("       Download channel avatars and update the Pooper registry.")
     print()
-    print("  8  Auto languages")
-    print("       Automatically tag languages for all videos.")
+    print("  8  Auto Language Tagger")
+    print("       Automatically assign languages (ITA, ENG, etc.) to videos.")
     print()
-    print("  9  Stats  →  stats.md")
-    print("       Section & channel breakdown (sources_index.json only).")
+    print("  9  Generate Stats  →  stats.md")
+    print("       Collection breakdown: total videos, channels, and active creators.")
     print()
-    print("  10 YouTube Search Scraping")
-    print("       Scrape videos based on YouTube searches.")
+    print("  10 Custom YouTube Search")
+    print("       Search for specific terms or YTP acronyms to expand the collection.")
     print()
-    print("  11 Keyword Search Scraping")
-    print("       Scrape videos based on all MEME_KEYWORDS.")
+    print("  11 Deep Keyword Discovery (Combinations)")
+    print("       Exhaustive scan: Search every combination of YTP + Meme keywords.")
     print()
-    print("  f  Forum Scrape")
-    print("       Analyze every folder in site_mirror to find YouTube videos.")
+    print("  f  Forum Scrape (Site Mirror)")
+    print("       Crawl archived forum folders to extract legacy YouTube links.")
     print()
-    print("  s  Full Scrape Run")
-    print("       Sequential: Option 3 -> 1 -> 7 -> 6.")
+    print("  s  Full Scrape Run (Standard Cycle)")
+    print("       Discovery: Scrape channels -> Metadata -> Profiles -> Comments.")
     print()
-    print("  d  Full Download (Parallel)")
-    print("       Parallel: Option 6, Option 4 (ITA), compress_videos.py.")
+    print("  d  Full Download (Parallel Processing)")
+    print("       Parallel: Italian YTPs, comments, and video compression.")
     print()
-    print("  a  Full Cycle")
-    print("       Full Scrape Run followed by Full Download (Parallel).")
+    print("  a  Full Automation (Scrape + Download)")
+    print("       The works: Run Full Scrape Cycle followed by Full Download.")
     print()
     print("  q  Quit")
     print()
-    choice = ask("  Choice [1-10/f/s/d/a/q]: ",
-                 {"1","2","3","4","5","6","7","8","9","10","f","s","d","a","q"})
+    choice = ask("  Choice [1-11/f/s/d/a/q]: ",
+                 {"1","2","3","4","5","6","7","8","9","10","11","f","s","d","a","q"})
 
     if choice == "q":
         sys.exit(0)
