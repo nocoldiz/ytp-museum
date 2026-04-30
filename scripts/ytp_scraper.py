@@ -26,877 +26,75 @@ from bs4 import BeautifulSoup
 
 # ── Sections to scan ──────────────────────────────────────────────────────────
 
+SCRIPT_PATH = Path(__file__).resolve()
+# Resolve PROJECT_ROOT: if we are in scripts/, go up one. Otherwise, we are likely in the root.
+PROJECT_ROOT = SCRIPT_PATH.parent.parent if SCRIPT_PATH.parent.name == "scripts" else SCRIPT_PATH.parent
+
+DEFAULT_VIDEO_DIR = str(PROJECT_ROOT / "videos")
+DEFAULT_SITE_DIR = str(PROJECT_ROOT / "site_mirror")
+DEFAULT_DOCS_DIR = str(PROJECT_ROOT / "db")
+DEFAULT_SOURCES_DIR = str(PROJECT_ROOT / "sources")
+DEFAULT_FORMAT = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
+
 SCAN_SECTIONS = [
     "YTP nostrane", "YTP fai da te", "YTPMV dimportazione", "YTP da internet",
     "Poop in progress", "Il significato della cacca", "Collab poopeschi",
     "Club sportivo della foca grassa", "Biografie YTP"
 ]
 
-# ── Disallowed channels (never scraped; removed from index if present) ────────
+def load_channels_from_md(filepath):
+    """Parses a markdown file for channel lists."""
+    channels = {
+        "DISALLOWED_CHANNELS": [],
+        "ITALIAN_CHANNELS": [],
+        "ENGLISH_CHANNELS": [],
+        "SPANISH_CHANNELS": [],
+        "GERMAN_CHANNELS": [],
+        "FRENCH_CHANNELS": [],
+        "RUSSIAN_CHANNELS": []
+    }
+    if not os.path.exists(filepath):
+        return channels
 
-DISALLOWED_CHANNELS = ["Yotobi", "Croix89","animorphy","Beeeerdman","foreverKirby","TorNis Entertainment","PineappleDisciple","DarkestIntellect" "QDSS","Skillet","PeendulumLive","twkmedia","Valerio Salsero""UCn-K7GIs62ENvdQe6ZZk9-w","FunAvenue","The Chalkeaters","Fabio Mariano","Pogo","Computron"]
+    def extract_handle(url):
+        if not url.startswith("http"): return url
+        url = url.split("?")[0].rstrip("/")
+        if "/@" in url: return url.split("/@")[-1]
+        if "/user/" in url: return url.split("/user/")[-1]
+        if "/c/" in url: return url.split("/c/")[-1]
+        if "/channel/" in url: return url.split("/channel/")[-1]
+        return url
 
-# ── Allowed channels (always scraped with keyword filter) ─────────────────────
-    #"https://www.youtube.com/@NocoldizTV",
+    current_section = None
+    with open(filepath, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line: continue
+            if line.startswith("#"):
+                section_name = line.lstrip("#").strip()
+                if section_name in channels:
+                    current_section = section_name
+                else:
+                    current_section = None
+            elif current_section:
+                url = line.strip()
+                if current_section == "DISALLOWED_CHANNELS":
+                    channels[current_section].append(extract_handle(url))
+                else:
+                    channels[current_section].append(url)
+    return channels
 
-ITALIAN_CHANNELS = [
-    "https://www.youtube.com/user/ComiCartoons",
-    "https://www.youtube.com/@100GameReaperYTP",
-    "https://www.youtube.com/@125Replay",
-    "https://www.youtube.com/@21stCenturyShy",
-    "https://www.youtube.com/@2ndCenturyFox",
-    "https://www.youtube.com/@Ace98100",
-    "https://www.youtube.com/@Achille12345",
-    "https://www.youtube.com/@age3rcm530",
-    "https://www.youtube.com/@AgelessObsession",
-    "https://www.youtube.com/@Aladauqs",
-    "https://www.youtube.com/@alberisecchi7647",
-    "https://www.youtube.com/@AlbyTree",
-    "https://www.youtube.com/@Alel_",
-    "https://www.youtube.com/@AlePoops",
-    "https://www.youtube.com/@AlessandroRosmo",
-    "https://www.youtube.com/@AlexanderFazio",
-    "https://www.youtube.com/@alfonsoamendola3262",
-    "https://www.youtube.com/@AlkeMystic",
-    "https://www.youtube.com/@allafacciatua_xd",
-    "https://www.youtube.com/@Andrea97YTPs",
-    "https://www.youtube.com/@anonymi",
-    "https://www.youtube.com/@anonymide",
-    "https://www.youtube.com/@antoniocovatta",
-    "https://www.youtube.com/@AntonioJuliano88",
-    "https://www.youtube.com/@arghivebeenshot",
-    "https://www.youtube.com/@Aros24",
-    "https://www.youtube.com/@ashhousewares445",
-    "https://www.youtube.com/@AssoDiDenari",
-    "https://www.youtube.com/@avojaifnot",
-    "https://www.youtube.com/@axelrod777",
-    "https://www.youtube.com/@B5P666c",
-    "https://www.youtube.com/@BarnabasB",
-    "https://www.youtube.com/@Barsay",
-    "https://www.youtube.com/@bassman85x",
-    "https://www.youtube.com/@BDSbowling",
-    "https://www.youtube.com/@blazor67",
-    "https://www.youtube.com/@Blazor67",
-    "https://www.youtube.com/@blazor69secondocanaledibla51",
-    "https://www.youtube.com/@BleachGuitar",
-    "https://www.youtube.com/@BlimfYTP",
-    "https://www.youtube.com/@boari994",
-    "https://www.youtube.com/@Bobomb83",
-    "https://www.youtube.com/@Boltryke",
-    "https://www.youtube.com/@Boogidyboo",
-    "https://www.youtube.com/@bosch002",
-    "https://www.youtube.com/@BowenKainZ",
-    "https://www.youtube.com/@Breakass123",
-    "https://www.youtube.com/@briotera",
-    "https://www.youtube.com/@ButtonsTheDragon",
-    "https://www.youtube.com/@cABit94",
-    "https://www.youtube.com/@CanaleDarioLoSurdo",
-    "https://www.youtube.com/@canesecco",
-    "https://www.youtube.com/@caprastrabica2182",
-    "https://www.youtube.com/@CaptnFalcon",
-    "https://www.youtube.com/@Captpan6",
-    "https://www.youtube.com/@celsowm",
-    "https://www.youtube.com/@CerealKillzYTP",
-    "https://www.youtube.com/@Cheez764",
-    "https://www.youtube.com/@ChristianIce",
-    "https://www.youtube.com/@cinemaverita",
-    "https://www.youtube.com/@Clodd",
-    "https://www.youtube.com/@Clodd97",
-    "https://www.youtube.com/@ClubSound18",
-    "https://www.youtube.com/@CommanderMorshu",
-    "https://www.youtube.com/@concadoreno",
-    "https://www.youtube.com/@CorruptionSound",
-    "https://www.youtube.com/@CraaazyCat13",
-    "https://www.youtube.com/@crapagent",
-    "https://www.youtube.com/@CrazyPooper",
-    "https://www.youtube.com/@crbenesch",
-    "https://www.youtube.com/@CuddlyDream",
-    "https://www.youtube.com/@cupoficewater1",
-    "https://www.youtube.com/@cyphermur9t",
-    "https://www.youtube.com/@DadediFRD"
-    "https://www.youtube.com/@DaniloTestoh4",
-    "https://www.youtube.com/@DanThoRiu",
-    "https://www.youtube.com/@DarkCoffe64",
-    "https://www.youtube.com/@DarkestIntellect",
-    "https://www.youtube.com/@darkturn",
-    "https://www.youtube.com/@Davaia",
-    "https://www.youtube.com/@DavideToroh",
-    "https://www.youtube.com/@DavvoYTP",
-    "https://www.youtube.com/@DeadpoolDamian",
-    "https://www.youtube.com/@DeltaHF89",
-    "https://www.youtube.com/@demenzialproject1942",
-    "https://www.youtube.com/@DemyGod",
-    "https://www.youtube.com/@derdingobaron",
-    "https://www.youtube.com/@despotaaa",
-    "https://www.youtube.com/@DiagloTheBriosser",
-    "https://www.youtube.com/@DinWar",
-    "https://www.youtube.com/@DioNero94",
-    "https://www.youtube.com/@djgiorgio97",
-    "https://www.youtube.com/@DjpoopOfficial",
-    "https://www.youtube.com/@DoctorChub",
-    "https://www.youtube.com/@Doskey",
-    "https://www.youtube.com/@DownOnTheBrazos",
-    "https://www.youtube.com/@dreameroflove",
-    "https://www.youtube.com/@dreamland94",
-    "https://www.youtube.com/@DrRustico",
-    "https://www.youtube.com/@DubskiDude",
-    "https://www.youtube.com/@Dumno7",
-    "https://www.youtube.com/@DWL1993",
-    "https://www.youtube.com/@EdomanSYTP",
-    "https://www.youtube.com/@eduardorpg64",
-    "https://www.youtube.com/@electricthecheese",
-    "https://www.youtube.com/@ElementNx",
-    "https://www.youtube.com/@EliaForce1984ita",
-    "https://www.youtube.com/@elibatsni",
-    "https://www.youtube.com/@ensisarts",
-    "https://www.youtube.com/@EpicLPer",
-    "https://www.youtube.com/@ErmioLP"
-    "https://www.youtube.com/@eugimosco",
-    "https://www.youtube.com/@EvilYorkiz",
-    "https://www.youtube.com/@fabulousfreebirds",
-    "https://www.youtube.com/@fagiolone83",
-    "https://www.youtube.com/@FarFedPoops",
-    "https://www.youtube.com/@FCChannelTubePoop",
-    "https://www.youtube.com/@Federigoo112",
-    "https://www.youtube.com/@filonits"
-    "https://www.youtube.com/@Flippy952",
-    "https://www.youtube.com/@FoeKidman",
-    "https://www.youtube.com/@Forza97",
-    "https://www.youtube.com/@Franchiowtf",
-    "https://www.youtube.com/@francoytp",
-    "https://www.youtube.com/@Frank_675",
-    "https://www.youtube.com/@Fraws87",
-    "https://www.youtube.com/@frederickfrankenstein5671",
-    "https://www.youtube.com/@FriendlyWarlord",
-    "https://www.youtube.com/@GabryGuii"
-    "https://www.youtube.com/@GabryGuii",
-    "https://www.youtube.com/@Gamemasternumberone",
-    "https://www.youtube.com/@gamepopper101",
-    "https://www.youtube.com/@ganonvslink1000",
-    "https://www.youtube.com/@Garrysmodita",
-    "https://www.youtube.com/@gb7zone7",
-    "https://www.youtube.com/@Ge%C9%9Bg",
-    "https://www.youtube.com/@Geibuchan",
-    "https://www.youtube.com/@geogeobananarap",
-    "https://www.youtube.com/@Gertilish",
-    "https://www.youtube.com/@gianluca104poops",
-    "https://www.youtube.com/@giganticproblem666",
-    "https://www.youtube.com/@giggipoops",
-    "https://www.youtube.com/@gionniovarb",
-    "https://www.youtube.com/@giromirgork3705",
-    "https://www.youtube.com/@GliUseless",
-    "https://www.youtube.com/@GoldLucario97",
-    "https://www.youtube.com/@Gordon91",
-    "https://www.youtube.com/@GreatBritishTurd",
-    "https://www.youtube.com/@Grimlon_Ufficiale"
-    "https://www.youtube.com/@guilhox",
-    "https://www.youtube.com/@guysafari",
-    "https://www.youtube.com/@HalDanGhor",
-    "https://www.youtube.com/@HaloJaxed",
-    "https://www.youtube.com/@HIKIKOMORI000",
-    "https://www.youtube.com/@IdiotCamel",
-    "https://www.youtube.com/@idiotcamel",
-    "https://www.youtube.com/@ilCirox",
-    "https://www.youtube.com/@IlPooperFiero"
-    "https://www.youtube.com/@ILPOOPERRANDOM",
-    "https://www.youtube.com/@ilpoveroComunistah",
-    "https://www.youtube.com/@IlReDellePoop",
-    "https://www.youtube.com/@IlTrioPoop",
-    "https://www.youtube.com/@imaperson180",
-    "https://www.youtube.com/@IndieGameMusicHD",
-    "https://www.youtube.com/@Informatopi",
-    "https://www.youtube.com/@inspecterclouseau",
-    "https://www.youtube.com/@Iperciuk",
-    "https://www.youtube.com/@ipoopanti5961",
-    "https://www.youtube.com/@irover",
-    "https://www.youtube.com/@ItalianHousePoop",
-    "https://www.youtube.com/@IzanagiYTP",
-    "https://www.youtube.com/@JacksonJunior101",
-    "https://www.youtube.com/@Jakabu128",
-    "https://www.youtube.com/@JakkoMatto",
-    "https://www.youtube.com/@JeffLindblom",
-    "https://www.youtube.com/@Jep93XxXNA",
-    "https://www.youtube.com/@jeroenpompoen",
-    "https://www.youtube.com/@JJokerDude",
-    "https://www.youtube.com/@johncrow6541",
-    "https://www.youtube.com/@JoltJolteon",
-    "https://www.youtube.com/@JornalismoQuebrado",
-    "https://www.youtube.com/@julaoa",
-    "https://www.youtube.com/@kagemaru026",
-    "https://www.youtube.com/@karinzio",
-    "https://www.youtube.com/@karolikYTP"
-    "https://www.youtube.com/@KefkaFTW",
-    "https://www.youtube.com/@kerby",
-    "https://www.youtube.com/@kevinastro",
-    "https://www.youtube.com/@keyserzozzo5388",
-    "https://www.youtube.com/@kifflom6910",
-    "https://www.youtube.com/@kikosak1",
-    "https://www.youtube.com/@kitty0706",
-    "https://www.youtube.com/@KojiKabutoITA",
-    "https://www.youtube.com/@KRDBrando",
-    "https://www.youtube.com/@Kuhneghetz",
-    "https://www.youtube.com/@kwarkman85",
-    "https://www.youtube.com/@KyoSMind",
-    "https://www.youtube.com/@l337toaster",
-    "https://www.youtube.com/@LaGuardiaReale",
-    "https://www.youtube.com/@Laizorb",
-    "https://www.youtube.com/@lallegrochirurgo5540",
-    "https://www.youtube.com/@lamegliogioventu",
-    "https://www.youtube.com/@Laretski",
-    "https://www.youtube.com/@Leemone",
-    "https://www.youtube.com/@LegendarySage",
-    "https://www.youtube.com/@LeNoirLive",
-    "https://www.youtube.com/@lesslunatic",
-    "https://www.youtube.com/@levusbevus",
-    "https://www.youtube.com/@lianfromthestars",
-    "https://www.youtube.com/@LightningToast3",
-    "https://www.youtube.com/@lolifante",
-    "https://www.youtube.com/@Loller97",
-    "https://www.youtube.com/@luciomarco",
-    "https://www.youtube.com/@LukTrek",
-    "https://www.youtube.com/@lullo74",
-    "https://www.youtube.com/@Lumpytoast",
-    "https://www.youtube.com/@luxexcellence2483",
-    "https://www.youtube.com/@M0rtanius",
-    "https://www.youtube.com/@macioilmagno",
-    "https://www.youtube.com/@madanonymous",
-    "https://www.youtube.com/@mamaluigi02",
-    "https://www.youtube.com/@ManakoBs",
-    "https://www.youtube.com/@manuknife93",
-    "https://www.youtube.com/@manusnake_",
-    "https://www.youtube.com/@MaraudersClub",
-    "https://www.youtube.com/@marco30074",
-    "https://www.youtube.com/@Mario6493",
-    "https://www.youtube.com/@mariotorrone",
-    "https://www.youtube.com/@massilmitico",
-    "https://www.youtube.com/@MasterAl",
-    "https://www.youtube.com/@MastercastPresident",
-    "https://www.youtube.com/@mattiapagano92",
-    "https://www.youtube.com/@matusalemmeballerino8020",
-    "https://www.youtube.com/@MclovinKillerMX",
-    "https://www.youtube.com/@McMaNGOS",
-    "https://www.youtube.com/@MectaPoopITA",
-    "https://www.youtube.com/@MediaMunkee",
-    "https://www.youtube.com/@MeStarStudios",
-    "https://www.youtube.com/@MetaAndre11",
-    "https://www.youtube.com/@METAL666MILITIA",
-    "https://www.youtube.com/@MewMewJoanna",
-    "https://www.youtube.com/@Michela_life_oac",
-    "https://www.youtube.com/@mijino",
-    "https://www.youtube.com/@mikycop6",
-    "https://www.youtube.com/@MilkshakeManCP",
-    "https://www.youtube.com/@MisterS0sa",
-    "https://www.youtube.com/@Moto200Alt",
-    "https://www.youtube.com/@MPCozmo",
-    "https://www.youtube.com/@MPYTP",
-    "https://www.youtube.com/@mr.pungolo716",
-    "https://www.youtube.com/@MrApocalisse",
-    "https://www.youtube.com/@MrDuePenny",
-    "https://www.youtube.com/@MrFp96",
-    "https://www.youtube.com/@MrLucario2",
-    "https://www.youtube.com/@mrpoldoakbar2849",
-    "https://www.youtube.com/@MrRoboto113",
-    "https://www.youtube.com/@MrTennek",
-    "https://www.youtube.com/@MrVernechannel",
-    "https://www.youtube.com/@MuzicFreakNumberOne",
-    "https://www.youtube.com/@MycroProcessor",
-    "https://www.youtube.com/@mylestailschannel",
-    "https://www.youtube.com/@n00bobliterator",
-    "https://www.youtube.com/@NefosG",
-    "https://www.youtube.com/@nickkarion",
-    "https://www.youtube.com/@NikiPoop",
-    "https://www.youtube.com/@NiklasPooper",
-    "https://www.youtube.com/@nobuyukinyuu",
-    "https://www.youtube.com/@NocoldizTV",
-    "https://www.youtube.com/@nocoldizTV",
-    "https://www.youtube.com/@noi4crazyguys",
-    "https://www.youtube.com/@nomefigo6115",
-    "https://www.youtube.com/@norris3942",
-    "https://www.youtube.com/@Nprp",
-    "https://www.youtube.com/@omgtsn",
-    "https://www.youtube.com/@ophios",
-    "https://www.youtube.com/@orangedo1official"
-    "https://www.youtube.com/@oscurobaronerampante",
-    "https://www.youtube.com/@Ottodorp",
-    "https://www.youtube.com/@OutoMaisteri",
-    "https://www.youtube.com/@OznerolDeAngelis",
-    "https://www.youtube.com/@p00pbuster",
-    "https://www.youtube.com/@PaandamanYo",
-    "https://www.youtube.com/@PARAAA"
-    "https://www.youtube.com/@PARAAA",
-    "https://www.youtube.com/@parnas1us",
-    "https://www.youtube.com/@PatrickLify",
-    "https://www.youtube.com/@pendulum",
-    "https://www.youtube.com/@Pennaz",
-    "https://www.youtube.com/@PeppeJep93",
-    "https://www.youtube.com/@Phantomat14",
-    "https://www.youtube.com/@PhantomDusclops92",
-    "https://www.youtube.com/@Pictocheat",
-    "https://www.youtube.com/@pierlupoops",
-    "https://www.youtube.com/@PigHunter4",
-    "https://www.youtube.com/@piodx",
-    "https://www.youtube.com/@PizzaPony",
-    "https://www.youtube.com/@poFETT",
-    "https://www.youtube.com/@pokemonmusicmaster",
-    "https://www.youtube.com/@PoladrittoYTP",
-    "https://www.youtube.com/@poopemcshit9131",
-    "https://www.youtube.com/@PoopMasta88",
-    "https://www.youtube.com/@pooppappero",
-    "https://www.youtube.com/@PoopPinchesBack",
-    "https://www.youtube.com/@PoopSlammer",
-    "https://www.youtube.com/@PooPTuBeNooB",
-    "https://www.youtube.com/@poponicspoops5044",
-    "https://www.youtube.com/@potsugoro",
-    "https://www.youtube.com/@PresidentOfJelybeans",
-    "https://www.youtube.com/@PyrotheBest",
-    "https://www.youtube.com/@Pyrstoyska",
-    "https://www.youtube.com/@quadcoreh8080",
-    "https://www.youtube.com/@Qualcunaltro1",
-    "https://www.youtube.com/@QueiServerSulDue",
-    "https://www.youtube.com/@QueITizio",
-    "https://www.youtube.com/@QuibbyJibby",
-    "https://www.youtube.com/@Raf_Tama",
-    "https://www.youtube.com/@RanaBastarda",
-    "https://www.youtube.com/@Ratmus1",
-    "https://www.youtube.com/@rawasir",
-    "https://www.youtube.com/@reddevils500a",
-    "https://www.youtube.com/@Remyrue",
-    "https://www.youtube.com/@RenardQueenston",
-    "https://www.youtube.com/@revergo",
-    "https://www.youtube.com/@RocchioSciamenna",
-    "https://www.youtube.com/@rohan_ytp/featured",
-    "https://www.youtube.com/@RoosterReal",
-    "https://www.youtube.com/@ruach12355",
-    "https://www.youtube.com/@rujoTV",
-    "https://www.youtube.com/@rushnerd",
-    "https://www.youtube.com/@sausism",
-    "https://www.youtube.com/@SecretaryEle",
-    "https://www.youtube.com/@SelceTeamProductions",
-    "https://www.youtube.com/@SermetraScPA",
-    "https://www.youtube.com/@ShadowtheKnuckles",
-    "https://www.youtube.com/@shadowxworks",
-    "https://www.youtube.com/@ShinRaNewlyEmployed",
-    "https://www.youtube.com/@shroomhead1tennis",
-    "https://www.youtube.com/@ShroomheadOne",
-    "https://www.youtube.com/@SimixF1",
-    "https://www.youtube.com/@sinpecadoweb",
-    "https://www.youtube.com/@Sir_Daniel",
-    "https://www.youtube.com/@skatethelife777",
-    "https://www.youtube.com/@ske1988",
-    "https://www.youtube.com/@Skullgirl9",
-    "https://www.youtube.com/@SLBysusparidas",
-    "https://www.youtube.com/@smontaggiovideo",
-    "https://www.youtube.com/@sofexsp"
-    "https://www.youtube.com/@Spaceoffz",
-    "https://www.youtube.com/@spartanguy00",
-    "https://www.youtube.com/@Spazza17",
-    "https://www.youtube.com/@spring.pooper",
-    "https://www.youtube.com/@Spritanium",
-    "https://www.youtube.com/@StackBrains",
-    "https://www.youtube.com/@StarRodMan",
-    "https://www.youtube.com/@StefanoMJSMusic",
-    "https://www.youtube.com/@StewBarzTube",
-    "https://www.youtube.com/@supdawg444",
-    "https://www.youtube.com/@SuperdarkIuigi4ever",
-    "https://www.youtube.com/@superkingytp5482",
-    "https://www.youtube.com/@SuperYoshi",
-    "https://www.youtube.com/@Surplusx21",
-    "https://www.youtube.com/@surstrommingytp"
-    "https://www.youtube.com/@susanne67ful",
-    "https://www.youtube.com/@svegliamiii",
-    "https://www.youtube.com/@SvenFletcher",
-    "https://www.youtube.com/@SwishFilmsinc",
-    "https://www.youtube.com/@TabooVudu",
-    "https://www.youtube.com/@Tachin1994",
-    "https://www.youtube.com/@tank2tank",
-    "https://www.youtube.com/@TarantoEvangelica",
-    "https://www.youtube.com/@Teletubbiepoop",
-    "https://www.youtube.com/@TeruChanLand",
-    "https://www.youtube.com/@thecloakedinquirer",
-    "https://www.youtube.com/@thecongurt",
-    "https://www.youtube.com/@TheDarkRises",
-    "https://www.youtube.com/@theDeamonXxX",
-    "https://www.youtube.com/@TheExtremeTE",
-    "https://www.youtube.com/@TheFelixxxmaster",
-    "https://www.youtube.com/@TheFilippoop",
-    "https://www.youtube.com/@TheGamerOfAllGamers",
-    "https://www.youtube.com/@thegianchi",
-    "https://www.youtube.com/@TheKingOFKings69611",
-    "https://www.youtube.com/@TheKingofSilverFoxes",
-    "https://www.youtube.com/@TheKooperPooper",
-    "https://www.youtube.com/@TheLaxOne",
-    "https://www.youtube.com/@TheMark001100",
-    "https://www.youtube.com/@ThemuseshoneY",
-    "https://www.youtube.com/@Themysteriouspirate",
-    "https://www.youtube.com/@TheNightwisher88",
-    "https://www.youtube.com/@TheNoelagghijesu",
-    "https://www.youtube.com/@THEpillo234",
-    "https://www.youtube.com/@TheSfronzMovies",
-    "https://www.youtube.com/@TheSpeedKing96",
-    "https://www.youtube.com/@TheTano97",
-    "https://www.youtube.com/@TheTehniga",
-    "https://www.youtube.com/@TheTeschioMan",
-    "https://www.youtube.com/@TimoteiLSD",
-    "https://www.youtube.com/@Tj8w",
-    "https://www.youtube.com/@tomgoodmen",
-    "https://www.youtube.com/@ToopofthePoop",
-    "https://www.youtube.com/@TottiBest92",
-    "https://www.youtube.com/@tracFelix96trac",
-    "https://www.youtube.com/@TranceDJnewbie",
-    "https://www.youtube.com/@Trapinch12",
-    "https://www.youtube.com/@TukariSilver",
-    "https://www.youtube.com/@tuttoratpoopytp",
-    "https://www.youtube.com/@twinx1337",
-    "https://www.youtube.com/@UberNooberPooper",
-    "https://www.youtube.com/@Ultimooooooooo",
-    "https://www.youtube.com/@unhoots",
-    "https://www.youtube.com/@unintended84",
-    "https://www.youtube.com/@universalquantifier",
-    "https://www.youtube.com/@UnNicknameOriginale",
-    "https://www.youtube.com/@UomoBlooper",
-    "https://www.youtube.com/@USBduck",
-    "https://www.youtube.com/@UtenteMacSenzaMac",
-    "https://www.youtube.com/@Vacantification",
-    "https://www.youtube.com/@ValeGadogni",
-    "https://www.youtube.com/@vanesso100",
-    "https://www.youtube.com/@Veksler96",
-    "https://www.youtube.com/@Victinho6D",
-    "https://www.youtube.com/@vic_vacuo",
-    "https://www.youtube.com/@Vid3able",
-    "https://www.youtube.com/@vlxo23",
-    "https://www.youtube.com/@Voiaganto",
-    "https://www.youtube.com/@voodoochildytp",
-    "https://www.youtube.com/@VoodooChildYTP",
-    "https://www.youtube.com/@Vorhias",
-    "https://www.youtube.com/@vortaniz",
-    "https://www.youtube.com/@vry-dab",
-    "https://www.youtube.com/@VRY-DAB",
-    "https://www.youtube.com/@Vurrix",
-    "https://www.youtube.com/@wazgul",
-    "https://www.youtube.com/@Whopperized",
-    "https://www.youtube.com/@Whyimnotfat",
-    "https://www.youtube.com/@WLB91",
-    "https://www.youtube.com/@Wurfenkopf",
-    "https://www.youtube.com/@XblowLyourBMind",
-    "https://www.youtube.com/@XXBlackLyon92XX",
-    "https://www.youtube.com/@xxsweetaddiexx",
-    "https://www.youtube.com/@xycechipmusic",
-    "https://www.youtube.com/@Yiulias",
-    "https://www.youtube.com/@Youtubors",
-    "https://www.youtube.com/@YovanniYoni",
-    "https://www.youtube.com/@YTPRohan"
-    "https://www.youtube.com/@Zaburac",
-    "https://www.youtube.com/@Zeroxxz11",
-    "https://www.youtube.com/@ZioMeso",
-    "https://www.youtube.com/@ZioTok83",
-    "https://www.youtube.com/c/allafacciatua_xd",
-    "https://www.youtube.com/c/AssoDiDenari",
-    "https://www.youtube.com/c/DerioYT",
-    "https://www.youtube.com/c/ilCirox",
-    "https://www.youtube.com/c/ISmattyr",
-    "https://www.youtube.com/c/MPYTP",
-    "https://www.youtube.com/c/RTpoop",
-    "https://www.youtube.com/c/SassoStrappato",
-    "https://www.youtube.com/channel/UC4HFJE8cvVXzjS1mR1HmuZw",
-    "https://www.youtube.com/channel/UC4I2inDRA46XWxO_x8W_mDA",
-    "https://www.youtube.com/channel/UC7Y-kAwZdFELamgM31alpPg",
-    "https://www.youtube.com/channel/UCEbd4eJbmSOoRxCd-_mt6Bw",
-    "https://www.youtube.com/channel/UCEyQUkC7IsKk14klgrMFzcg",
-    "https://www.youtube.com/channel/UCk34FwWL3wrOqnMzmKfI5Zg",
-    "https://www.youtube.com/channel/UCkp_VJMK8Z0h58v_rT9wPDQ",
-    "https://www.youtube.com/channel/UCOO5X6QKGNxLUmjydleXbqg",
-    "https://www.youtube.com/channel/UCpuTkFWkpBGbEZowCFQ4yrA",
-    "https://www.youtube.com/channel/UCrPnrIc-m4WU6Olon3furXg",
-    "https://www.youtube.com/channel/UCsZ-gR0qOy4fCNG2G8Swuhw",
-    "https://www.youtube.com/channel/UCULCU79tkDsZYaVCBF0Lmhw",
-    "https://www.youtube.com/channel/UCWl6FWjdCWSfWqLaNBzwHiw",
-    "https://www.youtube.com/@benrichardson5798",
-    "https://www.youtube.com/@ShadowtheKnuckles",
-    "https://www.youtube.com/user/125Replay",
-    "https://www.youtube.com/user/ChristianIce",
-    "https://www.youtube.com/user/ComiCartoons",
-    "https://www.youtube.com/user/CottoeFrullato",
-    "https://www.youtube.com/user/DanThoRiu",
-    "https://www.youtube.com/user/Davi42X",
-    "https://www.youtube.com/user/EvilYorkiz",
-    "https://www.youtube.com/user/IdiotCamel",
-    "https://www.youtube.com/user/JakkoMatto",
-    "https://www.youtube.com/user/jethrofool",
-    "https://www.youtube.com/user/julaoa",
-    "https://www.youtube.com/user/loller97ita",
-    "https://www.youtube.com/user/MasterFelixxx",
-    "https://www.youtube.com/user/mikycop6",
-    "https://www.youtube.com/user/MrAepox",
-    "https://www.youtube.com/user/MrLetame",
-    "https://www.youtube.com/user/oskari14",
-    "https://www.youtube.com/user/OurTube1011",
-    "https://www.youtube.com/user/PierluPoops",
-    "https://www.youtube.com/user/PopingaSay",
-    "https://www.youtube.com/user/RaptorArk",
-    "https://www.youtube.com/user/StewBarzTube",
-    "https://www.youtube.com/user/TheTehnigga",
-    "https://www.youtube.com/user/Tj8w",
-    "https://www.youtube.com/user/UtenteMacSenzaMac",
-    "https://www.youtube.com/user/YTPandmore",
-    "https://www.youtube.com/user/ZioMeso",
-    "https://www.youtube.com/user/ziomeso",
-    "https://www.youtube.com/user/ZioTok83",
-    "https://www.youtube.com/voodoochildytp",
-    "https://youtube.com/@antchannel",
-    "https://youtube.com/@AssoDiDenari",
-    "https://youtube.com/@aureliogame99",
-    "https://youtube.com/@azonsalus",
-    "https://youtube.com/@cristianpoops2.0",
-    "https://youtube.com/@giusepoop",
-    "https://youtube.com/@ilfilincazzatoytp",
-    "https://youtube.com/@ItalianHousePoop",
-    "https://youtube.com/@p00pbuster",
-    "https://youtube.com/@RanaBastarda",
-    "https://youtube.com/@TheGabryOfficial",
-    "https://youtube.com/@Tj8w",
-    "https://youtube.com/@xeduss.",
-    "https://youtube.com/@YTPRohan",
-    "https://youtube.com/truocolo",
-    "https://www.youtube.com/@shitmultiverse1404",
-    "https://www.youtube.com/user/RaptorArk",
-    "https://www.youtube.com/user/CiccioDiMaggio99",
-    "https://www.youtube.com/@GiGiYTP",
-    "https://www.youtube.com/@NinipeCollection",
-    "https://www.youtube.com/@pizzeriablaster2872",
-    "https://www.youtube.com/@TenenteColomboYTP",
-    "https://www.youtube.com/@MrMrkrikka",
-    "https://www.youtube.com/@Wurfenkopf",
-    "https://www.youtube.com/@settebellochannel7541",
-    "https://www.youtube.com/@GothCorn",
-    "https://www.youtube.com/@RPS-addicted",
-    "https://www.youtube.com/@thinkerytp8803",
-    "https://www.youtube.com/@darkpoop478",
-    "https://www.youtube.com/@ildiscepoloytpsas4006",
-    "https://www.youtube.com/@Possedella",
-    "https://www.youtube.com/@andrewpoops9892",
-    "https://www.youtube.com/@KirParodyYTP",
-    "https://www.youtube.com/@diomattone3406",
-    "https://www.youtube.com/@bovinoalatoytp4293",
-    "https://www.youtube.com/@therealtmaster8945",
-    "https://www.youtube.com/@SM95Storage",
-    "https://www.youtube.com/@NotVeryImportantButOk",
-    "https://www.youtube.com/@DBS_Video",
-    "https://www.youtube.com/@ytcultitalia",
-    "https://www.youtube.com/@davidfxesg8475",
-    "https://www.youtube.com/@evilwolf6612",
-    "https://www.youtube.com/@ketchuppe3025",
-    "https://www.youtube.com/@ghostangosvods9757",
-    "https://www.youtube.com/@mrpoldoakbararchivio6673",
-    "https://www.youtube.com/@Possedella",
-    "https://www.youtube.com/@scamorza",
-    "https://www.youtube.com/@freddyno.",
-    "https://www.youtube.com/@impossibleisnothing",
-    "https://www.youtube.com/@DaniloTestoh4",
-    "https://www.youtube.com/@LeLindasOfficialChannel",
-    "https://www.youtube.com/@TCResetGaming",
-    "https://www.youtube.com/@frang1494",
-    "https://www.youtube.com/@Pudedepla",
-    "https://www.youtube.com/@impossibleisnothing",
-    "https://www.youtube.com/@NinipeCollection",
-    "https://www.youtube.com/@alesabbio4943",
-    "https://www.youtube.com/@Possedella",
-    "https://www.youtube.com/@tigerytpcanalemorto",
-    "https://www.youtube.com/@luckypoop697",
-    "https://www.youtube.com/@mattmine9986",
-    "https://www.youtube.com/@DBS_Video",
-    "https://www.youtube.com/@sharmacs284",
-    "https://www.youtube.com/@karolikYTP",
-    "https://www.youtube.com/@SAMURAIYTP",
-    "https://www.youtube.com/@DaniloTestoh4",
-    "https://www.youtube.com/@slypooper_ytp",
-    "https://www.youtube.com/@SAMURAIYTP",
-    "https://www.youtube.com/@ghostangosvods9757",
-    "https://www.youtube.com/@DevillTM",
-    "https://www.youtube.com/@ipastoryofficial5515",
-    "https://www.youtube.com/@PooPpea",
-    "https://www.youtube.com/@PORDYYTP-ITA",
-    "https://www.youtube.com/@edpoop6793",
-    "https://www.youtube.com/@doctorsuus",
-    "https://www.youtube.com/@thegreatjolly3769",
-    "https://www.youtube.com/@ketchuppe3025",
-    "https://www.youtube.com/@MemeFactory30",
-    "https://www.youtube.com/@LightDragonTutorials",
-    "https://www.youtube.com/@TheFelixxxmaster",
-    "https://www.youtube.com/@Houndoom97akabranflakes",
-    "https://www.youtube.com/@TheMaxPooper",
-    "https://www.youtube.com/@allafacciatua_xd",
-    "https://www.youtube.com/@bub6279",
-    "https://www.youtube.com/@ValeGadogni",
-    "https://www.youtube.com/@cap_parrot6896",
-    "https://www.youtube.com/@thinkerytp8803",
-    "https://www.youtube.com/@00ItalianStyle00",
-    "https://www.youtube.com/@bvbk8",
-    "https://www.youtube.com/@Ins4n3",
-    "https://www.youtube.com/@gerryscoosytp1558",
-    "https://www.youtube.com/@CoolAntOnion",
-    "https://www.youtube.com/@MrCulo8751",
-    "https://www.youtube.com/@anything2712",
-    "https://www.youtube.com/@masafailpazzo6446",
-    "https://www.youtube.com/@ytpond7020",
-    "https://www.youtube.com/@ytpond7020",
-    "https://www.youtube.com/@giovannigiorgio7603",
-    "https://www.youtube.com/@TSMGirl",
-    "https://www.youtube.com/@cammelloserpente5316",
-    "https://www.youtube.com/@bub6279",
-    "https://www.youtube.com/@beolon7562",
-    "https://www.youtube.com/@bigandrea8888",
-    "https://www.youtube.com/@ilmonolito3764",
-    "https://www.youtube.com/@segreto13-y5f",
-    "https://www.youtube.com/@marcofazzini7740",
-    "https://www.youtube.com/@FireStewieCiak_REUPLOAD",
-    "https://www.youtube.com/@karolikYTP",
-    "https://www.youtube.com/@YTP-world",
-    "https://www.youtube.com/@LukTrek",
-    "https://www.youtube.com/@Girino829",
-    "https://www.youtube.com/@triziochannel",
-    "https://www.youtube.com/@FireStewieCiak_REUPLOAD",
-    "https://www.youtube.com/@RedGhosthell",
-    "https://www.youtube.com/@LolloBarbero",
-    "https://www.youtube.com/@98electivire",
-    "https://www.youtube.com/@CerealKillzYTP",
-    "https://www.youtube.com/@therealtmaster8945",
-    "https://www.youtube.com/@OurDearNeighborIlCaroVicino",
-    "https://www.youtube.com/@idiotcamel",
-    "https://www.youtube.com/@TheFelixxxmaster",
-    "https://www.youtube.com/@MISTERBIG",
-    "https://www.youtube.com/@DannyYTP",
-    "https://www.youtube.com/@rosousytp",
-    "https://www.youtube.com/@mikiytp",
-    "https://www.youtube.com/@revergo",
-    "https://www.youtube.com/@Glitchand",
-    "https://www.youtube.com/@horusytpgang7671",
-    "https://www.youtube.com/@pecorasatanicavivalefoche",
-    "https://www.youtube.com/@NDPS3",
-    "https://www.youtube.com/@RPS-addicted",
-    "https://www.youtube.com/@ghostangosvods9757",
-    "https://www.youtube.com/@th3d3e90",
-    "https://www.youtube.com/@therealtmaster8945",
-    "https://www.youtube.com/@GothCorn",
-    "https://www.youtube.com/@LolloBarbero",
-    "https://www.youtube.com/@NinipeCollection",
-    "https://www.youtube.com/@TenenteColomboYTP",
-    "https://www.youtube.com/@MrMrkrikka",
-    "https://www.youtube.com/@therealtmaster8945",
-    "https://www.youtube.com/@settebellochannel7541",
-    "https://www.youtube.com/@thinkerytp8803",
-    "https://www.youtube.com/@ildiscepoloytpsas4006",
-    "https://www.youtube.com/@darkpoop478",
-    "https://www.youtube.com/@SharkL96",
-    "https://www.youtube.com/@VivaleTortore259",
-    "https://www.youtube.com/@LolloReactions",
-    "https://www.youtube.com/@muroytp5033",
-    "https://www.youtube.com/@Faniellone109",
-    "https://www.youtube.com/@EngyOfficial",
-    "https://www.youtube.com/@Johnbrambo117",
-    "https://www.youtube.com/@giampierofuschi1438",
-    "https://www.youtube.com/@TheMark001100",
-    "https://www.youtube.com/@goldgameplay4237",
-    "https://www.youtube.com/@therealspaghetti1121",
-    "https://www.youtube.com/@tensingchannel820",
-    "https://www.youtube.com/@rambozeta",
-    "https://www.youtube.com/@pyrojojo3142",
-    "https://www.youtube.com/@giovannigiunchi1821",
-    "https://www.youtube.com/@gianytp9302",
-    "https://www.youtube.com/@Fabiosult",
-    "https://www.youtube.com/@vittovioletcreeper",
-    "https://www.youtube.com/@BlackJack-wg4op",
-    "https://www.youtube.com/@reazionisti",
-    "https://www.youtube.com/@TheEdo94",
-    "https://www.youtube.com/@scandynu2116",
-    "https://www.youtube.com/@ivagabondideltubo9855",
-    "https://www.youtube.com/@pyrojojo3142",
-    "https://www.youtube.com/@demenzialproject1942",
-    "https://www.youtube.com/@todd7606",
-    "https://www.youtube.com/@ValeGadogni",
-    "https://www.youtube.com/@maxmt_hip",
-    "https://www.youtube.com/@POOP-kd7ju",
-    "https://www.youtube.com/@drprocton",
-    "https://www.youtube.com/@lordzero4662",
-    "https://www.youtube.com/@AlexFrigobar",
-    "https://www.youtube.com/@gaspardytp2577",
-    "https://www.youtube.com/@iltarlo8221",
-    "https://www.youtube.com/@ATOMICDUCK",
-    "https://www.youtube.com/@comrademathias1754",
-    "https://www.youtube.com/@ipooppersytp389",
-    "https://www.youtube.com/@skrillezzo3542",
-    "https://www.youtube.com/@davimar13",
-    "https://www.youtube.com/@th3d3e90",
-    "https://www.youtube.com/@cesarepassardi5480",
-    "https://www.youtube.com/@matteosposato6431",
-    "https://www.youtube.com/@JohnPerezITA",
-    "https://www.youtube.com/@quentintarantentin3665",
-    "https://www.youtube.com/@ytpmovies3809",
-    "https://www.youtube.com/@Timoteoilmassaio",
-    "https://www.youtube.com/@bazingawwyr2935",
-    "https://www.youtube.com/@funnimame7279",
-    "https://www.youtube.com/@antiacido7426",
-    "https://www.youtube.com/@Francis-wt3qc",
-    "https://www.youtube.com/@mrcarrot6339",
-    "https://www.youtube.com/@Bagnosky",
-    "https://www.youtube.com/@Nipposandro96",
-    "https://www.youtube.com/@nicolajferretti2266",
-    "https://www.youtube.com/@TheEdo94",
-    "https://www.youtube.com/@castonio4274",
-    "https://www.youtube.com/@ganjalfytp4096",
-    "https://www.youtube.com/@SelceTeamProductions",
-    "https://www.youtube.com/@dottorano9847",
-    "https://www.youtube.com/@gervasoquaglia5538",
-    "https://www.youtube.com/@mgcerasus4206",
-    "https://www.youtube.com/@franktime3272",
-    "https://www.youtube.com/@rapcolorblind3293",
-    "https://www.youtube.com/@KrodinoPOOPS",
-    "https://www.youtube.com/@davide_2121",
-    "https://www.youtube.com/channel/UCvlTVG14PCaDENMNsLn2rtA",
-    "https://www.youtube.com/@Full1channel",
-    "https://www.youtube.com/@dottorano9847",
-    "https://www.youtube.com/@francescosacco7659",
-    "https://www.youtube.com/@OkiTHB",
-    "https://www.youtube.com/@SelceTeamProductions",
-    "https://www.youtube.com/@misticopoop8223",
-    "https://www.youtube.com/@ginopisellino2237",
-    "https://www.youtube.com/@andretorre94",
-    "https://www.youtube.com/@dummgeist",
-    "https://www.youtube.com/@DigiDavidex4",
-    "https://www.youtube.com/@chrisredfield8653",
-    "https://www.youtube.com/@slypooper_ytp",
-    "https://www.youtube.com/@TheMrSminchio",
-    "https://www.youtube.com/@leonicsYTP",
-    "https://www.youtube.com/@salamoya9407",
-    "https://www.youtube.com/@%E1%8A%A0%E1%8A%95%E1%89%AA%E1%88%8D-111",
-    "https://www.youtube.com/@tubepoop9571",
-    "https://www.youtube.com/@Megaleochannel",
-    "https://www.youtube.com/@timmo543cx7",
-    "https://www.youtube.com/@topogiammy",
-    "https://www.youtube.com/@ThemuseshoneY",
-    "https://www.youtube.com/@MISTERBIG",
-    "https://www.youtube.com/watch?v=1a4vHEk9EQ4",
-    "https://www.youtube.com/@bulboculuschannel3483",
-    "https://www.youtube.com/@ilgryfftp4275",
-    "https://www.youtube.com/@PoldoUncut",
-    "https://www.youtube.com/@raymi3ds",
-    "https://www.youtube.com/@deketisondeteibol2301",
-]
-ENGLISH_CHANNELS = [
-    "https://www.youtube.com/@drinkcoffeewithme",
-    "https://www.youtube.com/@TheFemmeReel",
-    "https://www.youtube.com/@cs188",
-    "https://www.youtube.com/@TwoPoundTurtle",
-    "https://www.youtube.com/@KroboProductions",
-    "https://www.youtube.com/@EmperorLemon",
-    "https://www.youtube.com/@Deepercutt",
-    "https://www.youtube.com/@Hurricoaster",
-    "https://www.youtube.com/@ciciAAAHHH",
-    "https://www.youtube.com/@DaThings",
-    "https://www.youtube.com/user/YTPandmore",
-    "https://www.youtube.com/@TheMasterPoop",
-    "https://www.youtube.com/@blanegamerguymemeboi",
-    "https://www.youtube.com/@MorimotoYTP",
-    "https://www.youtube.com/@15SS25",
-    "https://www.youtube.com/@kitty0706",
-    "https://www.youtube.com/@Stegblob",
-    "https://www.youtube.com/@Kajetokun",
-    "https://www.youtube.com/@Captpan6",
-    "https://www.youtube.com/@Paperking99",
-    "https://www.youtube.com/@PeppaPigParodies",
-    "https://www.youtube.com/@SchaffrillasProductions",
-    "https://www.youtube.com/@Bosh",
-    "https://www.youtube.com/@RoscoeMcGillicuddy",
-    "https://www.youtube.com/@NPCarlsson",
-    "https://www.youtube.com/@SwagPikachu",
-    "https://www.youtube.com/@klystron2010",
-    "https://www.youtube.com/@CoryTheNorm",
-    "https://www.youtube.com/@MoBrosStudios",
-    "https://www.youtube.com/@Waltman13",
-    "https://www.youtube.com/@LinHeartAttack",
-    "https://www.youtube.com/@Shrekardo",
-    "https://www.youtube.com/@verytallbart"
-]
+# Load channels from centralized MD file
+CHANNELS_MD_PATH = os.path.join(DEFAULT_DOCS_DIR, "channels_by_language.md")
+loaded_channels = load_channels_from_md(CHANNELS_MD_PATH)
 
-SPANISH_CHANNELS = [
-    "https://www.youtube.com/@ParodiadorAnimado",
-    "https://www.youtube.com/@HDLuigi",
-    "https://www.youtube.com/@Catdany",
-    "https://www.youtube.com/@NinterYT",
-    "https://www.youtube.com/@Reloxard",
-    "https://www.youtube.com/@SLBysusparidas",
-    "https://www.youtube.com/@SimixF1",
-    "https://www.youtube.com/@Tachin1994",
-    "https://www.youtube.com/@SLAPJACK23",
-    "https://www.youtube.com/@Ayuwoki",
-    "https://www.youtube.com/@Fistroman",
-    "https://www.youtube.com/@MФRDO",
-    "https://www.youtube.com/@Cristeve",
-    "https://www.youtube.com/@SuperM",
-    "https://www.youtube.com/@Gokusan925",
-    "https://www.youtube.com/@DarkSchool",
-    "https://www.youtube.com/@CriticalShock",
-    "https://www.youtube.com/@SatanJaguar",
-    "https://www.youtube.com/@Iluminatus",
-    "https://www.youtube.com/@JochusPlay",
-    "https://www.youtube.com/@Jaguer91",
-    "https://www.youtube.com/@DeTounPoop",
-    "https://www.youtube.com/@Cacamojadaman",
-    "https://www.youtube.com/@AnzhyraPOOPS",
-    "https://www.youtube.com/@DragonSouru",
-    "https://www.youtube.com/@AlexParodiadorChileno",
-    "https://www.youtube.com/@Bolivianopooper",
-    "https://www.youtube.com/@Davasato",
-    "https://www.youtube.com/@Davuuwart",
-    "https://www.youtube.com/@DeepWeeb",
-    "https://www.youtube.com/@BastianoYTP_lollll",
-    "https://www.youtube.com/@Coscia333"
-]
-
-GERMAN_CHANNELS = [
-    "https://www.youtube.com/@PetersKotstube",
-    "https://www.youtube.com/@Sostrator",
-    "https://www.youtube.com/@YTKFactory",
-    "https://www.youtube.com/@FanboyAllianz",
-    "https://www.youtube.com/@MinerMorsel",
-    "https://www.youtube.com/@CorruptionSound",
-    "https://www.youtube.com/@ShroomheadOne",
-    "https://www.youtube.com/@GANOVENHABICHT",
-    "https://www.youtube.com/@JuckKek"
-]
-FRENCH_CHANNELS = [
-    "https://www.youtube.com/@PoopSlammer",
-    "https://www.youtube.com/@USBduck",
-    "https://www.youtube.com/@Tj8w",
-    "https://www.youtube.com/@123lunatic",
-    "https://www.youtube.com/@Chuiapoil",
-    "https://www.youtube.com/@GUGUSlaPoop",
-    "https://www.youtube.com/@jefaischierlesgens",
-    "https://www.youtube.com/@Maxlefoulevrai",
-    "https://www.youtube.com/@MopTheMoss",
-    "https://www.youtube.com/@MystR076",
-    "https://www.youtube.com/@ParodyOfStephane",
-    "https://www.youtube.com/@YoonnsNewkarlottay",
-    "https://www.youtube.com/@Quentingrd"
-]
-
-RUSSIAN_CHANNELS = [
-    "https://www.youtube.com/@Whyimnotfat",
-    "https://www.youtube.com/@gfoint",
-    "https://www.youtube.com/@Shootlife2008",
-    "https://www.youtube.com/@Multiprogramm",
-    "https://www.youtube.com/@GTHO",
-    "https://www.youtube.com/@FureonNectarmoon",
-    "https://www.youtube.com/@Bezboltenko",
-    "https://www.youtube.com/@Shpigun",
-    "https://www.youtube.com/@SPIDEN",
-    "https://www.youtube.com/@SgBash",
-    "https://www.youtube.com/@SenyaLyutyy",
-    "https://www.youtube.com/@iMiles",
-    "https://www.youtube.com/@Inex",
-    "https://www.youtube.com/@Zverobox",
-    "https://www.youtube.com/@TRALLPUKANOW"
-]
-
+DISALLOWED_CHANNELS = loaded_channels["DISALLOWED_CHANNELS"]
+ITALIAN_CHANNELS = loaded_channels["ITALIAN_CHANNELS"]
+ENGLISH_CHANNELS = loaded_channels["ENGLISH_CHANNELS"]
+SPANISH_CHANNELS = loaded_channels["SPANISH_CHANNELS"]
+GERMAN_CHANNELS = loaded_channels["GERMAN_CHANNELS"]
+FRENCH_CHANNELS = loaded_channels["FRENCH_CHANNELS"]
+RUSSIAN_CHANNELS = loaded_channels["RUSSIAN_CHANNELS"]
 
 ALLOWED_CHANNELS = (
     RUSSIAN_CHANNELS + 
@@ -911,30 +109,71 @@ NOCOLDIZ_BLACKLIST = re.compile(
     r'(?i)(gameplay|hypernet|devlog|gioco|em\.Path|em\.Brace|Dwarf)'
 )
 
-# ── Channel keywords ──────────────────────────────────────────────────────────
+# ── Keywords ──────────────────────────────────────────────────────────────────
 
-CHANNEL_KEYWORDS = re.compile(
-    r'(?i)(YTP|YTPMV|Collab|Youtube\s+poop|YT\s+Poop|Poop|Speciale'
+import re
+
+YTP_KEYWORDS = re.compile(
+    r'(?i)('
+    # 1. Standard YTP, YTPV, & YTPMV
+    r'YTP(?:H|HSHORT|BR|FR|ITA|PL|RU|ES|PT|RO|GR|NL|HU|JP)?|'
+    r'YTPV|YTPMV(?:\s+ITA|BR|RU|PL)?|'
+    
+    # 2. Italian Specific Memes & Series
+    r'san\'itario|s\.itario|'                # Sanitario / S.itario
+    r's\.antonino|'                          # S.antonino
+    r'catena\s+di|CATENA\s+S\.\s+ANTONIO|'   # Catena di / Catena S. Antonio
+    r'Shitstorm\s+Pt\.|'                     # Shitstorm series
+    
+    # 3. Japanese & Music Specifics
+    r'Otomad|音MAD|MAD\s+Movie|YTPM|'
+    
+    # 4. Sports & Collaborative Sub-genres
+    r'YTP\s+(?:Tennis|Soccer|Ping\s+pong)|'
+    r'YTP(?:Tennis|Soccer|Pingpong)|'
+    
+    # 5. Regional Acronyms & Localized Names
+    r'RYTP|STP|Pytp|YouTube\s+Kacke|YouTube\s+Kaka|'
+    r'YTK|YTM|Youtube\s+poop(?:\s+ITA)?'
+    r')'
+)
+
+MEME_KEYWORDS = re.compile(
+    r'(?i)(YTP|YTPMV|Collab|YT\s+Poop|Poop|Speciale'
     
     # --- YTPITA (ITALIAN) ---
     r'|matteo\s+montesi|avventure|Zeb|Collegio|Bigazzi|Soccer|Ganon|Billy\s+Mays|Branduardi|Luigi|Ambrogio|Risotto|ariete|Harry\s+potter|Round|Peppa|Grylls|Tennis|Acid|Favij|Testoh|Pingu'
-    r'|Dipr[eè]|Bello\s+Figo|Germano|Grillo|Gesù|Nabbo|Yotobi|Berlusconi|Muniz|Travaglio|Nemesis|Testo|Papa|Super\s+Quark|Iscritti|YTM|YTG|MLG|YTK'
+    r'|Dipr[eè]|Bello\s+Figo|Germano|Grillo|Gesù|Nabbo|Yotobi|Berlusconi|Muniz|Travaglio|Nemesis|Testo|Papa|Super\s+Quark|Iscritti|YTG|MLG'
     r'|Sentence\s+Mix|Ear\s?rape|G-Major|Mondo\s+emo|Pubblicità|Spot|Spongebob|Reverse|Masking|Pitch\s+Shift'
     r'|Mosconi|Benson|Brumotti|Master\s?chef|Mister\s+Lui|Pappalardo|Sgarbi|Razzi|Salvini|Renzi|Rio\s+mare|Gerry\s+Scotti|Fazio'
     r'|Kabu|Nocoldiz|Poldo|Cloroformio|Giannino|Gianni\s+Morandi|Doraemon|Me\s+cont[ro]o\s+Te'
     # --- GLOBAL & ENGLISH CLASSICS ---
     r'|Pingas|CD-i|Morshu|Mah\s+Boi|He[\s-]?Man|Sparta\s+Remix|Scad|Stutter|Patrick|Jack\s+Black|Gourmet|The\s+king|Weegee|Spadinner|Michael\s+Rosen|Viacom|Skooks|Flex\s+Tape|Phil\s+Swift|Slap\s+Chop|Hotel\s+Mario|Hank\s+Hill|King\s+Harkinian|Zelda\s+CD-i'
     # --- YTPH (SPANISH) ---
-    r'|YTPH|YTPHSHORT|YTPBR|Chavo\s+del\s+8|Pelea\s+de\s+invalidos|Vete\s+a\s+la\s+Versh|Pooppa[ñn]ol'
+    r'|Chavo\s+del\s+8|Pelea\s+de\s+invalidos|Vete\s+a\s+la\s+Versh|Pooppa[ñn]ol'
     # --- YTP FR (FRENCH) ---
-    r'|YTPFR|YTP\s+FR|Brocante|Joueur\s+du\s+Grenier|JDG|Koh\s+Lanta|Denis\s+Brogniart|David\s+Goodenough'
+    r'|Brocante|Joueur\s+du\s+Grenier|JDG|Koh\s+Lanta|Denis\s+Brogniart|David\s+Goodenough'
     # --- YTK (GERMAN / YOUTUBE KACKE) ---
     r'|YouTube\s+Kacke|Marcell\s+D\'Avis|Peter\s+Zwegat|Kinski|Löwenzahn|Peter\s+Lustig|1&1'
     # --- RYTP (RUSSIAN) ---
     r'|RYTP|РУТП|Поцык|Повар|Сашко|Гамаз|Пенек)'
 )
 
-import re
+def get_target_index(title):
+    """
+    Determines where a video should go based on its title.
+    Returns: 'video', 'sources', or 'none'.
+    """
+    if not title:
+        return "none"
+    if NON_YTP_KEYWORDS.search(title):
+        return "none"
+    if YTP_KEYWORDS.search(title):
+        return "video"
+    if MEME_KEYWORDS.search(title):
+        return "sources"
+    return "none"
+
 
 NON_YTP_KEYWORDS = re.compile(
     r'(?i)('
@@ -975,16 +214,6 @@ NON_YTP_KEYWORDS = re.compile(
     r')'
 )
 
-# Path resolution for moving the script to the scripts/ folder
-SCRIPT_PATH = Path(__file__).resolve()
-PROJECT_ROOT = SCRIPT_PATH.parent.parent if SCRIPT_PATH.parent.name == "scripts" else SCRIPT_PATH.parent
-
-DEFAULT_SITE_DIR = str(PROJECT_ROOT / "site_mirror")
-DEFAULT_VIDEO_DIR = str(PROJECT_ROOT / "db" / "videos")
-DEFAULT_DOCS_DIR = str(PROJECT_ROOT / "db")
-DEFAULT_SOURCES_DIR = str(PROJECT_ROOT / "sources")
-
-DEFAULT_FORMAT = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
 
 # ── YouTube URL helpers ───────────────────────────────────────────────────────
 
@@ -1079,17 +308,21 @@ def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, 
                 v_id, v_title, v_date = line.split('|', 2)
 
                 # Keyword Match Check
-                if CHANNEL_KEYWORDS.search(v_title):
-                    if v_id not in index.data and v_id not in index.excluded_ids:
+                target = get_target_index(v_title)
+                if target != "none":
+                    if v_id not in index.data and v_id not in index.sources_data and v_id not in index.actually_excluded_ids:
                         index.add_video(
                             video_id=v_id,
                             section="Youtube",
                             source_page=f"Language Scrape ({base_url})",
                             thread_title=v_title,
-                            channel_url=base_url
+                            channel_url=base_url,
+                            target=target
                         )
                         # Tag with language immediately
-                        index.data[v_id]['language'] = language
+                        entry = index.data.get(v_id) or index.sources_data.get(v_id)
+                        if entry:
+                            entry['language'] = language
                         new_entries += 1
                         print(f"    [Found] Match: {v_title}", flush=True)
                         
@@ -1227,7 +460,9 @@ class VideoIndex:
         # Store video_index.json in docs/ for the web visualizer
         self.docs_dir = docs_dir or DEFAULT_DOCS_DIR
         self.filepath = os.path.join(self.docs_dir, "video_index.json")
+        self.sources_filepath = os.path.join(self.docs_dir, "sources_index.json")
         self.data = {}
+        self.sources_data = {}
         self.actually_excluded_ids = set()
         self.sources_ids = set()
         self.excluded_ids = set() # Combined for compatibility
@@ -1268,7 +503,10 @@ class VideoIndex:
         if os.path.exists(self.filepath):
             with open(self.filepath, encoding="utf-8") as f:
                 self.data = json.load(f)
-            self.cleanup_index()
+        if os.path.exists(self.sources_filepath):
+            with open(self.sources_filepath, encoding="utf-8") as f:
+                self.sources_data = json.load(f)
+        self.cleanup_index()
 
     def cleanup_index(self):
         """
@@ -1292,11 +530,16 @@ class VideoIndex:
     def save(self):
         try:
             os.makedirs(self.docs_dir, exist_ok=True)
-            # Use Path to normalize/resolve the path to avoid "Invalid argument" errors on Windows
+            # Save main index
             path = Path(self.filepath).resolve()
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(self.data, f, separators=(',', ':'), ensure_ascii=False)
             
+            # Save sources index
+            sources_path = Path(self.sources_filepath).resolve()
+            with open(sources_path, "w", encoding="utf-8") as f:
+                json.dump(self.sources_data, f, separators=(',', ':'), ensure_ascii=False)
+
             # Auto-generate minified search index
             try:
                 from generate_search_index import generate_search_index
@@ -1306,15 +549,23 @@ class VideoIndex:
             except Exception as e:
                 print(f"  [!] Error generating search index: {e}")
         except Exception as e:
-            print(f"\n  [!] Error saving index to {self.filepath}: {e}")
+            print(f"\n  [!] Error saving index to {self.docs_dir}: {e}")
 
-    def add_video(self, video_id, section, source_page, thread_title=None, nickname=None, channel_url=None):
+    def add_video(self, video_id, section, source_page, thread_title=None, nickname=None, channel_url=None, target="video"):
         if video_id in self.actually_excluded_ids:
             # Skip only hard-blacklisted videos during scanning
             return
 
-        if video_id not in self.data:
-            self.data[video_id] = {
+        if target == "video":
+            data_store = self.data
+        else:
+            data_store = self.sources_data
+            # Don't add to sources if it already exists in video_index
+            if video_id in self.data:
+                return
+
+        if video_id not in data_store:
+            data_store[video_id] = {
                 "url": canonical_yt_url(video_id),
                 "title": None,
                 "description": None,
@@ -1332,7 +583,7 @@ class VideoIndex:
                 "local_file": None,
                 "mirrors": None,
             }
-        e = self.data[video_id]
+        e = data_store[video_id]
         if channel_url and not e.get("channel_url"):
             e["channel_url"] = channel_url
         if section not in e["sections"]:
@@ -1384,9 +635,10 @@ class VideoIndex:
     def set_metadata(self, video_id, title=None, description=None,
                      channel_name=None, channel_url=None,
                      publish_date=None, view_count=None, like_count=None, tags=None):
-        if video_id not in self.data:
+        # Look in both indices
+        e = self.data.get(video_id) or self.sources_data.get(video_id)
+        if not e:
             return
-        e = self.data[video_id]
         if title:
             e["title"] = title
         if description is not None:
@@ -1790,11 +1042,6 @@ def do_forum_scrape(index, site_dir):
         "Biografie YTP"
     }
     
-    src_path = os.path.join(index.docs_dir, "sources_index.json")
-    sources_data = {}
-    if os.path.exists(src_path):
-        with open(src_path, encoding="utf-8") as f:
-            sources_data = json.load(f)
 
     scanner = Scanner(site_dir)
     new_found_video = 0
@@ -1813,72 +1060,43 @@ def do_forum_scrape(index, site_dir):
                 parts = rel_file.split(os.sep)
                 section = parts[0] if len(parts) >= 1 else "Unknown"
                 
-                target = "video" if section in video_sections else "sources"
-                
                 # Thread title logic
                 if re.match(r'^page_\d+\.html$', fname):
                     parent = os.path.basename(os.path.dirname(fpath))
                     thread_title = thread_title_from_filename(parent)
                 else:
                     thread_title = thread_title_from_filename(fname)
-                    
+
+                target = get_target_index(thread_title)
+                
                 ids, nickname = scanner.scan_file(fpath)
                 
                 if ids:
-                    print(f"  [scan] {rel_file} → Found {len(ids)} video(s), sorting to {target}_index", flush=True)
+                    print(f"  [scan] {rel_file} → Found {len(ids)} video(s), routing by keywords...", flush=True)
                     for vid in ids:
                         total_links_found += 1
-                        if target == "video":
-                            was_new = vid not in index.data
-                            index.add_video(vid, section, rel_file, thread_title, nickname=nickname)
+                        
+                        # Use the centralized routing logic
+                        # During forum scan, we mostly rely on thread_title since video title isn't fetched yet
+                        video_target = target
+                        
+                        if video_target != "none":
+                            was_new = (vid not in index.data and vid not in index.sources_data)
+                            index.add_video(vid, section, rel_file, thread_title, nickname=nickname, target=video_target)
+                            
                             if was_new:
-                                new_found_video += 1
-                                print(f"    [Found] {vid} -> video_index", flush=True)
-                        else:
-                            # sources
-                            # Don't add to sources if it already exists in video_index
-                            if vid in index.data:
-                                continue
-                                
-                            if vid not in sources_data:
-                                sources_data[vid] = {
-                                    "url": canonical_yt_url(vid),
-                                    "title": None,
-                                    "description": None,
-                                    "channel_name": None,
-                                    "channel_url": None,
-                                    "publish_date": None,
-                                    "view_count": None,
-                                    "like_count": None,
-                                    "tags": [],
-                                    "nickname": nickname,
-                                    "sections": [section],
-                                    "source_pages": [rel_file],
-                                    "thread_titles": [thread_title] if thread_title else [],
-                                    "status": "pending",
-                                    "local_file": None,
-                                    "mirrors": None,
-                                }
-                                new_found_source += 1
-                                print(f"    [Found] {vid} -> sources_index", flush=True)
-                            else:
-                                e = sources_data[vid]
-                                if section not in e.get("sections", []):
-                                    e.setdefault("sections", []).append(section)
-                                if rel_file not in e.get("source_pages", []):
-                                    e.setdefault("source_pages", []).append(rel_file)
-                                if thread_title and thread_title not in e.get("thread_titles", []):
-                                    e.setdefault("thread_titles", []).append(thread_title)
+                                if video_target == "video":
+                                    new_found_video += 1
+                                    print(f"    [Found] {vid} -> video_index", flush=True)
+                                else:
+                                    new_found_source += 1
+                                    print(f"    [Found] {vid} -> sources_index", flush=True)
 
                 pages_scanned += 1
                 if pages_scanned % 50 == 0:
                     index.save()
-                    with open(src_path, "w", encoding="utf-8") as f:
-                        json.dump(sources_data, f, separators=(',', ':'), ensure_ascii=False)
 
     index.save()
-    with open(src_path, "w", encoding="utf-8") as f:
-        json.dump(sources_data, f, separators=(',', ':'), ensure_ascii=False)
         
     sync_ytpoopers_index(index)
     print(f"\n>>> Forum Scrape Complete. Scanned {pages_scanned} pages.")
@@ -1972,16 +1190,9 @@ def do_scrape_search(index):
     """Scrape videos based on YouTube searches."""
     print("\n--- YouTube Search Scraping ---")
     
-    # Strictly filter by these keywords as requested
-    base_keywords = ["YTPH", "YTPHSHORT", "YTPBR", "RYTP", "РУТП", "YTP", "YTPMV", "Youtube poop", "YT Poop"]
+    # Use keywords from the new YTP_KEYWORDS system as base
+    base_keywords = ["YTPH", "YTPHSHORT", "YTPBR", "YTPFR", "YTK", "Youtube poop", "YTP ITA", "YTM"]
     
-    # Create a regex for strict title filtering
-    # We use \b for word boundaries where appropriate, but some of these are acronyms
-    pattern_parts = [re.escape(kw) for kw in base_keywords]
-    # Handle "Youtube poop" and "YT Poop" specifically for spacing if needed, 
-    # but re.escape handles them literally which is fine.
-    strict_regex = re.compile(r'(?i)(' + '|'.join(pattern_parts) + r')')
-
     extra_keywords = input("Add extra keywords to the search (optional): ").strip()
     
     total_new = 0
@@ -2020,12 +1231,13 @@ def do_scrape_search(index):
                     if not vid:
                         continue
                         
-                    # 1. Ignore if already in video_index or sources_index
-                    if vid in index.data or vid in index.sources_ids:
+                    # 1. Ignore if already in video_index or sources_index or excluded
+                    if vid in index.data or vid in index.sources_data or vid in index.actually_excluded_ids:
                         continue
                     
-                    # 2. Strict title match
-                    if not strict_regex.search(title):
+                    # 2. Keyword routing logic
+                    target = get_target_index(title)
+                    if target == "none":
                         continue
                     
                     # 3. Add to index
@@ -2034,7 +1246,8 @@ def do_scrape_search(index):
                         section="Youtube", 
                         source_page="YouTube Search", 
                         thread_title=f"Search: {search_query}",
-                        channel_url=channel_url
+                        channel_url=channel_url,
+                        target=target
                     )
                     
                     # Set metadata if available
@@ -2045,7 +1258,7 @@ def do_scrape_search(index):
                         channel_url=channel_url
                     )
                     
-                    print(f"    [+] New match: {title} ({vid})")
+                    print(f"    [+] New {target} match: {title} ({vid})")
                     found_in_this_search += 1
                     total_new += 1
                     
@@ -2117,19 +1330,19 @@ def do_scrape_channels(index):
                         vid = d.get("id")
                         title = d.get("title", "")
                         
-                        # Match logic based on CHANNEL_KEYWORDS or NOCOLDIZ_BLACKLIST
-                        is_match = False
+                        # Match logic based on get_target_index or NOCOLDIZ_BLACKLIST
+                        target = "none"
                         if nocoldiz:
                             if not NOCOLDIZ_BLACKLIST.search(title):
-                                is_match = True
-                        elif CHANNEL_KEYWORDS.search(title):
-                            is_match = True
+                                target = "video"
+                        else:
+                            target = get_target_index(title)
 
                         # If it matches and is not already in the index (and not excluded), log and add it
-                        if is_match and vid and vid not in index.data and vid not in index.excluded_ids:
+                        if target != "none" and vid and vid not in index.data and vid not in index.sources_data and vid not in index.actually_excluded_ids:
                             clear_line()
-                            print(f"    [+] New keyword match found: {title} ({vid})")
-                            index.add_video(vid, "Scraped Channel", videos_url, title)
+                            print(f"    [+] New {target} match found: {title} ({vid})")
+                            index.add_video(vid, "Scraped Channel", videos_url, title, target=target)
                             index.set_metadata(vid, title=title, channel_url=ch_url)
                             new_total += 1
                             
@@ -2268,7 +1481,7 @@ def do_download_italian(index, video_dir, yt_format, rate_limit, retry_failed, y
     def is_italian(e):
         # Must match keywords
         title = e.get("title") or ""
-        if not CHANNEL_KEYWORDS.search(title):
+        if not YTP_KEYWORDS.search(title):
             return False
 
         secs = e.get("sections", [])
