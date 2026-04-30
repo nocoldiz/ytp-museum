@@ -34,6 +34,7 @@ GERMAN_CHANNELS = [
 ]
 
 ITALIAN_CHANNELS = [
+    "https://www.youtube.com/user/ComiCartoons",
     "https://www.youtube.com/@00ItalianStyle00",
     "https://www.youtube.com/@100GameReaperYTP",
     "https://www.youtube.com/@125Replay",

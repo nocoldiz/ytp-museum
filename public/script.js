@@ -2055,6 +2055,7 @@ let sortDir = 1;
 let scrollObserver = null;
 let viewMode = 'table';
 let searchViewMode = 'list';
+let showVideoEmbed = false;
 
 function setViewMode(mode) {
   viewMode = mode;
@@ -2117,6 +2118,8 @@ function applyFilters() {
   
   const hideEmpty = document.getElementById('filter-hide-empty') ? document.getElementById('filter-hide-empty').checked : false;
   const excludeYTP = document.getElementById('filter-exclude-ytp') ? document.getElementById('filter-exclude-ytp').checked : false;
+  showVideoEmbed = document.getElementById('filter-show-embed') ? document.getElementById('filter-show-embed').checked : false;
+  
   const ytpRegex = /YTP|YTPMV|Collab|Youtube\s+poop|YT\s+Poop|Poop|Speciale '|YTPFR|YTP\s+FR| |YTPH|YTPHSHORT|YTPBR| '|RYTP|РУТП|Поцык|Повар|Сашко|Гамаз|Пенек\) |YTM|YTG|MLG|YTK| Dinner | The king | Harkinian | Impa | Gwonam/i;
 
   // Apply global year limit
@@ -2138,7 +2141,11 @@ function applyFilters() {
   // Apply hard filters
   scored = scored.filter(({ video: v }) => {
     if (hideEmpty && !v.title && !v.view_count && !v.publish_date) return false;
-    if (excludeYTP && v.title && ytpRegex.test(v.title)) return false;
+    
+    // Exclude YTP keywords also excludes entries with no title
+    if (excludeYTP) {
+        if (!v.title || ytpRegex.test(v.title)) return false;
+    }
 
     if (status && v.status !== status) return false;
     if (section && !(v.sections || []).includes(section)) return false;
@@ -2227,6 +2234,21 @@ function setupScrollObserver() {
   scrollObserver.observe(sentinel);
 }
 
+function getEmbedHtml(v) {
+    const isDownloaded = v.status === 'downloaded' && v.local_file;
+    if (isDownloaded) {
+        const localPath = getLocalVideoPath(v);
+        return `<video controls preload="metadata" style="width:240px; aspect-ratio:16/9; display:block; margin-top:8px; border-radius:4px; background:#000;">
+            <source src="${localPath}" type="video/mp4">
+            Your browser does not support the video tag.
+        </video>`;
+    } else {
+        return `<iframe src="https://www.youtube-nocookie.com/embed/${v.id}" 
+            style="width:240px; aspect-ratio:16/9; display:block; margin-top:8px; border-radius:4px; border:none;" 
+            allowfullscreen></iframe>`;
+    }
+}
+
 function renderTable(append = false) {
   const tbody = document.getElementById('video-tbody');
   const grid = document.getElementById('video-grid');
@@ -2250,9 +2272,14 @@ function renderTable(append = false) {
 
       // Determine the title to display, falling back to the first thread title if v.title is missing
       const fallbackTitle = (v.thread_titles && v.thread_titles[0]) ? v.thread_titles[0] : null;
-      const titleContent = v.title
+      let titleContent = v.title
         ? `<a href="watch?v=${v.id}" onclick="event.preventDefault(); openVideo('${v.id}')">${escHtml(v.title)}</a>`
         : (fallbackTitle ? `<a href="watch?v=${v.id}" onclick="event.preventDefault(); openVideo('${v.id}')"><em>${escHtml(fallbackTitle)}</em></a>` : `<span class="vid-id">${v.id}</span>`);
+
+      // Add embed if requested
+      if (showVideoEmbed) {
+          titleContent += getEmbedHtml(v);
+      }
 
       const playAction = (v.status === 'downloaded' && v.local_file)
         ? `<a class="btn-play" href="${getLocalVideoPath(v)}" target="_blank" title="Play local file">▶</a>`

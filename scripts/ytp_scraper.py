@@ -40,6 +40,7 @@ DISALLOWED_CHANNELS = ["Yotobi", "Croix89","animorphy","Beeeerdman","foreverKirb
     #"https://www.youtube.com/@NocoldizTV",
 
 ITALIAN_CHANNELS = [
+    "https://www.youtube.com/user/ComiCartoons",
     "https://www.youtube.com/@100GameReaperYTP",
     "https://www.youtube.com/@125Replay",
     "https://www.youtube.com/@21stCenturyShy",
@@ -1879,6 +1880,7 @@ def do_forum_scrape(index, site_dir):
     with open(src_path, "w", encoding="utf-8") as f:
         json.dump(sources_data, f, separators=(',', ':'), ensure_ascii=False)
         
+    sync_ytpoopers_index(index)
     print(f"\n>>> Forum Scrape Complete. Scanned {pages_scanned} pages.")
     print(f"    Added {new_found_video} new videos to video_index.")
     print(f"    Added {new_found_source} new videos to sources_index.")
@@ -1966,6 +1968,108 @@ def do_download(index, video_dir, yt_format, rate_limit, retry_failed):
     print(f"  Index:       {os.path.abspath(index.filepath)}")
 
 
+def do_scrape_search(index):
+    """Scrape videos based on YouTube searches."""
+    print("\n--- YouTube Search Scraping ---")
+    
+    # Strictly filter by these keywords as requested
+    base_keywords = ["YTPH", "YTPHSHORT", "YTPBR", "RYTP", "РУТП", "YTP", "YTPMV", "Youtube poop", "YT Poop"]
+    
+    # Create a regex for strict title filtering
+    # We use \b for word boundaries where appropriate, but some of these are acronyms
+    pattern_parts = [re.escape(kw) for kw in base_keywords]
+    # Handle "Youtube poop" and "YT Poop" specifically for spacing if needed, 
+    # but re.escape handles them literally which is fine.
+    strict_regex = re.compile(r'(?i)(' + '|'.join(pattern_parts) + r')')
+
+    extra_keywords = input("Add extra keywords to the search (optional): ").strip()
+    
+    total_new = 0
+    
+    for kw in base_keywords:
+        search_query = kw
+        if extra_keywords:
+            search_query += f" {extra_keywords}"
+            
+        print(f"\n  Searching for: {search_query}")
+        
+        try:
+            # ytsearch50 gets top 50 results
+            r = subprocess.run(
+                ["yt-dlp", f"ytsearch50:{search_query}", "--flat-playlist", "--dump-json", 
+                 "--no-warnings", "--socket-timeout", "20"],
+                capture_output=True, text=True, timeout=180,
+            )
+            
+            lines = r.stdout.splitlines()
+            if not lines:
+                print("    No results found.")
+                continue
+                
+            found_in_this_search = 0
+            for line in lines:
+                if not line.strip().startswith("{"):
+                    continue
+                try:
+                    d = json.loads(line)
+                    vid = d.get("id")
+                    title = d.get("title") or ""
+                    uploader = d.get("uploader")
+                    channel_url = d.get("channel_url")
+                    
+                    if not vid:
+                        continue
+                        
+                    # 1. Ignore if already in video_index or sources_index
+                    if vid in index.data or vid in index.sources_ids:
+                        continue
+                    
+                    # 2. Strict title match
+                    if not strict_regex.search(title):
+                        continue
+                    
+                    # 3. Add to index
+                    index.add_video(
+                        vid, 
+                        section="Youtube", 
+                        source_page="YouTube Search", 
+                        thread_title=f"Search: {search_query}",
+                        channel_url=channel_url
+                    )
+                    
+                    # Set metadata if available
+                    index.set_metadata(
+                        vid,
+                        title=title,
+                        channel_name=uploader,
+                        channel_url=channel_url
+                    )
+                    
+                    print(f"    [+] New match: {title} ({vid})")
+                    found_in_this_search += 1
+                    total_new += 1
+                    
+                except json.JSONDecodeError:
+                    continue
+            
+            if found_in_this_search > 0:
+                print(f"    Added {found_in_this_search} new videos from this search.")
+            else:
+                print("    No new matching videos found in this search.")
+                
+        except subprocess.TimeoutExpired:
+            print("    [!] Search timed out.")
+        except Exception as e:
+            print(f"    [!] Error during search: {e}")
+
+    if total_new > 0:
+        index.save()
+        sync_ytpoopers_index(index)
+        print(f"\n--- Done. Added {total_new} total new videos to index. ---")
+    else:
+        print("\n--- Done. No new videos added. ---")
+
+
 def do_scrape_channels(index):
     """Scans channels from docs/channels_to_scrape.txt for new YTP videos matching keywords and logs details with a progress bar."""
     
@@ -2048,6 +2152,7 @@ def do_scrape_channels(index):
     # Save all new entries to the index
     if new_total > 0:
         index.save()
+        sync_ytpoopers_index(index)
         
     print(f"\n  Finished scraping channels. Added {new_total} new videos to the index.")
 def do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, limit_channels=None, language_filter=None):
@@ -2582,6 +2687,66 @@ def do_find_mirrors(index):
     print(f"  Mirror data stored in 'mirrors' field of video_index.json.")
 
 
+def sync_ytpoopers_index(index):
+    """Ensures every channel found in video_index.json and sources_index.json is present in ytpoopers_index.json."""
+    docs_dir = index.docs_dir
+    poopers_path = os.path.join(docs_dir, "ytpoopers_index.json")
+    sources_path = os.path.join(docs_dir, "sources_index.json")
+    
+    poopers_data = {}
+    if os.path.exists(poopers_path):
+        try:
+            with open(poopers_path, "r", encoding="utf-8") as f:
+                poopers_data = json.load(f)
+        except Exception as e:
+            print(f"  [!] Error loading {poopers_path}: {e}")
+            poopers_data = {}
+
+    changes = False
+    
+    # Indices to check
+    indices_to_check = [index.data] # video_index.json
+    if os.path.exists(sources_path):
+        try:
+            with open(sources_path, "r", encoding="utf-8") as f:
+                src_data = json.load(f)
+                if isinstance(src_data, dict):
+                    indices_to_check.append(src_data)
+        except Exception as e:
+            print(f"  [!] Error reading sources_index.json: {e}")
+
+    for d in indices_to_check:
+        for vid_id, entry in d.items():
+            ch_url = entry.get("channel_url")
+            ch_name = entry.get("channel_name")
+            if not ch_url:
+                continue
+            
+            if ch_url not in poopers_data:
+                poopers_data[ch_url] = {
+                    "channel_name": ch_name,
+                    "channel_url": ch_url,
+                    "alias": [],
+                    "description": None,
+                    "subscriber_count": None,
+                    "creation_date": None,
+                    "thumbnail": None,
+                }
+                changes = True
+            elif ch_name and not poopers_data[ch_url].get("channel_name"):
+                # Update name if it was missing in the poopers index
+                poopers_data[ch_url]["channel_name"] = ch_name
+                changes = True
+                
+    if changes:
+        try:
+            with open(poopers_path, "w", encoding="utf-8") as f:
+                json.dump(poopers_data, f, separators=(',', ':'), ensure_ascii=False)
+            print(f"  [sync] Updated ytpoopers_index.json with new channels.")
+        except Exception as e:
+            print(f"  [!] Error saving {poopers_path}: {e}")
+
+
 def do_scrape_thumbnails(index, docs_dir):
     import requests
     from bs4 import BeautifulSoup
@@ -2606,47 +2771,16 @@ def do_scrape_thumbnails(index, docs_dir):
     
     changes_made = False
 
-    # 1. Collect unique channels from both video_index.json and sources_index.json
-    print("  Syncing channels from indices...")
-    indices_to_sync = [index.data] # video_index.json
+    # 1. Sync channels from both indices
+    sync_ytpoopers_index(index)
     
-    src_path = os.path.join(docs_dir, "sources_index.json")
-    if os.path.exists(src_path):
+    # Reload data for processing
+    if os.path.exists(input_file):
         try:
-            with open(src_path, "r", encoding="utf-8") as f:
-                src_data = json.load(f)
-                if isinstance(src_data, dict):
-                    indices_to_sync.append(src_data)
-        except Exception as e:
-            print(f"  [!] Error reading sources_index.json: {e}")
-
-    for data_dict in indices_to_sync:
-        for e in data_dict.values():
-            ch_url = e.get("channel_url")
-            ch_name = e.get("channel_name")
-            if not ch_url:
-                continue
-            
-            if ch_url not in youtubers_data:
-                youtubers_data[ch_url] = {
-                    "channel_name": ch_name,
-                    "channel_url": ch_url,
-                    "description": None,
-                    "subscriber_count": None,
-                    "creation_date": None,
-                    "thumbnail": None,
-                }
-                changes_made = True
-            elif ch_name and not youtubers_data[ch_url].get("channel_name"):
-                # Update name if it was missing in the poopers index
-                youtubers_data[ch_url]["channel_name"] = ch_name
-                changes_made = True
-
-    if changes_made:
-        print(f"  [+] Updated ytpoopers_index.json with new channels.")
-        with open(input_file, "w", encoding="utf-8") as f:
-            json.dump(youtubers_data, f, separators=(',', ':'), ensure_ascii=False)
-        changes_made = False # Reset for thumbnail tracking
+            with open(input_file, "r", encoding="utf-8") as f:
+                youtubers_data = json.load(f)
+        except Exception:
+            pass
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
@@ -2857,19 +2991,9 @@ def do_scrape_profiles(index, docs_dir):
         print("  Index is empty. Run 'Update index' first.")
         return
 
-    # Collect unique channels from the index
-    channel_map = {}  # channel_url -> channel_name
-    for e in index.data.values():
-        ch_url = e.get("channel_url")
-        ch_name = e.get("channel_name")
-        if ch_url and ch_name and ch_url not in channel_map:
-            channel_map[ch_url] = ch_name
-
-    if not channel_map:
-        print("  No channels with URLs found in the index.")
-        return
-
-    # Load existing data to allow incremental updates
+    # Sync and load existing data
+    sync_ytpoopers_index(index)
+    
     output_path = os.path.join(docs_dir, "ytpoopers_index.json")
     existing = {}
     if os.path.exists(output_path):
@@ -2879,24 +3003,13 @@ def do_scrape_profiles(index, docs_dir):
         except Exception:
             existing = {}
 
-    # Initial population: ensure every channel in index is in ytpoopers_index.json
-    added_new = False
-    for ch_url, ch_name in channel_map.items():
-        if ch_url not in existing:
-            existing[ch_url] = {
-                "channel_name": ch_name,
-                "channel_url": ch_url,
-                "description": None,
-                "subscriber_count": None,
-                "creation_date": None,
-                "thumbnail": None,
-            }
-            added_new = True
-    
-    if added_new:
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(existing, f, separators=(',', ':'), ensure_ascii=False)
-        print(f"  Updated {output_path} with new channels from index.")
+    # Map for processing loop (needs both existing and current index)
+    channel_map = {}
+    for e in index.data.values():
+        ch_url = e.get("channel_url")
+        ch_name = e.get("channel_name")
+        if ch_url and ch_url not in channel_map:
+            channel_map[ch_url] = ch_name or existing.get(ch_url, {}).get("channel_name")
 
     thumb_dir = os.path.join(docs_dir, "profile_thumbnails")
     os.makedirs(thumb_dir, exist_ok=True)
@@ -3332,6 +3445,9 @@ def main():
     print("  9  Stats  →  stats.md")
     print("       Section & channel breakdown (sources_index.json only).")
     print()
+    print("  10 YouTube Search Scraping")
+    print("       Scrape videos based on YouTube searches.")
+    print()
     print("  f  Forum Scrape")
     print("       Analyze every folder in site_mirror to find YouTube videos.")
     print()
@@ -3346,8 +3462,8 @@ def main():
     print()
     print("  q  Quit")
     print()
-    choice = ask("  Choice [1-9/f/s/d/a/q]: ",
-                 {"1","2","3","4","5","6","7","8","9","f","s","d","a","q"})
+    choice = ask("  Choice [1-10/f/s/d/a/q]: ",
+                 {"1","2","3","4","5","6","7","8","9","10","f","s","d","a","q"})
 
     if choice == "q":
         sys.exit(0)
@@ -3435,6 +3551,9 @@ def main():
     if choice == "9":
         do_stats(index)
         index.cleanup_index()
+
+    if choice == "10":
+        do_scrape_search(index)
 
     if choice == "f":
         do_forum_scrape(index, args.site_dir)
