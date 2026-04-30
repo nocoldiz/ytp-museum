@@ -116,8 +116,8 @@ import re
 YTP_KEYWORDS_LIST = [
     r'YTP(?:H|HSHORT|BR|FR|ITA|PL|RU|ES|PT|RO|GR|NL|HU|JP)?',
     r'YTPV', r'YTPMV(?:\s+ITA|BR|RU|PL)?',
-    r'san\'itario', r's\.itario', r's\.antonino',
-    r'catena\s+di', r'CATENA\s+S\.\s+ANTONIO',
+    r'san\'itario', r's\.itario', r's\.antonino',r'Reuploaded',
+    r'catena\s+di', r'CATENA\s+S\.\s+ANTONIO',r'Reupload',
     r'Shitstorm\s+Pt\.', r'Otomad', r'音MAD', r'MAD\s+Movie', r'YTPM',
     r'YTP\s+(?:Tennis|Soccer|Ping\s+pong)', r'YTP(?:Tennis|Soccer|Pingpong)',
     r'RYTP', r'STP', r'Pytp', r'YouTube\s+Kacke', r'YouTube\s+Kaka',
@@ -212,6 +212,9 @@ def get_target_index(title):
         return "sources"
     return "none"
 
+RESTRICTED_ITALIAN_KEYWORDS = re.compile(
+    r'(?i)(Youtube poop ita|You tube poop ita|YTP ITA|Youtube merda|YTM|S\.Itario|Shitstorm pt\.)'
+)
 
 NON_YTP_KEYWORDS = re.compile(
     r'(?i)('
@@ -323,7 +326,32 @@ def clear_line():
     cols = shutil.get_terminal_size((80, 24)).columns
     print("\r" + " " * cols + "\r", end="", flush=True)
 
-def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, channels_list, language, year_limit=None, skip_scan=False):
+def find_video_on_disk(video_id, search_dirs):
+    """
+    Recursively search search_dirs for files like * [ID].mp4 or * - ID.mp4.
+    Returns the path to the first matching file, or None.
+    """
+    patterns = [
+        f"* [{video_id}].*",
+        f"* - {video_id}.*",
+        f"{video_id}.*"
+    ]
+    
+    for s_dir in search_dirs:
+        s_path = Path(s_dir)
+        if not s_path.exists():
+            continue
+            
+        for pattern in patterns:
+            # Use rglob for recursive search
+            for match in s_path.rglob(pattern):
+                # Avoid matching thumbnails
+                if match.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".json"}:
+                    continue
+                return str(match)
+    return None
+
+def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, channels_list, language, year_limit=None, skip_scan=False, restricted_mode=False):
     # Check if the skip flag is True before doing anything else
     if skip_scan:
         print(f"\n>>> Skipping Language Scan as requested.")
@@ -347,6 +375,10 @@ def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, 
 
                 # Keyword Match Check
                 target = get_target_index(v_title)
+                
+                if restricted_mode and not RESTRICTED_ITALIAN_KEYWORDS.search(v_title):
+                    target = "none"
+                    
                 if target != "none":
                     if v_id not in index.data and v_id not in index.sources_data and v_id not in index.actually_excluded_ids:
                         index.add_video(
@@ -547,7 +579,53 @@ class VideoIndex:
         if os.path.exists(self.sources_filepath):
             with open(self.sources_filepath, encoding="utf-8") as f:
                 self.sources_data = json.load(f)
+        
+        # Enhanced Skipping Logic: Verify disk existence for pending videos
+        self.check_disk_existence()
+        
         self.cleanup_index()
+
+    def check_disk_existence(self):
+        """Checks if pending videos exist on disk and updates their status."""
+        search_dirs = [DEFAULT_VIDEO_DIR, DEFAULT_SOURCES_DIR]
+        
+        pending_ids = [vid for vid, e in self.data.items() if e.get("status") == "pending"]
+        pending_sources = [vid for vid, e in self.sources_data.items() if e.get("status") == "pending"]
+        
+        checked = 0
+        found = 0
+        
+        total_to_check = len(pending_ids) + len(pending_sources)
+        if total_to_check > 0:
+            print(f"  [Disk Check] Verifying existence for {total_to_check} pending videos...")
+            
+        for vid in pending_ids:
+            path = find_video_on_disk(vid, search_dirs)
+            if path:
+                rel = os.path.relpath(path, ".")
+                self.set_downloaded(vid, rel)
+                found += 1
+            checked += 1
+            if checked % 100 == 0:
+                print(f"\r    Checked {checked}/{total_to_check}...", end="", flush=True)
+
+        for vid in pending_sources:
+            path = find_video_on_disk(vid, search_dirs)
+            if path:
+                rel = os.path.relpath(path, ".")
+                # Update sources_data directly as set_downloaded works on self.data
+                self.sources_data[vid]["status"] = "downloaded"
+                self.sources_data[vid]["local_file"] = rel
+                found += 1
+            checked += 1
+            if checked % 100 == 0:
+                print(f"\r    Checked {checked}/{total_to_check}...", end="", flush=True)
+                
+        if total_to_check > 0:
+            clear_line()
+            print(f"  [Disk Check] Found {found} videos already on disk.")
+            if found > 0:
+                self.save()
 
     def cleanup_index(self):
         """
@@ -1007,6 +1085,9 @@ def download_video(video_id, output_dir, yt_format, rate_limit,
         if is_exists:
             return "exists", local_file, title
         if proc.returncode == 0:
+            if not local_file:
+                # Fallback check if --print didn't work as expected
+                local_file = find_video_on_disk(video_id, [output_dir])
             return "ok", local_file, title
 
         return "error", None, None
@@ -2771,6 +2852,89 @@ def do_full_download_parallel():
     
     print("\n>>> All processes launched.")
 
+def do_download_parallel_internal(index, video_dir, yt_format, rate_limit, workers=4, no_db_update=False):
+    """
+    Internal parallel download logic using ThreadPoolExecutor.
+    Downloads and then immediately calls compress_videos.process_video.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import compress_videos
+
+    pending = index.pending()
+    if not pending:
+        print("  Nothing to download.")
+        return
+
+    total = len(pending)
+    print(f"\n>>> Starting Parallel Download ({workers} workers, no_db_update={no_db_update})")
+    print(f"    Target: {total} videos\n")
+
+    def download_worker(vid):
+        try:
+            e = index.data[vid]
+            ch_name = e.get("channel_name")
+            folder_name = safe_filename(ch_name) if ch_name else "Unknown Channel"
+            out_dir = os.path.join(video_dir, folder_name)
+
+            # 1. Download
+            status, local_file, dl_title = download_video(
+                vid, out_dir, yt_format, rate_limit, 0, 0 # Progress handled elsewhere
+            )
+
+            if status in ("ok", "exists"):
+                # 2. Compress
+                if local_file and os.path.exists(local_file):
+                    print(f"    [Compressing] {os.path.basename(local_file)}")
+                    compressed_path = compress_videos.process_video(local_file)
+                    local_file = str(compressed_path)
+
+                # 3. Update DB
+                if not no_db_update:
+                    rel = os.path.relpath(local_file, ".") if local_file else None
+                    index.set_downloaded(vid, rel, dl_title)
+                    return "ok", vid
+                return "ok_no_db", vid
+            elif status == "unavailable":
+                if not no_db_update:
+                    index.set_unavailable(vid)
+                return "unavailable", vid
+            else:
+                if not no_db_update:
+                    index.set_failed(vid)
+                return "error", vid
+        except Exception as ex:
+            print(f"    [!] Error in worker for {vid}: {ex}")
+            return "error", vid
+
+    ok_count = 0
+    err_count = 0
+    unavail_count = 0
+    
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(download_worker, vid): vid for vid in pending}
+        
+        for i, future in enumerate(as_completed(futures), 1):
+            res_status, vid = future.result()
+            if res_status in ("ok", "ok_no_db"):
+                ok_count += 1
+            elif res_status == "unavailable":
+                unavail_count += 1
+            else:
+                err_count += 1
+            
+            if i % 5 == 0 or i == total:
+                print(f"    Progress: {i}/{total} (OK: {ok_count}, Fail: {err_count}, Unavail: {unavail_count})")
+                if not no_db_update:
+                    index.save()
+
+    if not no_db_update:
+        index.save()
+    
+    print("\n>>> Parallel download complete.")
+    print(f"    Succeeded:   {ok_count}")
+    print(f"    Failed:      {err_count}")
+    print(f"    Unavailable: {unavail_count}")
+
 
 # ── Menu helpers ──────────────────────────────────────────────────────────────
 
@@ -2836,6 +3000,10 @@ def main():
                    help="Analyze every folder in site_mirror and sort videos")
     p.add_argument("--year-limit",      type=int, default=2016,
                    help="Limit downloads to videos published until this year (for language mode)")
+    p.add_argument("--no-db-update",    action="store_true",
+                   help="Do not update the JSON database with download status")
+    p.add_argument("--workers",         type=int, default=4,
+                   help="Number of parallel workers for downloading")
     args, _ = p.parse_known_args()
 
     if not os.path.isdir(args.site_dir):
@@ -2917,13 +3085,16 @@ def main():
     print("  d  Full Download (Parallel Processing)")
     print("       Parallel: Italian YTPs, comments, and video compression.")
     print()
+    print("  p  Internal Parallel Download & Compression")
+    print("       Use ThreadPoolExecutor for fast downloads + automatic compression.")
+    print()
     print("  a  Full Automation (Scrape + Download)")
     print("       The works: Run Full Scrape Cycle followed by Full Download.")
     print()
     print("  q  Quit")
     print()
-    choice = ask("  Choice [1-11/f/s/d/a/q]: ",
-                 {"1","2","3","4","5","6","7","8","9","10","11","f","s","d","a","q"})
+    choice = ask("  Choice [1-11/f/s/d/p/a/q]: ",
+                 {"1","2","3","4","5","6","7","8","9","10","11","f","s","d","p","a","q"})
 
     if choice == "q":
         sys.exit(0)
@@ -2966,12 +3137,14 @@ def main():
         print("4. German")
         print("5. French")
         print("6. Russian")
-        lang_choice = input("Language Choice [1-6]: ").strip()
+        print("7. Restricted Italian (Strict Keywords)")
+        lang_choice = input("Language Choice [1-7]: ").strip()
         skip_input = input("Skip the scan? (y/n): ").strip().lower()
         should_skip = skip_input == 'y'
         
         selected_list = []
         lang_name = None
+        restricted = False
         if lang_choice == "1": 
             selected_list = ITALIAN_CHANNELS
             lang_name = "italian"
@@ -2990,9 +3163,13 @@ def main():
         elif lang_choice == "6": 
             selected_list = RUSSIAN_CHANNELS
             lang_name = "russian"
+        elif lang_choice == "7":
+            selected_list = ITALIAN_CHANNELS
+            lang_name = "italian"
+            restricted = True
         
         if lang_name:
-            do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, selected_list, lang_name, year_limit=args.year_limit, skip_scan=should_skip)
+            do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, selected_list, lang_name, year_limit=args.year_limit, skip_scan=should_skip, restricted_mode=restricted)
         else:
             print("Invalid language selection.")
 
@@ -3026,6 +3203,9 @@ def main():
 
     if choice == "d":
         do_full_download_parallel()
+
+    if choice == "p":
+        do_download_parallel_internal(index, args.video_dir, args.format, args.rate_limit, workers=args.workers, no_db_update=args.no_db_update)
 
     if choice == "a":
         do_full_scrape_run(index, args)
