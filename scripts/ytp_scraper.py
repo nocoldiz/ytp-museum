@@ -992,6 +992,18 @@ class VideoIndex:
             # Skip only hard-blacklisted videos during scanning
             return
 
+        # Check if video exists in ANY of the stores
+        # If it exists in a different store than 'target', we skip adding it to honor the "no duplicates" rule
+        existing_store = None
+        if video_id in self.data: existing_store = "video"
+        elif video_id in self.ytpmv_data: existing_store = "ytpmv"
+        elif video_id in self.collabs_data: existing_store = "collabs"
+        elif video_id in self.sources_data: existing_store = "sources"
+
+        if existing_store and existing_store != target:
+            # Already exists in another database, skip
+            return
+
         if target == "video":
             data_store = self.data
         elif target == "ytpmv":
@@ -1000,7 +1012,7 @@ class VideoIndex:
             data_store = self.collabs_data
         else:
             data_store = self.sources_data
-            # Don't add to sources if it already exists in other main indices
+            # Don't add to sources if it already exists in other main indices (Redundant but safe)
             if video_id in self.data or video_id in self.ytpmv_data or video_id in self.collabs_data:
                 return
 
@@ -1259,7 +1271,7 @@ class Scanner:
                 target = get_target_index(thread_title)
                 if target != "none":
                     for vid in ids:
-                        was_new = vid not in index.data and vid not in index.sources_data
+                        was_new = not index.is_indexed(vid)
                         index.add_video(vid, sec, rel, thread_title, nickname=nickname, target=target)
                         if was_new:
                             new_found += 1
