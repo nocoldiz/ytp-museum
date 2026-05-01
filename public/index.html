@@ -12,7 +12,7 @@
 
 <body class="theme-old theme-light">
   <script>
-    (function() {
+    (function () {
       const mode = localStorage.getItem('lastThemeMode') || 'old';
       const dark = localStorage.getItem('ytp-theme-dark') === 'true';
       if (mode === 'modern') document.body.classList.remove('theme-old');
@@ -134,9 +134,12 @@
         <div id="theme-toggles-modern" class="sidebar-section theme-modern-only" style="margin-top: auto;">
           <div class="sidebar-divider"></div>
           <div class="sidebar-header">Settings</div>
-          
+
           <div class="nav-tab setting-tab">
-            <svg class="nav-icon" viewBox="0 0 24 24"><path d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z"/></svg>
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path
+                d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z" />
+            </svg>
             <div class="setting-content">
               <label>Year Limit</label>
               <select id="modern-global-year-selector" onchange="setGlobalMaxYear(this.value)"></select>
@@ -144,7 +147,10 @@
           </div>
 
           <div class="nav-tab setting-tab">
-            <svg class="nav-icon" viewBox="0 0 24 24"><path d="M19 12h-2v3h-3v2h5v-5zM7 9h3V7H5v5h2V9zm14-6H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/></svg>
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path
+                d="M19 12h-2v3h-3v2h5v-5zM7 9h3V7H5v5h2V9zm14-6H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z" />
+            </svg>
             <div class="setting-content">
               <label>Aspect Ratio</label>
               <select class="aspect-ratio-selector" onchange="setAspectRatio(this.value)">
@@ -155,22 +161,34 @@
           </div>
 
           <a href="#" class="nav-tab btn-video-mode" onclick="toggleVideoMode(); return false;">
-            <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path
+                d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z" />
+            </svg>
             <span>Show all videos</span>
           </a>
 
           <a href="http://localhost:3001" target="_blank" class="nav-tab">
-            <svg class="nav-icon" viewBox="0 0 24 24"><path d="M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z"/></svg>
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path
+                d="M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z" />
+            </svg>
             <span>YTP Forum</span>
           </a>
 
           <a href="#" class="nav-tab" onclick="toggleThemeMode(); return false;">
-            <svg class="nav-icon" viewBox="0 0 24 24"><path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/></svg>
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path
+                d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z" />
+            </svg>
             <span>Switch to Old Mode</span>
           </a>
 
           <a href="#" class="nav-tab" onclick="toggleNightDay(); return false;">
-            <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z"/></svg>
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path
+                d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z" />
+            </svg>
             <span>Night Mode</span>
           </a>
         </div>
@@ -189,6 +207,11 @@
               <div class="yt-tab-bar">
                 <a href="#" class="yt-tab active" onclick="setFeaturedTab('featured');return false;">Random</a>
                 <span class="yt-tab-sep">|</span>
+                <a href="#" class="yt-tab" onclick="setFeaturedTab('ytpmv');return false;">YTPMV</a>
+                <span class="yt-tab-sep">|</span>
+                <a href="#" class="yt-tab" onclick="setFeaturedTab('acid');return false;">Acid Poop</a>
+                <span class="yt-tab-sep">|</span>
+
                 <a href="#" class="yt-tab" onclick="setFeaturedTab('subscribed');return false;">Subscribed</a>
                 <span class="yt-tab-sep">|</span>
                 <a href="#" class="yt-tab" onclick="setFeaturedTab('views');return false;">Most Viewed</a>
@@ -215,6 +238,8 @@
             <button class="chip" onclick="setModernHomeTab('views', this)">Most Viewed</button>
             <button class="chip" onclick="setModernHomeTab('discussed', this)">Most Discussed</button>
             <button class="chip" onclick="setModernHomeTab('favorited', this)">Top Favorited</button>
+            <button class="chip" onclick="setModernHomeTab('ytpmv', this)">YTPMV</button>
+            <button class="chip" onclick="setModernHomeTab('acid', this)">Acid Poop</button>
           </div>
           <div id="modern-videos-grid"></div>
         </div>
@@ -256,8 +281,10 @@
             </div>
             <div id="watch-description"></div>
             <div id="watch-actions" style="margin-top: 10px; display: flex; flex-direction: column; gap: 8px;">
-              <button id="btn-save-video" class="btn-thread" style="width: 100%; padding: 10px; font-weight: bold;">Save Video</button>
-              <button id="btn-add-to-playlist" class="btn-thread" style="width: 100%; padding: 10px; font-weight: bold;" onclick="openAddToPlaylistModal()">Add to Playlist</button>
+              <button id="btn-save-video" class="btn-thread" style="width: 100%; padding: 10px; font-weight: bold;">Save
+                Video</button>
+              <button id="btn-add-to-playlist" class="btn-thread" style="width: 100%; padding: 10px; font-weight: bold;"
+                onclick="openAddToPlaylistModal()">Add to Playlist</button>
             </div>
             <div class="box" style="margin-top: 15px;">
               <div class="box-header">More From This Channel</div>
@@ -309,8 +336,10 @@
           <div class="search-title">Search Results for "<span id="search-query-display"></span>"</div>
           <div style="display:flex; align-items:center; gap:12px;">
             <div class="view-toggle" style="margin-right: 8px;">
-              <button id="btn-search-view-list" class="view-btn active" onclick="setSearchViewMode('list')" title="List View">≡</button>
-              <button id="btn-search-view-grid" class="view-btn" onclick="setSearchViewMode('grid')" title="Grid View">⊞</button>
+              <button id="btn-search-view-list" class="view-btn active" onclick="setSearchViewMode('list')"
+                title="List View">≡</button>
+              <button id="btn-search-view-grid" class="view-btn" onclick="setSearchViewMode('grid')"
+                title="Grid View">⊞</button>
             </div>
             <button class="filters-toggle-btn" onclick="toggleFilters()">
               <svg viewBox="0 0 24 24" style="width:20px; height:20px; fill:currentColor;">
@@ -378,23 +407,31 @@
             <div class="filter-group-modern" style="margin-left: 15px;">
               <label>View</label>
               <div class="view-toggle">
-                <button id="btn-search-view-list-old" class="view-btn active" onclick="setSearchViewMode('list')" title="List View">≡</button>
-                <button id="btn-search-view-grid-old" class="view-btn" onclick="setSearchViewMode('grid')" title="Grid View">⊞</button>
+                <button id="btn-search-view-list-old" class="view-btn active" onclick="setSearchViewMode('list')"
+                  title="List View">≡</button>
+                <button id="btn-search-view-grid-old" class="view-btn" onclick="setSearchViewMode('grid')"
+                  title="Grid View">⊞</button>
               </div>
             </div>
           </div>
 
           <div id="search-channels-section" style="display:none;">
-            <h3 class="theme-old-only" style="margin-bottom: 15px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Channels</h3>
+            <h3 class="theme-old-only"
+              style="margin-bottom: 15px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+              Channels</h3>
             <div id="search-channels-results" style="margin-bottom: 30px;"></div>
           </div>
 
           <div id="search-playlists-section" style="display:none;">
-            <h3 class="theme-old-only" style="margin-bottom: 15px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Playlists</h3>
+            <h3 class="theme-old-only"
+              style="margin-bottom: 15px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+              Playlists</h3>
             <div id="search-playlists-results" class="video-grid" style="margin-bottom: 30px;"></div>
           </div>
-          
-          <h3 class="theme-old-only" style="margin-bottom: 15px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px;">Videos</h3>
+
+          <h3 class="theme-old-only"
+            style="margin-bottom: 15px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 8px;">
+            Videos</h3>
           <div id="search-videos-results"></div>
         </div>
       </div>
@@ -467,10 +504,12 @@
         <div class="page-loader">
           <div class="spinner"></div>Loading videos...
         </div>
-        <div class="yt-tab-bar" style="margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
+        <div class="yt-tab-bar"
+          style="margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
           <a href="#" class="yt-tab active" id="manager-tab-videos" onclick="showPage('videos'); return false;">YTP</a>
           <span class="yt-tab-sep">|</span>
-          <a href="#" class="yt-tab" id="manager-tab-sources" onclick="showPage('sources'); return false;">Other videos</a>
+          <a href="#" class="yt-tab" id="manager-tab-sources" onclick="showPage('sources'); return false;">Other
+            videos</a>
         </div>
         <div class="section-header">
           <h2>Video Search</h2>
@@ -478,7 +517,8 @@
           <div id="management-actions" style="display:none; margin-left: 15px; gap: 8px; align-items: center;">
             <button class="btn-mgmt" onclick="bulkAction('flag-source')">Flag as Source</button>
             <div style="height: 20px; width: 1px; background: var(--border); margin: 0 5px;"></div>
-            <select id="mgmt-lang-select" style="font-size:12px; padding:5px; border-radius:6px; border:1px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer;">
+            <select id="mgmt-lang-select"
+              style="font-size:12px; padding:5px; border-radius:6px; border:1px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer;">
               <option value="">Set Language...</option>
               <option value="english">🇬🇧 English</option>
               <option value="italian">🇮🇹 Italian</option>
@@ -489,7 +529,8 @@
             </select>
             <button class="btn-mgmt" onclick="bulkAction('set-lang')">Apply Lang</button>
             <button class="btn-mgmt" onclick="openAddToPlaylistModal(true)">Add to Playlist</button>
-            <button class="btn-mgmt" onclick="toggleAllManage(false)" style="background:var(--surface); opacity:0.8;">Deselect All</button>
+            <button class="btn-mgmt" onclick="toggleAllManage(false)"
+              style="background:var(--surface); opacity:0.8;">Deselect All</button>
           </div>
           <div class="view-toggle" style="margin-left: auto;">
             <button id="btn-view-table" class="view-btn active" onclick="setViewMode('table')"
@@ -612,14 +653,15 @@
           <span class="count-badge">Scroll to zoom, drag to pan</span>
         </div>
         <div class="search-bar" id="timeline-filter-container">
-          <div id="timeline-tags-container" style="display: flex; flex-wrap: wrap; gap: 5px; align-items: center;"></div>
-          <input type="text" id="timeline-channel-filter" list="timeline-channel-datalist"
-            placeholder="Add channel..." onkeydown="handleTimelineFilterKey(event)" style="flex: 1; min-width: 150px;">
+          <div id="timeline-tags-container" style="display: flex; flex-wrap: wrap; gap: 5px; align-items: center;">
+          </div>
+          <input type="text" id="timeline-channel-filter" list="timeline-channel-datalist" placeholder="Add channel..."
+            onkeydown="handleTimelineFilterKey(event)" style="flex: 1; min-width: 150px;">
           <datalist id="timeline-channel-datalist"></datalist>
-          <button class="btn-thread"
-            onclick="clearTimelineTags()">Clear All</button>
-          
-          <div style="margin-left: 20px; display: flex; align-items: center; gap: 8px; background: var(--surface2); padding: 4px; border-radius: 8px; border: 1px solid var(--border);">
+          <button class="btn-thread" onclick="clearTimelineTags()">Clear All</button>
+
+          <div
+            style="margin-left: 20px; display: flex; align-items: center; gap: 8px; background: var(--surface2); padding: 4px; border-radius: 8px; border: 1px solid var(--border);">
             <label style="font-size: 11px; color: var(--text-muted); margin-left: 5px;">Show:</label>
             <div class="tl-type-filter" style="display: flex; gap: 4px;">
               <button class="tl-type-btn active" onclick="setTimelineVideoType('both', this)">Both</button>
@@ -630,7 +672,8 @@
 
           <div style="margin-left: 20px; display: flex; align-items: center; gap: 8px;">
             <label style="font-size: 12px; color: var(--text-muted);">Jump to:</label>
-            <select id="timeline-era-selector" onchange="jumpToEra(this.value)" style="font-size:12px; padding:4px; border-radius:4px; border:1px solid var(--border); background:var(--surface2); color:var(--text);">
+            <select id="timeline-era-selector" onchange="jumpToEra(this.value)"
+              style="font-size:12px; padding:4px; border-radius:4px; border:1px solid var(--border); background:var(--surface2); color:var(--text);">
               <option value="">Select Era...</option>
               <option value="2006">Era 2: Origins (2006)</option>
               <option value="2007">Era 3: US Golden (2007)</option>
@@ -666,13 +709,14 @@
         <div class="section-header">
           <h2>Playlists</h2>
           <span class="count-badge" id="playlists-count-label">0 playlists</span>
-          <button class="btn-submit" style="margin-left:auto;" onclick="openCreatePlaylistModal()">+ New Playlist</button>
+          <button class="btn-submit" style="margin-left:auto;" onclick="openCreatePlaylistModal()">+ New
+            Playlist</button>
         </div>
-        
+
         <div id="playlists-list-container">
           <div id="playlists-grid" class="video-grid"></div>
         </div>
-        
+
         <div id="playlist-detail-container" style="display:none;">
           <div class="section-header" style="margin-bottom:20px;">
             <button class="btn-thread" onclick="closePlaylistDetail()">← Back</button>
@@ -703,14 +747,18 @@
         <button onclick="closeImportModal()">&times;</button>
       </div>
       <div class="modal-body">
-        <div class="yt-tab-bar" style="margin-bottom: 20px; display: flex; gap: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
-          <a href="#" class="yt-tab active" id="tab-import-mass" onclick="toggleImportMode('mass'); return false;" style="font-weight: bold; color: var(--text);">Mass URL Import</a>
-          <a href="#" class="yt-tab" id="tab-import-single" onclick="toggleImportMode('single'); return false;" style="font-weight: bold; color: var(--text-muted);">Single File Upload</a>
+        <div class="yt-tab-bar"
+          style="margin-bottom: 20px; display: flex; gap: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
+          <a href="#" class="yt-tab active" id="tab-import-mass" onclick="toggleImportMode('mass'); return false;"
+            style="font-weight: bold; color: var(--text);">Mass URL Import</a>
+          <a href="#" class="yt-tab" id="tab-import-single" onclick="toggleImportMode('single'); return false;"
+            style="font-weight: bold; color: var(--text-muted);">Single File Upload</a>
         </div>
 
         <!-- Mass Import Form -->
         <div id="form-import-mass">
-          <p style="margin-bottom: 10px; font-size: 14px; color: var(--text-muted);">Enter YouTube URLs (one per line, or separated by commas/spaces):</p>
+          <p style="margin-bottom: 10px; font-size: 14px; color: var(--text-muted);">Enter YouTube URLs (one per line,
+            or separated by commas/spaces):</p>
           <textarea id="import-urls" placeholder="https://www.youtube.com/watch?v=..."></textarea>
           <div style="margin-top: 15px;">
             <label style="font-size: 14px;">Target Index:</label>
@@ -726,20 +774,24 @@
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
             <div style="grid-column: span 2;">
               <label style="display: block; font-size: 13px; margin-bottom: 5px;">Video File *</label>
-              <input type="file" id="upload-file" accept="video/*" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+              <input type="file" id="upload-file" accept="video/*"
+                style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
             </div>
             <div>
               <label style="display: block; font-size: 13px; margin-bottom: 5px;">Title *</label>
-              <input type="text" id="upload-title" placeholder="Video Title" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+              <input type="text" id="upload-title" placeholder="Video Title"
+                style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
             </div>
             <div>
               <label style="display: block; font-size: 13px; margin-bottom: 5px;">Channel Name *</label>
-              <input type="text" id="upload-channel" list="uploader-channel-datalist" placeholder="Unknown" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+              <input type="text" id="upload-channel" list="uploader-channel-datalist" placeholder="Unknown"
+                style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
               <datalist id="uploader-channel-datalist"></datalist>
             </div>
             <div>
               <label style="display: block; font-size: 13px; margin-bottom: 5px;">Video Type *</label>
-              <select id="upload-type" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-top: 0;">
+              <select id="upload-type"
+                style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-top: 0;">
                 <option value="">-- Select Type --</option>
                 <option value="ytp">YouTube Poop (YTP)</option>
                 <option value="other">Other Video (Source)</option>
@@ -747,19 +799,23 @@
             </div>
             <div>
               <label style="display: block; font-size: 13px; margin-bottom: 5px;">Video ID (optional)</label>
-              <input type="text" id="upload-id" placeholder="e.g. gZrBjgbL660" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+              <input type="text" id="upload-id" placeholder="e.g. gZrBjgbL660"
+                style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
             </div>
             <div>
               <label style="display: block; font-size: 13px; margin-bottom: 5px;">Channel URL (optional)</label>
-              <input type="text" id="upload-channel-url" placeholder="https://youtube.com/@..." style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+              <input type="text" id="upload-channel-url" placeholder="https://youtube.com/@..."
+                style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
             </div>
             <div>
               <label style="display: block; font-size: 13px; margin-bottom: 5px;">Publish Date (optional)</label>
-              <input type="date" id="upload-date" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+              <input type="date" id="upload-date"
+                style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
             </div>
             <div>
               <label style="display: block; font-size: 13px; margin-bottom: 5px;">Language (optional)</label>
-              <select id="upload-lang" style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-top: 0;">
+              <select id="upload-lang"
+                style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-top: 0;">
                 <option value="">Unknown</option>
                 <option value="italian">Italian</option>
                 <option value="english">English</option>
@@ -767,8 +823,10 @@
               </select>
             </div>
             <div>
-              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Tags (optional, comma-separated)</label>
-              <input type="text" id="upload-tags" placeholder="tag1, tag2, ..." style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
+              <label style="display: block; font-size: 13px; margin-bottom: 5px;">Tags (optional,
+                comma-separated)</label>
+              <input type="text" id="upload-tags" placeholder="tag1, tag2, ..."
+                style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text);">
             </div>
           </div>
         </div>
@@ -776,7 +834,8 @@
       <div class="modal-footer">
         <div id="upload-progress-container" style="display: none; flex: 1; align-items: center; gap: 10px;">
           <div style="flex: 1; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden;">
-            <div id="upload-progress-bar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.2s;"></div>
+            <div id="upload-progress-bar"
+              style="width: 0%; height: 100%; background: var(--accent); transition: width 0.2s;"></div>
           </div>
           <span id="upload-progress-text" style="font-size: 12px; color: var(--text-muted);">0%</span>
         </div>
@@ -799,8 +858,10 @@
         <div id="playlist-type-selection" style="margin-top:15px;">
           <label>Type:</label>
           <div style="display:flex; gap:10px; margin-top:5px;">
-            <label style="flex:1; cursor:pointer;"><input type="radio" name="playlist-type" value="local" checked> Local (Browser)</label>
-            <label id="server-playlist-option" style="flex:1; cursor:pointer; display:none;"><input type="radio" name="playlist-type" value="server"> Server (Public)</label>
+            <label style="flex:1; cursor:pointer;"><input type="radio" name="playlist-type" value="local" checked> Local
+              (Browser)</label>
+            <label id="server-playlist-option" style="flex:1; cursor:pointer; display:none;"><input type="radio"
+                name="playlist-type" value="server"> Server (Public)</label>
           </div>
         </div>
       </div>
@@ -821,7 +882,8 @@
         <div id="playlist-selection-list" style="max-height:300px; overflow-y:auto; margin-bottom:15px;">
           <!-- Playlists will be loaded here -->
         </div>
-        <button class="btn-modern" style="width:100%;" onclick="openCreatePlaylistModal()">+ Create New Playlist</button>
+        <button class="btn-modern" style="width:100%;" onclick="openCreatePlaylistModal()">+ Create New
+          Playlist</button>
       </div>
     </div>
   </div>
