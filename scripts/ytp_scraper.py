@@ -544,6 +544,9 @@ class VideoIndex:
         # ── Backup Databases ──────────────────────────────────────────────────
         self.backup_databases()
         
+        # Merge ytp.db if it's missing (needed for SQLite operations)
+        self._merge_db_parts(self.ytp_db_path)
+        
         self.load_excluded()
 
     def backup_databases(self):
@@ -820,6 +823,9 @@ class VideoIndex:
             self._save_dict_to_sql(self.ytpmv_data, 'ytpmv')
             self._save_dict_to_sql(self.collabs_data, 'collabs')
 
+            # Split ytp.db after saving to ensure parts are updated for Git
+            self._split_db_into_parts(self.ytp_db_path)
+
             # Auto-generate minified search index
             try:
                 from generate_search_index import generate_search_index
@@ -828,6 +834,58 @@ class VideoIndex:
                 pass 
         except Exception as e:
             print(f"\n  [!] Error saving to SQLite: {e}")
+
+    def _merge_db_parts(self, db_path):
+        """Merges .partN files into a single database file if it doesn't exist."""
+        part1 = db_path + ".part1"
+        if not os.path.exists(db_path) and os.path.exists(part1):
+            print(f"  [Merge] {os.path.basename(db_path)} not found, merging parts...", flush=True)
+            try:
+                with open(db_path, 'wb') as outfile:
+                    part_num = 1
+                    while True:
+                        part_name = f"{db_path}.part{part_num}"
+                        if not os.path.exists(part_name):
+                            break
+                        with open(part_name, 'rb') as infile:
+                            outfile.write(infile.read())
+                        part_num += 1
+                print(f"  [Merge] Done. Merged {part_num-1} parts.", flush=True)
+            except Exception as e:
+                print(f"  [!] Error merging {db_path}: {e}", flush=True)
+
+    def _split_db_into_parts(self, db_path, chunk_size_mb=50):
+        """Splits a database file into .partN files of 50MB each."""
+        if not os.path.exists(db_path):
+            return
+        
+        file_size = os.path.getsize(db_path)
+        chunk_size = chunk_size_mb * 1024 * 1024
+        
+        # Always split ytp.db because it's ignored by Git
+        # For others, only split if they exceed the chunk size
+        if "ytp.db" not in db_path and file_size <= chunk_size:
+            return
+
+        print(f"  [Split] Splitting {os.path.basename(db_path)} into {chunk_size_mb}MB chunks...", flush=True)
+        try:
+            # Remove old parts to avoid leftovers
+            for old_part in glob.glob(db_path + ".part*"):
+                os.remove(old_part)
+            
+            with open(db_path, 'rb') as infile:
+                part_num = 1
+                while True:
+                    chunk = infile.read(chunk_size)
+                    if not chunk:
+                        break
+                    part_name = f"{db_path}.part{part_num}"
+                    with open(part_name, 'wb') as outfile:
+                        outfile.write(chunk)
+                    part_num += 1
+            print(f"  [Split] Done. Created {part_num-1} parts.", flush=True)
+        except Exception as e:
+            print(f"  [!] Error splitting {db_path}: {e}", flush=True)
 
     def _save_dict_to_sql(self, data_dict, db_type):
         if not data_dict and db_type in ['ytpmv', 'collabs']:
