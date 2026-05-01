@@ -20,6 +20,7 @@ const path = require('path');
 const { URL } = require('url');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
+const zlib = require('zlib');
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -272,8 +273,34 @@ function onRequest(req, res) {
 
   if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, { 'Content-Type': MIME_TYPES[ext] || 'application/octet-stream' });
-    return fs.createReadStream(filePath).pipe(res);
+    const stat = fs.statSync(filePath);
+    
+    // Cache headers for DB files and static assets
+    let headers = {
+      'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
+      'Cache-Control': 'public, max-age=3600', // 1 hour
+      'Accept-Ranges': 'bytes'
+    };
+
+    // Very aggressive caching for .db files (they only change when scraper runs)
+    if (ext === '.db') {
+      headers['Cache-Control'] = 'public, max-age=86400'; // 1 day
+    }
+
+    const acceptEncoding = req.headers['accept-encoding'] || '';
+    
+    // Compress text and DB files
+    const shouldCompress = ['.html', '.js', '.css', '.json', '.db'].includes(ext);
+
+    if (shouldCompress && acceptEncoding.includes('gzip')) {
+      res.writeHead(200, { ...headers, 'Content-Encoding': 'gzip' });
+      const gzip = zlib.createGzip();
+      fs.createReadStream(filePath).pipe(gzip).pipe(res);
+    } else {
+      res.writeHead(200, headers);
+      fs.createReadStream(filePath).pipe(res);
+    }
+    return;
   }
 
   // SPA Fallback: if not a file, serve index.html
