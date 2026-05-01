@@ -73,6 +73,9 @@ async function saveStoredDB(name, buffer) {
   store.put(buffer, name);
 }
 
+/**
+ * Combines multiple .partX files into a single ArrayBuffer.
+ */
 async function fetchChunks(name) {
   const chunks = [];
   let partNum = 1;
@@ -80,16 +83,29 @@ async function fetchChunks(name) {
   
   while (true) {
     const chunkName = `${name}.part${partNum}`;
-    const res = await fetch(chunkName);
-    if (!res.ok) {
-      if (partNum === 1) throw new Error(`Failed to fetch ${chunkName}`);
-      break; // End of chunks
+    try {
+      const res = await fetch(chunkName);
+      if (!res.ok) {
+        if (partNum === 1) throw new Error(`Primary chunk ${chunkName} not found (Status: ${res.status})`);
+        break; // End of chunks
+      }
+      const buffer = await res.arrayBuffer();
+      if (buffer.byteLength === 0) {
+        console.warn(`Chunk ${chunkName} is empty.`);
+        break;
+      }
+      chunks.push(buffer);
+      partNum++;
+    } catch (e) {
+      if (partNum === 1) throw e;
+      console.warn(`Error fetching chunk ${partNum}, stopping.`, e);
+      break;
     }
-    chunks.push(await res.arrayBuffer());
-    partNum++;
   }
 
-  console.log(`Successfully fetched ${chunks.length} chunks.`);
+  if (chunks.length === 0) throw new Error(`No chunks found for ${name}`);
+
+  console.log(`Successfully fetched ${chunks.length} chunks for ${name}.`);
   // Combine chunks
   const totalLength = chunks.reduce((acc, c) => acc + c.byteLength, 0);
   const result = new Uint8Array(totalLength);
@@ -98,37 +114,65 @@ async function fetchChunks(name) {
     result.set(new Uint8Array(chunk), offset);
     offset += chunk.byteLength;
   }
+  
+  // Basic SQLite validation: first 16 bytes must start with "SQLite format 3"
+  const header = new TextDecoder().decode(result.slice(0, 15));
+  if (header !== "SQLite format 3") {
+    throw new Error(`Invalid SQLite header in combined chunks for ${name}`);
+  }
+
   return result.buffer;
 }
 
 async function fetchAndCache(name) {
   let buffer;
-  if (name === 'ytp.db') {
-    // Try to load chunks first if it's the split DB
-    try {
+  try {
+    if (name === 'ytp.db') {
       buffer = await fetchChunks(name);
-    } catch (e) {
-      console.warn("Chunked fetch failed, trying single file...", e);
+    } else {
       const response = await fetch(name);
+      if (!response.ok) throw new Error(`Failed to fetch ${name}: ${response.status}`);
       buffer = await response.arrayBuffer();
     }
-  } else {
-    const response = await fetch(name);
-    buffer = await response.arrayBuffer();
+    
+    // Validate before saving
+    const header = new TextDecoder().decode(new Uint8Array(buffer).slice(0, 15));
+    if (header === "SQLite format 3") {
+      await saveStoredDB(name, buffer);
+      console.log(`Successfully cached ${name}`);
+    } else {
+      console.error(`Fetched ${name} is not a valid SQLite database, skipping cache.`);
+    }
+    return buffer;
+  } catch (e) {
+    console.error(`Fetch/Cache failed for ${name}:`, e);
+    throw e;
   }
-  
-  saveStoredDB(name, buffer).catch(console.error);
-  return buffer;
 }
 
 async function loadDB(name, SQL) {
-  const cached = await getStoredDB(name);
-  if (cached) {
-    console.log(`Loaded ${name} from cache`);
-    // Fetch in background to update cache for next time
-    fetchAndCache(name).catch(() => { });
-    return new SQL.Database(new Uint8Array(cached));
+  try {
+    const cached = await getStoredDB(name);
+    if (cached) {
+      // Validate cached header
+      const header = new TextDecoder().decode(new Uint8Array(cached).slice(0, 15));
+      if (header === "SQLite format 3") {
+        console.log(`Loaded ${name} from cache (Valid SQLite)`);
+        // Refresh cache in background
+        fetchAndCache(name).catch(() => { });
+        return new SQL.Database(new Uint8Array(cached));
+      } else {
+        console.warn(`Cached ${name} is corrupted (Invalid header). Clearing cache...`);
+        const db = await openIDB();
+        const transaction = db.transaction('databases', 'readwrite');
+        transaction.objectStore('databases').delete(name);
+      }
+    }
+  } catch (e) {
+    console.warn(`Cache read error for ${name}:`, e);
   }
+
+  console.log(`Fetching ${name} from network/chunks...`);
   const buffer = await fetchAndCache(name);
   return new SQL.Database(new Uint8Array(buffer));
 }
