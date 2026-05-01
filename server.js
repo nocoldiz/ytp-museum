@@ -21,7 +21,7 @@ const { URL } = require('url');
 const crypto = require('crypto');
 const { execSync } = require('child_process');
 
-const PORT = parseInt(process.env.PORT || '3000', 10);
+const PORT = parseInt(process.env.PORT || '4000', 10);
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DB_DIR = path.join(__dirname, 'db');
 const VIDEOS_DIR = path.join(DB_DIR, 'videos');

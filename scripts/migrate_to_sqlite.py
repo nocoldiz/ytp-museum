@@ -8,7 +8,10 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB_DIR = os.path.join(BASE_DIR, "scripts/db")
 PUBLIC_DIR = os.path.join(BASE_DIR, "public")
 
-SQLITE_PATH = os.path.join(PUBLIC_DIR, "museum.db")
+# Split DB Paths
+YTP_DB_PATH = os.path.join(PUBLIC_DIR, "ytp.db")
+SOURCES_DB_PATH = os.path.join(PUBLIC_DIR, "sources.db")
+YTPOOPERS_DB_PATH = os.path.join(PUBLIC_DIR, "ytpoopers.db")
 
 # JSON Paths
 VIDEO_INDEX_PATH = os.path.join(DB_DIR, "video_index.json")
@@ -17,23 +20,8 @@ SOURCES_INDEX_PATH = os.path.join(DB_DIR, "sources_index.json")
 EXCLUDED_VIDEOS_PATH = os.path.join(DB_DIR, "excluded_videos.json")
 PLAYLISTS_PATH = os.path.join(DB_DIR, "playlists.json")
 
-def create_schema(cursor):
-    """Creates the SQLite schema."""
-    print("Creating schema...")
-    
-    # Core tables
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS channels (
-        channel_url TEXT PRIMARY KEY,
-        channel_name TEXT NOT NULL,
-        thumbnail TEXT,
-        description TEXT,
-        subscriber_count INTEGER,
-        creation_date TEXT,
-        aliases TEXT -- JSON string of list
-    )
-    """)
-
+def create_common_video_tables(cursor):
+    """Creates tables used by both ytp.db and sources.db."""
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS videos (
         id TEXT PRIMARY KEY,
@@ -50,12 +38,10 @@ def create_schema(cursor):
         channel_name TEXT,
         is_source INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (channel_url) REFERENCES channels(url)
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
     """)
 
-    # Many-to-Many / Lists
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS tags (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,23 +76,26 @@ def create_schema(cursor):
     )
     """)
 
+def create_ytpoopers_schema(cursor):
+    """Creates the schema for ytpoopers.db."""
+    print("Creating ytpoopers schema...")
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS source_pages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        path TEXT UNIQUE NOT NULL
+    CREATE TABLE IF NOT EXISTS channels (
+        channel_url TEXT PRIMARY KEY,
+        channel_name TEXT NOT NULL,
+        thumbnail TEXT,
+        description TEXT,
+        subscriber_count INTEGER,
+        creation_date TEXT,
+        aliases TEXT -- JSON string of list
     )
     """)
 
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS video_sources (
-        video_id TEXT,
-        source_page_id INTEGER,
-        PRIMARY KEY (video_id, source_page_id),
-        FOREIGN KEY (video_id) REFERENCES videos(id),
-        FOREIGN KEY (source_page_id) REFERENCES source_pages(id)
-    )
-    """)
-
+def create_ytp_schema(cursor):
+    """Creates the schema for ytp.db."""
+    print("Creating ytp schema...")
+    create_common_video_tables(cursor)
+    
     # Playlists
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS playlists (
@@ -136,13 +125,35 @@ def create_schema(cursor):
     )
     """)
 
+def create_sources_schema(cursor):
+    """Creates the schema for sources.db."""
+    print("Creating sources schema...")
+    create_common_video_tables(cursor)
+    
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS source_pages (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        path TEXT UNIQUE NOT NULL
+    )
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS video_sources (
+        video_id TEXT,
+        source_page_id INTEGER,
+        PRIMARY KEY (video_id, source_page_id),
+        FOREIGN KEY (video_id) REFERENCES videos(id),
+        FOREIGN KEY (source_page_id) REFERENCES source_pages(id)
+    )
+    """)
+
 def migrate_channels(cursor):
     """Migrates data from ytpoopers_index.json."""
     if not os.path.exists(CHANNELS_INDEX_PATH):
         print(f"Skipping channels: {CHANNELS_INDEX_PATH} not found.")
         return
 
-    print("Migrating channels...")
+    print("Migrating channels to ytpoopers.db...")
     with open(CHANNELS_INDEX_PATH, 'r', encoding='utf-8') as f:
         data = json.load(f)
         
@@ -166,23 +177,16 @@ def migrate_channels(cursor):
             print(f"  Error inserting channel {url}: {e}")
             raise
 
-def migrate_videos(cursor):
-    """Migrates data from video_index.json."""
-    if not os.path.exists(VIDEO_INDEX_PATH):
-        print(f"Skipping videos: {VIDEO_INDEX_PATH} not found.")
+def migrate_video_data(cursor, json_path, label="videos"):
+    """Generic migration for video data from a JSON file."""
+    if not os.path.exists(json_path):
+        print(f"Skipping {label}: {json_path} not found.")
         return
 
-    print("Migrating videos (this may take a moment)...")
-    with open(VIDEO_INDEX_PATH, 'r', encoding='utf-8') as f:
+    print(f"Migrating {label} (this may take a moment)...")
+    with open(json_path, 'r', encoding='utf-8') as f:
         data = json.load(f)
     
-    source_data = {}
-    if os.path.exists(SOURCES_INDEX_PATH):
-        print("Loading sources index...")
-        with open(SOURCES_INDEX_PATH, 'r', encoding='utf-8') as f:
-            source_data = json.load(f)
-        data.update(source_data)
-
     # Cache for IDs to avoid redundant lookups
     tag_cache = {}
     section_cache = {}
@@ -217,7 +221,7 @@ def migrate_videos(cursor):
             info.get('local_file'),
             info.get('language'),
             info.get('channel_name') or info.get('nickname'),
-            1 if vid_id in source_data or info.get('is_source') or (info.get('local_file') and info.get('local_file').startswith('sources/')) else 0
+            1 if label == "sources" or info.get('is_source') or (info.get('local_file') and info.get('local_file').startswith('sources/')) else 0
         ))
 
         # 2. Handle Tags
@@ -232,18 +236,20 @@ def migrate_videos(cursor):
                 section_id = get_or_create('sections', 'name', section_name, section_cache)
                 cursor.execute("INSERT OR IGNORE INTO video_sections (video_id, section_id) VALUES (?, ?)", (vid_id, section_id))
 
-        # 4. Handle Sources
-        for source_path in info.get('source_pages', []):
-            if source_path:
-                source_id = get_or_create('source_pages', 'path', source_path, source_cache)
-                cursor.execute("INSERT OR IGNORE INTO video_sources (video_id, source_page_id) VALUES (?, ?)", (vid_id, source_id))
+        # 4. Handle Sources (only if source_pages table exists in this DB)
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='source_pages'")
+        if cursor.fetchone():
+            for source_path in info.get('source_pages', []):
+                if source_path:
+                    source_id = get_or_create('source_pages', 'path', source_path, source_cache)
+                    cursor.execute("INSERT OR IGNORE INTO video_sources (video_id, source_page_id) VALUES (?, ?)", (vid_id, source_id))
 
         count += 1
         if count % 1000 == 0:
-            print(f"  Processed {count} videos...")
+            print(f"  Processed {count} {label}...")
 
 def migrate_excluded(cursor):
-    """Migrates data from excluded_videos.json."""
+    """Migrates data from excluded_videos.json to ytp.db."""
     if not os.path.exists(EXCLUDED_VIDEOS_PATH):
         return
 
@@ -254,7 +260,6 @@ def migrate_excluded(cursor):
     for vid_id, info in data.items():
         reason = ""
         if isinstance(info, dict):
-            # If it's a full metadata object, we might want to store it or a summary
             reason = info.get('reason') or info.get('title') or "Excluded"
         else:
             reason = str(info)
@@ -266,7 +271,7 @@ def migrate_excluded(cursor):
             raise
 
 def migrate_playlists(cursor):
-    """Migrates data from playlists.json."""
+    """Migrates data from playlists.json to ytp.db."""
     if not os.path.exists(PLAYLISTS_PATH):
         return
 
@@ -283,29 +288,34 @@ def migrate_playlists(cursor):
                            (pl_id, vid_id, i))
 
 def main():
-    if os.path.exists(SQLITE_PATH):
-        print(f"Warning: {SQLITE_PATH} already exists. It will be updated.")
-    
-    conn = sqlite3.connect(SQLITE_PATH)
-    cursor = conn.cursor()
-    
-    try:
-        create_schema(cursor)
-        migrate_channels(cursor)
-        migrate_videos(cursor)
-        migrate_excluded(cursor)
-        migrate_playlists(cursor)
-        
-        conn.commit()
-        print("\nMigration completed successfully!")
-        print(f"Database saved to: {SQLITE_PATH}")
-        
-    except Exception as e:
-        conn.rollback()
-        print(f"\nError during migration: {e}")
-        sys.exit(1)
-    finally:
-        conn.close()
+    # 1. YT Poopers DB
+    print(f"\n--- Migrating {YTPOOPERS_DB_PATH} ---")
+    conn_poopers = sqlite3.connect(YTPOOPERS_DB_PATH)
+    create_ytpoopers_schema(conn_poopers.cursor())
+    migrate_channels(conn_poopers.cursor())
+    conn_poopers.commit()
+    conn_poopers.close()
+
+    # 2. Sources DB
+    print(f"\n--- Migrating {SOURCES_DB_PATH} ---")
+    conn_sources = sqlite3.connect(SOURCES_DB_PATH)
+    create_sources_schema(conn_sources.cursor())
+    migrate_video_data(conn_sources.cursor(), SOURCES_INDEX_PATH, label="sources")
+    conn_sources.commit()
+    conn_sources.close()
+
+    # 3. YTP DB
+    print(f"\n--- Migrating {YTP_DB_PATH} ---")
+    conn_ytp = sqlite3.connect(YTP_DB_PATH)
+    create_ytp_schema(conn_ytp.cursor())
+    migrate_video_data(conn_ytp.cursor(), VIDEO_INDEX_PATH, label="videos")
+    migrate_excluded(conn_ytp.cursor())
+    migrate_playlists(conn_ytp.cursor())
+    conn_ytp.commit()
+    conn_ytp.close()
+
+    print("\nMigration completed successfully!")
+    print(f"Databases saved to:\n  {YTPOOPERS_DB_PATH}\n  {SOURCES_DB_PATH}\n  {YTP_DB_PATH}")
 
 if __name__ == "__main__":
     main()

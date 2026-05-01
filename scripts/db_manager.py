@@ -3,24 +3,41 @@ import json
 import sys
 import os
 
-DB_PATH = 'public/museum.db'
+YTP_DB = 'public/ytp.db'
+SOURCES_DB = 'public/sources.db'
+POOPERS_DB = 'public/ytpoopers.db'
 
-def get_conn():
-    return sqlite3.connect(DB_PATH)
+def get_conn(db_type='ytp'):
+    path = YTP_DB
+    if db_type == 'sources': path = SOURCES_DB
+    elif db_type == 'poopers': path = POOPERS_DB
+    return sqlite3.connect(path)
+
+def find_video_db(vid_id):
+    """Checks which DB contains the video and returns (conn, db_type)."""
+    for db_type in ['ytp', 'sources']:
+        conn = get_conn(db_type)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM videos WHERE id = ?", (vid_id,))
+        if cursor.fetchone():
+            return conn, db_type
+        conn.close()
+    return None, None
 
 def ban_videos(video_ids):
-    conn = get_conn()
-    cursor = conn.cursor()
     deleted = []
     skipped = []
     
     for vid_id in video_ids:
-        cursor.execute("SELECT local_file FROM videos WHERE id = ?", (vid_id,))
-        row = cursor.fetchone()
-        if not row:
+        conn, db_type = find_video_db(vid_id)
+        if not conn:
             skipped.append(vid_id)
             continue
             
+        cursor = conn.cursor()
+        cursor.execute("SELECT local_file FROM videos WHERE id = ?", (vid_id,))
+        row = cursor.fetchone()
+        
         local_file = row[0]
         if local_file:
             abs_path = os.path.join(os.getcwd(), local_file)
@@ -32,14 +49,12 @@ def ban_videos(video_ids):
                     
         cursor.execute("UPDATE videos SET status = 'banned', local_file = NULL WHERE id = ?", (vid_id,))
         deleted.append(vid_id)
+        conn.commit()
+        conn.close()
         
-    conn.commit()
-    conn.close()
     return {"success": True, "results": {"deleted": deleted, "skipped": skipped}}
 
 def flag_as_source(video_ids):
-    conn = get_conn()
-    cursor = conn.cursor()
     moved = []
     skipped = []
     
@@ -48,36 +63,69 @@ def flag_as_source(video_ids):
         os.makedirs(sources_dir)
         
     for vid_id in video_ids:
-        cursor.execute("SELECT local_file FROM videos WHERE id = ?", (vid_id,))
-        row = cursor.fetchone()
-        if not row:
+        conn_ytp, db_type = find_video_db(vid_id)
+        if not conn_ytp or db_type == 'sources':
+            if conn_ytp: conn_ytp.close()
             skipped.append(vid_id)
             continue
             
-        local_file = row[0]
-        new_rel_path = local_file
+        # 1. Get data from YTP DB
+        conn_ytp.row_factory = sqlite3.Row
+        cursor_ytp = conn_ytp.cursor()
+        cursor_ytp.execute("SELECT * FROM videos WHERE id = ?", (vid_id,))
+        v_data = dict(cursor_ytp.fetchone())
         
+        # Get tags
+        cursor_ytp.execute("SELECT t.name FROM tags t JOIN video_tags vt ON t.id = vt.tag_id WHERE vt.video_id = ?", (vid_id,))
+        tags = [r[0] for r in cursor_ytp.fetchall()]
+        
+        # 2. Move local file if needed
+        local_file = v_data['local_file']
+        new_rel_path = local_file
         if local_file and not local_file.startswith('sources/'):
             old_path = os.path.join(os.getcwd(), local_file)
             file_name = os.path.basename(local_file)
             new_rel_path = f"sources/{file_name}"
             new_path = os.path.join(os.getcwd(), new_rel_path)
-            
             if os.path.exists(old_path):
                 try:
                     os.rename(old_path, new_path)
                 except Exception as e:
                     print(f"Error moving {old_path}: {e}", file=sys.stderr)
-                    
-        cursor.execute("UPDATE videos SET is_source = 1, local_file = ? WHERE id = ?", (new_rel_path, vid_id))
+
+        # 3. Insert into Sources DB
+        conn_sources = get_conn('sources')
+        cursor_sources = conn_sources.cursor()
+        v_data['is_source'] = 1
+        v_data['local_file'] = new_rel_path
+        
+        cols = ", ".join(v_data.keys())
+        placeholders = ", ".join(["?"] * len(v_data))
+        cursor_sources.execute(f"INSERT OR REPLACE INTO videos ({cols}) VALUES ({placeholders})", tuple(v_data.values()))
+        
+        # Re-insert tags in sources.db
+        for tag_name in tags:
+            cursor_sources.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag_name,))
+            cursor_sources.execute("SELECT id FROM tags WHERE name = ?", (tag_name,))
+            tag_id = cursor_sources.fetchone()[0]
+            cursor_sources.execute("INSERT OR IGNORE INTO video_tags (video_id, tag_id) VALUES (?, ?)", (vid_id, tag_id))
+            
+        conn_sources.commit()
+        conn_sources.close()
+        
+        # 4. Remove from YTP DB
+        cursor_ytp.execute("DELETE FROM videos WHERE id = ?", (vid_id,))
+        cursor_ytp.execute("DELETE FROM video_tags WHERE video_id = ?", (vid_id,))
+        conn_ytp.commit()
+        conn_ytp.close()
+        
         moved.append(vid_id)
         
-    conn.commit()
-    conn.close()
     return {"success": True, "results": {"moved": moved, "skipped": skipped}}
 
 def import_videos(urls, target):
-    conn = get_conn()
+    db_type = 'sources' if target == 'sources' else 'ytp'
+    conn = get_conn(db_type)
     cursor = conn.cursor()
     added = []
     skipped = []
@@ -95,8 +143,11 @@ def import_videos(urls, target):
             continue
             
         vid_id = match.group(1)
-        cursor.execute("SELECT id FROM videos WHERE id = ?", (vid_id,))
-        if cursor.fetchone():
+        
+        # Check if exists in EITHER db
+        existing_conn, _ = find_video_db(vid_id)
+        if existing_conn:
+            existing_conn.close()
             skipped.append(url)
             continue
             
@@ -109,24 +160,29 @@ def import_videos(urls, target):
     return {"success": True, "results": {"added": added, "skipped": skipped}}
 
 def set_language(video_ids, language):
-    conn = get_conn()
-    cursor = conn.cursor()
     updated = []
     skipped = []
     
     for vid_id in video_ids:
+        conn, db_type = find_video_db(vid_id)
+        if not conn:
+            skipped.append(vid_id)
+            continue
+            
+        cursor = conn.cursor()
         cursor.execute("UPDATE videos SET language = ? WHERE id = ?", (language, vid_id))
         if cursor.rowcount > 0:
             updated.append(vid_id)
         else:
             skipped.append(vid_id)
+        conn.commit()
+        conn.close()
             
-    conn.commit()
-    conn.close()
     return {"success": True, "results": {"updated": updated, "skipped": skipped}}
 
 def add_upload_metadata(id, title, channel_name, channel_url, publish_date, language, is_source, local_file, tags):
-    conn = get_conn()
+    db_type = 'sources' if is_source else 'ytp'
+    conn = get_conn(db_type)
     cursor = conn.cursor()
     
     cursor.execute("""
@@ -145,7 +201,7 @@ def add_upload_metadata(id, title, channel_name, channel_url, publish_date, lang
     return {"success": True, "id": id}
 
 def create_playlist(name, pl_id):
-    conn = get_conn()
+    conn = get_conn('ytp')
     cursor = conn.cursor()
     from datetime import datetime
     created_at = datetime.now().isoformat()
@@ -155,7 +211,7 @@ def create_playlist(name, pl_id):
     return {"success": True, "playlist": {"id": pl_id, "name": name, "videoIds": []}}
 
 def add_videos_to_playlist(playlist_id, video_ids):
-    conn = get_conn()
+    conn = get_conn('ytp')
     cursor = conn.cursor()
     added = 0
     for vid_id in video_ids:
@@ -166,7 +222,7 @@ def add_videos_to_playlist(playlist_id, video_ids):
     return {"success": True, "addedCount": added}
 
 def get_playlists():
-    conn = get_conn()
+    conn = get_conn('ytp')
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM playlists")
