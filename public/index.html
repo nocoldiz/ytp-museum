@@ -70,7 +70,8 @@
           <div id="masthead-search">
             <div class="search-form" style="position: relative;">
               <input type="text" class="search-term" id="global-search-input" placeholder="Search"
-                oninput="onGlobalSearchInput()" autocomplete="off">
+                oninput="onGlobalSearchInput()" onkeypress="if(event.key==='Enter')performSearch(this.value)"
+                autocomplete="off">
               <button class="search-button"
                 onclick="performSearch(document.getElementById('global-search-input').value)">Search</button>
               <div id="search-suggestions" class="search-suggestions"></div>
@@ -205,13 +206,14 @@
             <div id="homepage-featured-heading">
               <h2 class="yt-featured-title">Featured Videos</h2>
               <div class="yt-tab-bar">
-                <a href="#" class="yt-tab active" onclick="setFeaturedTab('featured');return false;">Random</a>
+                <a href="#" class="yt-tab active" onclick="setFeaturedTab('ytp');return false;">YTP</a>
                 <span class="yt-tab-sep">|</span>
                 <a href="#" class="yt-tab" onclick="setFeaturedTab('ytpmv');return false;">YTPMV</a>
                 <span class="yt-tab-sep">|</span>
                 <a href="#" class="yt-tab" onclick="setFeaturedTab('acid');return false;">Acid Poop</a>
                 <span class="yt-tab-sep">|</span>
-
+                <a href="#" class="yt-tab" onclick="setFeaturedTab('random');return false;">Random</a>
+                <span class="yt-tab-sep">|</span>
                 <a href="#" class="yt-tab" onclick="setFeaturedTab('subscribed');return false;">Subscribed</a>
                 <span class="yt-tab-sep">|</span>
                 <a href="#" class="yt-tab" onclick="setFeaturedTab('views');return false;">Most Viewed</a>
@@ -227,7 +229,8 @@
 
         <div id="youtube-modern-layout">
           <div id="home-chips" class="home-chips-container">
-            <button class="chip active" onclick="setModernHomeTab('featured', this)">Featured</button>
+            <button class="chip active" onclick="setModernHomeTab('ytp', this)">YTP</button>
+            <button class="chip" onclick="setModernHomeTab('random', this)">Random</button>
             <button class="chip" onclick="setModernHomeTab('subscribed', this)">Subscribed</button>
             <button class="chip" onclick="setModernHomeTab('views', this)">Most Viewed</button>
             <button class="chip" onclick="setModernHomeTab('discussed', this)">Most Discussed</button>
@@ -346,16 +349,6 @@
 
         <div class="search-results-main">
           <div id="search-filter-bar" class="search-bar search-advanced-filters">
-            <div class="filter-group-modern">
-              <label>Status</label>
-              <select id="search-filter-status"
-                onchange="performSearch(document.getElementById('global-search-input').value)">
-                <option value="">All statuses</option>
-                <option value="downloaded">Downloaded</option>
-                <option value="pending">Pending</option>
-                <option value="unavailable">Unavailable</option>
-              </select>
-            </div>
             <div class="filter-group-modern">
               <label>Section</label>
               <select id="search-filter-section"
@@ -502,8 +495,11 @@
           style="margin-bottom: 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px;">
           <a href="#" class="yt-tab active" id="manager-tab-videos" onclick="showPage('videos'); return false;">YTP</a>
           <span class="yt-tab-sep">|</span>
-          <a href="#" class="yt-tab" id="manager-tab-sources" onclick="showPage('sources'); return false;">Other
-            videos</a>
+          <a href="#" class="yt-tab" id="manager-tab-ytpmv" onclick="showPage('ytpmv'); return false;">YTPMV</a>
+          <span class="yt-tab-sep">|</span>
+          <a href="#" class="yt-tab" id="manager-tab-collabs" onclick="showPage('collabs'); return false;">Collabs</a>
+          <span class="yt-tab-sep">|</span>
+          <a href="#" class="yt-tab" id="manager-tab-sources" onclick="showPage('sources'); return false;">Other videos</a>
         </div>
         <div class="section-header">
           <h2>Video Search</h2>
@@ -536,12 +532,6 @@
           <input type="text" id="search-input"
             placeholder="Search title, channel, tags, thread, description, video ID..."
             onkeypress="if(event.key==='Enter')applyFilters()">
-          <select id="filter-status" onchange="applyFilters()">
-            <option value="">All statuses</option>
-            <option value="downloaded">Downloaded</option>
-            <option value="pending">Pending</option>
-            <option value="unavailable">Unavailable</option>
-          </select>
           <select id="filter-section" onchange="applyFilters()">
             <option value="">All sections</option>
           </select>
@@ -599,8 +589,6 @@
                 <th data-field="channel_name" onclick="sortTable('channel_name')" style="cursor:pointer">Channel <span
                     class="sort-arrow">↕</span></th>
                 <th data-field="publish_date" onclick="sortTable('publish_date')" style="cursor:pointer">Date <span
-                    class="sort-arrow">↕</span></th>
-                <th data-field="status" onclick="sortTable('status')" style="cursor:pointer">Status <span
                     class="sort-arrow">↕</span></th>
                 <th data-field="language" onclick="sortTable('language')" style="cursor:pointer">Lang <span
                     class="sort-arrow">↕</span></th>

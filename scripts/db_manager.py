@@ -6,16 +6,20 @@ import os
 YTP_DB = 'public/ytp.db'
 SOURCES_DB = 'public/sources.db'
 POOPERS_DB = 'public/ytpoopers.db'
+YTPMV_DB = 'public/ytpmv.db'
+COLLABS_DB = 'public/collabs.db'
 
 def get_conn(db_type='ytp'):
     path = YTP_DB
     if db_type == 'sources': path = SOURCES_DB
     elif db_type == 'poopers': path = POOPERS_DB
+    elif db_type == 'ytpmv': path = YTPMV_DB
+    elif db_type == 'collabs': path = COLLABS_DB
     return sqlite3.connect(path)
 
 def find_video_db(vid_id):
     """Checks which DB contains the video and returns (conn, db_type)."""
-    for db_type in ['ytp', 'sources']:
+    for db_type in ['ytp', 'sources', 'ytpmv', 'collabs']:
         conn = get_conn(db_type)
         cursor = conn.cursor()
         cursor.execute("SELECT id FROM videos WHERE id = ?", (vid_id,))
@@ -47,7 +51,7 @@ def ban_videos(video_ids):
                 except Exception as e:
                     print(f"Error removing {abs_path}: {e}", file=sys.stderr)
                     
-        cursor.execute("UPDATE videos SET status = 'banned', local_file = NULL WHERE id = ?", (vid_id,))
+        cursor.execute("UPDATE videos SET local_file = NULL WHERE id = ?", (vid_id,))
         deleted.append(vid_id)
         conn.commit()
         conn.close()
@@ -96,7 +100,6 @@ def flag_as_source(video_ids):
         # 3. Insert into Sources DB
         conn_sources = get_conn('sources')
         cursor_sources = conn_sources.cursor()
-        v_data['is_source'] = 1
         v_data['local_file'] = new_rel_path
         
         cols = ", ".join(v_data.keys())
@@ -151,8 +154,8 @@ def import_videos(urls, target):
             skipped.append(url)
             continue
             
-        cursor.execute("INSERT INTO videos (id, url, status, is_source) VALUES (?, ?, 'available', ?)",
-                       (vid_id, f"https://www.youtube.com/watch?v={vid_id}", 1 if target == 'sources' else 0))
+        cursor.execute("INSERT INTO videos (id, url) VALUES (?, ?)",
+                       (vid_id, f"https://www.youtube.com/watch?v={vid_id}"))
         added.append(vid_id)
         
     conn.commit()
@@ -186,9 +189,9 @@ def add_upload_metadata(id, title, channel_name, channel_url, publish_date, lang
     cursor = conn.cursor()
     
     cursor.execute("""
-        INSERT INTO videos (id, title, channel_name, channel_url, publish_date, language, status, is_source, local_file, view_count, like_count)
-        VALUES (?, ?, ?, ?, ?, ?, 'downloaded', ?, ?, 0, 0)
-    """, (id, title, channel_name, channel_url, publish_date, language, is_source, local_file))
+        INSERT INTO videos (id, title, channel_name, channel_url, publish_date, language, local_file, view_count, like_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0)
+    """, (id, title, channel_name, channel_url, publish_date, language, local_file))
     
     for tag_name in tags:
         cursor.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag_name,))
@@ -203,9 +206,7 @@ def add_upload_metadata(id, title, channel_name, channel_url, publish_date, lang
 def create_playlist(name, pl_id):
     conn = get_conn('ytp')
     cursor = conn.cursor()
-    from datetime import datetime
-    created_at = datetime.now().isoformat()
-    cursor.execute("INSERT INTO playlists (id, name, created_at) VALUES (?, ?, ?)", (pl_id, name, created_at))
+    cursor.execute("INSERT INTO playlists (id, name) VALUES (?, ?)", (pl_id, name))
     conn.commit()
     conn.close()
     return {"success": True, "playlist": {"id": pl_id, "name": name, "videoIds": []}}

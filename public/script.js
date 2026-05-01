@@ -18,14 +18,14 @@ let sourceChannels = new Set();
 let playbackMode = localStorage.getItem('ytp-playback-mode') || 'youtube';
 let renderedHomeVideoIds = new Set();
 let isFetchingMoreHome = false;
-let currentModernTab = 'featured';
+let currentModernTab = 'ytp';
 
 // DB Constants
 const dbName = 'YTPArchiveDB';
 const storeName = 'savedVideos';
 const playlistStoreName = 'playlists';
 let idb; // IndexedDB
-let dbYTP, dbSources, dbPoopers; // Split SQLite DBs
+let dbYTP, dbSources, dbPoopers, dbYTPMV, dbCollabs; // Split SQLite DBs
 let sqlDB; // Reference to main DB for compatibility
 
 // ─── QUERY CACHING ────────────────────────────────────────────────────────
@@ -73,9 +73,50 @@ async function saveStoredDB(name, buffer) {
   store.put(buffer, name);
 }
 
+async function fetchChunks(name) {
+  const chunks = [];
+  let partNum = 1;
+  console.log(`Fetching chunks for ${name}...`);
+  
+  while (true) {
+    const chunkName = `${name}.part${partNum}`;
+    const res = await fetch(chunkName);
+    if (!res.ok) {
+      if (partNum === 1) throw new Error(`Failed to fetch ${chunkName}`);
+      break; // End of chunks
+    }
+    chunks.push(await res.arrayBuffer());
+    partNum++;
+  }
+
+  console.log(`Successfully fetched ${chunks.length} chunks.`);
+  // Combine chunks
+  const totalLength = chunks.reduce((acc, c) => acc + c.byteLength, 0);
+  const result = new Uint8Array(totalLength);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(new Uint8Array(chunk), offset);
+    offset += chunk.byteLength;
+  }
+  return result.buffer;
+}
+
 async function fetchAndCache(name) {
-  const response = await fetch(name);
-  const buffer = await response.arrayBuffer();
+  let buffer;
+  if (name === 'ytp.db') {
+    // Try to load chunks first if it's the split DB
+    try {
+      buffer = await fetchChunks(name);
+    } catch (e) {
+      console.warn("Chunked fetch failed, trying single file...", e);
+      const response = await fetch(name);
+      buffer = await response.arrayBuffer();
+    }
+  } else {
+    const response = await fetch(name);
+    buffer = await response.arrayBuffer();
+  }
+  
   saveStoredDB(name, buffer).catch(console.error);
   return buffer;
 }
@@ -84,7 +125,6 @@ async function loadDB(name, SQL) {
   const cached = await getStoredDB(name);
   if (cached) {
     console.log(`Loaded ${name} from cache`);
-    // Verify length or something? For now just trust it.
     // Fetch in background to update cache for next time
     fetchAndCache(name).catch(() => { });
     return new SQL.Database(new Uint8Array(cached));
@@ -110,15 +150,26 @@ async function initSQLite() {
   dbPoopers = db3;
   sqlDB = dbYTP;
 
-  // Lazy load sources.db if not already loading it
+  // Lazy load extra databases in background
   if (!dbSources) {
     loadDB('sources.db', SQL).then(db => {
       dbSources = db;
       console.log("Sources database loaded in background.");
-      // Refresh dependencies
-      const sources = queryDB("SELECT DISTINCT channel_name FROM videos WHERE is_source = 1");
+      const sources = queryDB("SELECT DISTINCT channel_name FROM videos", [], dbSources);
       sourceChannels = new Set(sources.map(s => s.channel_name));
       updateBadges();
+    });
+  }
+  if (!dbYTPMV) {
+    loadDB('ytpmv.db', SQL).then(db => {
+      dbYTPMV = db;
+      console.log("YTPMV database loaded in background.");
+    });
+  }
+  if (!dbCollabs) {
+    loadDB('collabs.db', SQL).then(db => {
+      dbCollabs = db;
+      console.log("Collabs database loaded in background.");
     });
   }
 
@@ -138,8 +189,10 @@ function queryDB(sql, params = [], targetDB = null) {
       db = dbSources;
     } else if (appMode === 'sources' && (lowerSql.includes('from videos') || lowerSql.includes('from tags') || lowerSql.includes('from sections'))) {
       db = dbSources;
-    } else if (lowerSql.includes('is_source = 1')) {
-      db = dbSources;
+    } else if (appMode === 'ytpmv' && (lowerSql.includes('from videos') || lowerSql.includes('from tags') || lowerSql.includes('from sections'))) {
+      db = dbYTPMV;
+    } else if (appMode === 'collabs' && (lowerSql.includes('from videos') || lowerSql.includes('from tags') || lowerSql.includes('from sections'))) {
+      db = dbCollabs;
     } else {
       db = dbYTP;
     }
@@ -159,6 +212,16 @@ function queryDB(sql, params = [], targetDB = null) {
     console.error('[queryDB] Error executing SQL:', sql, 'Params:', params, 'Error:', e);
     return [];
   }
+}
+
+function findVideoAcrossDBs(vidId) {
+  const dbs = [dbYTP, dbSources, dbYTPMV, dbCollabs];
+  for (const db of dbs) {
+    if (!db) continue;
+    const res = queryDB("SELECT * FROM videos WHERE id = ?", [vidId], db);
+    if (res.length > 0) return { video: res[0], db };
+  }
+  return { video: null, db: null };
 }
 
 /**
@@ -224,7 +287,7 @@ async function autoLoad() {
     if (p.channel_name) pooperMap[p.channel_name] = p;
   });
 
-  const sources = queryDB("SELECT DISTINCT channel_name FROM videos WHERE is_source = 1");
+  const sources = queryDB("SELECT DISTINCT channel_name FROM videos", [], dbSources);
   sourceChannels = new Set(sources.map(s => s.channel_name));
 
   initApp();
@@ -304,7 +367,7 @@ function initApp() {
 
   const yearSelectors = [document.getElementById('global-year-selector'), document.getElementById('modern-global-year-selector')];
   if (yearSelectors[0] || yearSelectors[1]) {
-    const minYearRes = queryDB("SELECT MIN(CAST(substr(publish_date, 1, 4) AS INTEGER)) as m FROM videos WHERE publish_date IS NOT NULL");
+    const minYearRes = queryDB("SELECT MIN(CAST(substr(publish_date, 1, 4) AS INTEGER)) as m FROM videos");
     const minYear = (minYearRes && minYearRes[0] && minYearRes[0].m) ? parseInt(minYearRes[0].m) : 2005;
     const currentYear = new Date().getFullYear();
     globalMaxYear = currentYear;
@@ -454,15 +517,26 @@ function showPage(name, pushToHistory = true) {
   }
   let targetPage = name;
   if (name === 'years') targetPage = 'overview';
-  if (name === 'sources' || name === 'videos') {
+  if (name === 'sources' || name === 'videos' || name === 'ytpmv' || name === 'collabs') {
     appMode = name;
     targetPage = 'videos';
-    document.getElementById('page-videos').querySelector('h2').textContent = appMode === 'sources' ? 'Source Search' : 'Video Search';
+    
+    let title = 'Video Search';
+    if (appMode === 'sources') title = 'Source Search';
+    else if (appMode === 'ytpmv') title = 'YTPMV Search';
+    else if (appMode === 'collabs') title = 'Collabs Search';
+    
+    document.getElementById('page-videos').querySelector('h2').textContent = title;
 
     const tabV = document.getElementById('manager-tab-videos');
     const tabS = document.getElementById('manager-tab-sources');
+    const tabM = document.getElementById('manager-tab-ytpmv');
+    const tabC = document.getElementById('manager-tab-collabs');
+    
     if (tabV) tabV.classList.toggle('active', name === 'videos');
     if (tabS) tabS.classList.toggle('active', name === 'sources');
+    if (tabM) tabM.classList.toggle('active', name === 'ytpmv');
+    if (tabC) tabC.classList.toggle('active', name === 'collabs');
 
     buildFilterOptions();
     applyFilters();
@@ -488,12 +562,13 @@ function showPage(name, pushToHistory = true) {
 
   if (name === 'timeline' && typeof initTimeline === 'function') {
     if (allVideos.length === 0) {
-      allVideos = queryDB("SELECT * FROM videos WHERE is_source = 0");
-      allSources = queryDB("SELECT * FROM videos WHERE is_source = 1");
+      allVideos = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '')", [], dbYTP);
+      allSources = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '')", [], dbSources);
     }
     initTimeline();
   }
   if (name === 'youtube') {
+    appMode = 'videos';
     renderHomePage();
   }
   if (name === 'saved') {
@@ -686,7 +761,9 @@ const SEARCH_FIELD_WEIGHTS = {
  */
 function tokenize(str) {
   if (!str) return [];
-  return str.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(/\s+/).filter(Boolean);
+  // Normalize: lowercase, remove accents (NFKD), remove non-alphanumeric
+  const normalized = str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  return normalized.replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(/\s+/).filter(token => token.length > 0);
 }
 
 function levenshtein(a, b) {
@@ -722,13 +799,10 @@ function fuzzyScore(s1, s2) {
  *   • Field string starts with token → 0.9
  *   • Substring / partial match   → 0.6
  *   • No match                    → 0
- *
- * Uses BM25-style saturation: tf / (tf + 1) so repeating a word has
- * diminishing returns.
  */
 function scoreField(fieldValue, queryTokens, allowFuzzy = true) {
   if (!fieldValue) return { score: 0, matchedTokens: new Set() };
-  const lower = fieldValue.toLowerCase();
+  const lower = fieldValue.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   const fieldTokens = tokenize(fieldValue);
   const fieldTokenSet = new Set(fieldTokens);
   let totalScore = 0;
@@ -742,11 +816,11 @@ function scoreField(fieldValue, queryTokens, allowFuzzy = true) {
     }
     // 2. Prefix of a word (e.g. "harr" matches "harry")
     else if (fieldTokens.some(ft => ft.startsWith(qt))) {
-      bestTermScore = 0.9;
+      bestTermScore = 0.8;
     }
     // 3. Substring anywhere
     else if (lower.includes(qt)) {
-      bestTermScore = 0.6;
+      bestTermScore = 0.5;
     }
     // 4. Fuzzy / typo match (only for tokens >= 3 chars)
     else if (allowFuzzy && qt.length >= 3) {
@@ -757,7 +831,7 @@ function scoreField(fieldValue, queryTokens, allowFuzzy = true) {
         if (s > bestFuzzy) bestFuzzy = s;
       }
       if (bestFuzzy > 0.75) {
-        bestTermScore = bestFuzzy * 0.5; // Lower weight for fuzzy matches
+        bestTermScore = bestFuzzy * 0.4; // Lower weight for fuzzy matches
       }
     }
 
@@ -776,7 +850,16 @@ function scoreField(fieldValue, queryTokens, allowFuzzy = true) {
 /**
  * Score a video against query tokens. Returns a numeric relevance score (0 = no match).
  */
-function scoreVideo(video, queryTokens) {
+function scoreVideo(video, queryTokens, rawQuery = "") {
+  const qLower = rawQuery.toLowerCase().trim();
+  const vTitle = (video.title || "").toLowerCase().trim();
+  
+  // High-priority: Exact title match (huge bonus)
+  if (vTitle === qLower) return 10000;
+  
+  // Very high priority: Title starts with query
+  if (vTitle.startsWith(qLower)) return 5000;
+
   const fields = [
     { value: video.title, weight: SEARCH_FIELD_WEIGHTS.title },
     { value: (video.tags || []).join(' '), weight: SEARCH_FIELD_WEIGHTS.tags },
@@ -799,30 +882,32 @@ function scoreVideo(video, queryTokens) {
   if (totalScore === 0) return 0;
 
   // Proportion of query tokens matched across all fields
-  const coverage = allMatched.size / queryTokens.length;
+  const coverage = queryTokens.length > 0 ? allMatched.size / queryTokens.length : 1;
 
   // Strong bonus when ALL query tokens appear somewhere (order-independent)
-  const allMatchBonus = coverage === 1.0 ? 2.0 : 0;
+  const allMatchBonus = coverage === 1.0 ? 100 : 0;
 
   // Mild popularity signal (log-scaled, capped)
-  const popBoost = 1 + Math.min(Math.log10(Math.max(video.view_count || 1, 1)) / 10, 0.3);
+  const popBoost = 1 + Math.min(Math.log10(Math.max(video.view_count || 1, 1)) / 12, 0.2);
 
   return (totalScore + allMatchBonus) * coverage * popBoost;
 }
 
 /**
- * Builds a SQL WHERE clause for keyword search across multiple fields.
- * Supports tokenized search (all words must match somewhere).
+ * Builds a SQL WHERE clause for discovery.
+ * Uses OR for broad matching, which is then ranked in JS.
  */
-function buildSearchClause(query) {
+function buildSearchClause(query, useOr = true) {
   if (!query) return { clause: "1", params: [] };
-  const tokens = tokenize(query);
-  if (tokens.length === 0) return { clause: "1", params: [] };
+  
+  // Use raw tokens for SQL to avoid normalization mismatches (like è vs e)
+  const rawTokens = query.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(/\s+/).filter(t => t.length > 0);
+  if (rawTokens.length === 0) return { clause: "1", params: [] };
 
   let clauses = [];
   let params = [];
 
-  tokens.forEach(token => {
+  rawTokens.forEach(token => {
     const qp = `%${token}%`;
     clauses.push(`(
       title LIKE ? OR 
@@ -836,7 +921,7 @@ function buildSearchClause(query) {
   });
 
   return {
-    clause: "(" + clauses.join(" AND ") + ")",
+    clause: "(" + clauses.join(useOr ? " OR " : " AND ") + ")",
     params: params
   };
 }
@@ -868,17 +953,17 @@ function performSearch(query) {
 
   document.getElementById('search-query-display').textContent = query;
 
-  const fStatus = document.getElementById('search-filter-status')?.value || '';
   const fSection = document.getElementById('search-filter-section')?.value || '';
-  const fYearMin = document.getElementById('search-filter-year-min')?.value || '';
-  const fYearMax = document.getElementById('search-filter-year-max')?.value || '';
+  const fYearMin = document.getElementById('search-filter-year-min')?.value;
+  const fYearMax = document.getElementById('search-filter-year-max')?.value;
   const fLang = document.getElementById('search-filter-language')?.value || 'any';
   const fSort = document.getElementById('search-sort')?.value || 'relevance';
 
   const queryPattern = `%${query}%`;
+  const queryTokens = tokenize(query);
 
   // ── Search Channels ──────────────────────────────────────────────────
-  const scoredChannels = queryDB("SELECT channel_name as name FROM channels WHERE channel_name LIKE ? LIMIT 3", [queryPattern]);
+  const scoredChannels = queryDB("SELECT channel_name as name FROM channels WHERE channel_name LIKE ? LIMIT 5", [queryPattern]);
   const channelsSection = document.getElementById('search-channels-section');
   const channelsContainer = document.getElementById('search-channels-results');
   if (scoredChannels.length === 0) {
@@ -889,7 +974,6 @@ function performSearch(query) {
   }
 
   // ── Search Playlists ──────────────────────────────────────────────────
-  // For playlists, we still use the in-memory allPlaylists as they are small and can be local-only
   const playlists = [...allPlaylists.local, ...allPlaylists.server];
   const scoredPlaylists = playlists
     .filter(p => p.name.toLowerCase().includes(query.toLowerCase()))
@@ -910,36 +994,61 @@ function performSearch(query) {
   }
 
   // ── Search Videos ────────────────────────────────────────────────────
-  const { clause: searchClause, params: searchParams } = buildSearchClause(query);
-  let whereClauses = [searchClause];
-  let params = [...searchParams];
+  const buildVideoQuery = (db) => {
+    let whereClauses = ["(title IS NOT NULL AND title != '')"];
+    let params = [];
 
-  if (fStatus) { whereClauses.push("status = ?"); params.push(fStatus); }
-  if (fSection) {
-    whereClauses.push("id IN (SELECT video_id FROM video_sections vs JOIN sections s ON vs.section_id = s.id WHERE s.name = ?)");
-    params.push(fSection);
-  }
-  if (fYearMin) { whereClauses.push("substr(publish_date, 1, 4) >= ?"); params.push(fYearMin); }
-  if (fYearMax) { whereClauses.push("substr(publish_date, 1, 4) <= ?"); params.push(fYearMax); }
-  if (fLang !== 'any') { whereClauses.push("language = ?"); params.push(fLang); }
+    // Use OR for broader discovery, then rank in JS. This solves the "è" vs "e" issue
+    // and ensures that phrase fragments still return results.
+    const { clause: searchClause, params: searchParams } = buildSearchClause(query, true);
+    
+    whereClauses.push(`(${searchClause} OR title LIKE ? OR channel_name LIKE ?)`);
+    params.push(...searchParams, queryPattern, queryPattern);
 
-  // Global year limit
-  whereClauses.push("(substr(publish_date, 1, 4) <= ? OR publish_date IS NULL)");
-  params.push(globalMaxYear);
+    // status filter removed
+    if (fSection) {
+      whereClauses.push("id IN (SELECT video_id FROM video_sections vs JOIN sections s ON vs.section_id = s.id WHERE s.name = ?)");
+      params.push(fSection);
+    }
+    if (fYearMin) { whereClauses.push("CAST(substr(publish_date, 1, 4) AS INTEGER) >= ?"); params.push(parseInt(fYearMin)); }
+    if (fYearMax) { whereClauses.push("CAST(substr(publish_date, 1, 4) AS INTEGER) <= ?"); params.push(parseInt(fYearMax)); }
+    if (fLang !== 'any') { whereClauses.push("language = ?"); params.push(fLang); }
 
-  let sql = "SELECT * FROM videos WHERE " + whereClauses.join(" AND ");
+    if (!document.body.classList.contains('video-mode-all')) {
+      whereClauses.push("(CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL)");
+      params.push(parseInt(globalMaxYear));
+    }
 
-  if (fSort === 'relevance') {
-    // Simple relevance approximation: Title match > Channel match > Description match
-    sql += " ORDER BY (CASE WHEN title LIKE ? THEN 10 WHEN channel_name LIKE ? THEN 5 ELSE 1 END) DESC, view_count DESC";
-    params.push(queryPattern, queryPattern);
-  } else if (fSort === 'publish_date') {
-    sql += " ORDER BY publish_date DESC";
-  } else if (fSort === 'view_count') {
-    sql += " ORDER BY view_count DESC";
-  }
+    let sql = "SELECT * FROM videos WHERE " + whereClauses.join(" AND ");
+    console.log(`[Global Search] DB: ${db === dbSources ? 'Sources' : 'YTP'} SQL:`, sql, "Params:", params);
+    return queryDB(sql, params, db);
+  };
 
-  filteredVideos = queryDB(sql, params);
+  const resultsYTP = buildVideoQuery(dbYTP);
+  const resultsSources = buildVideoQuery(dbSources);
+  let merged = [...resultsYTP, ...resultsSources];
+
+  // ── High-Precision Ranking ──────────────────────────────────────────
+  merged.forEach(v => {
+      v._score = scoreVideo(v, queryTokens, query);
+  });
+
+  // Filter out irrelevant results to keep the UI clean
+  merged = merged.filter(v => v._score > 0 || v.title.toLowerCase().includes(query.toLowerCase()));
+
+  merged.sort((a, b) => {
+    if (fSort === 'relevance' || !fSort) {
+        const diff = b._score - a._score;
+        if (Math.abs(diff) > 0.01) return diff;
+    }
+    
+    if (fSort === 'publish_date') return (b.publish_date || "").localeCompare(a.publish_date || "");
+    if (fSort === 'view_count') return (b.view_count || 0) - (a.view_count || 0);
+    
+    return (b.view_count || 0) - (a.view_count || 0);
+  });
+
+  filteredVideos = merged;
   currentPage = 1;
   renderSearchVideos(false);
   setupSearchScrollObserver();
@@ -1004,16 +1113,16 @@ async function openVideo(vidId, pushToHistory = true) {
   showPage('video', false);
   if (typeof updateVideoLayoutForTheme === 'function') updateVideoLayoutForTheme();
 
-  const vRes = queryDB("SELECT * FROM videos WHERE id = ?", [vidId]);
-  if (vRes.length === 0) {
+  const { video, db } = findVideoAcrossDBs(vidId);
+  if (!video) {
     document.getElementById('watch-title').textContent = "Video not found";
     return false;
   }
-  const v = vRes[0];
+  const v = video;
 
-  // Fetch tags and sections
-  v.tags = queryDB("SELECT t.name FROM tags t JOIN video_tags vt ON t.id = vt.tag_id WHERE vt.video_id = ?", [vidId]).map(r => r.name);
-  v.sections = queryDB("SELECT s.name FROM sections s JOIN video_sections vs ON s.id = vs.section_id WHERE vs.video_id = ?", [vidId]).map(r => r.name);
+  // Fetch tags and sections from the SAME database
+  v.tags = queryDB("SELECT t.name FROM tags t JOIN video_tags vt ON t.id = vt.tag_id WHERE vt.video_id = ?", [vidId], db).map(r => r.name);
+  v.sections = queryDB("SELECT s.name FROM sections s JOIN video_sections vs ON s.id = vs.section_id WHERE vs.video_id = ?", [vidId], db).map(r => r.name);
 
   const title = v.title || v.id;
   const channel = v.channel_name || 'Unknown Channel';
@@ -1046,8 +1155,8 @@ async function openVideo(vidId, pushToHistory = true) {
   document.getElementById('watch-description').innerHTML = linkify(escHtml(desc)) + tagsHtml;
 
   const playerContainer = document.getElementById('watch-player');
-  const hasLocal = (v.status === 'downloaded' && v.local_file);
-  const isYoutubeDead = (v.status === 'unavailable' || v.status === 'failed');
+  const hasLocal = !!v.local_file;
+  const isYoutubeDead = false; // We no longer have reliable status data for dead videos in the DB
 
   function renderError() {
     playerContainer.innerHTML = `
@@ -1091,7 +1200,7 @@ async function openVideo(vidId, pushToHistory = true) {
 
   const moreContainer = document.getElementById('more-from-channel');
   if (moreContainer) {
-    const moreVids = queryDB("SELECT * FROM videos WHERE channel_name = ? AND id != ? AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL) LIMIT 5", [v.channel_name, v.id, globalMaxYear]);
+    const moreVids = queryDB("SELECT * FROM videos WHERE channel_name = ? AND id != ? AND (title IS NOT NULL AND title != '') AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL) LIMIT 5", [v.channel_name, v.id, globalMaxYear]);
     moreContainer.innerHTML = moreVids.map(x => renderVideoItem(x, 'grid')).join('');
   }
   updateSaveButton(vidId);
@@ -1118,7 +1227,7 @@ function loadVideoResponses(video) {
     return;
   }
 
-  const matched = queryDB("SELECT * FROM videos WHERE id IN (" + filteredIds.map(() => "?").join(",") + ")", filteredIds);
+  const matched = queryDB("SELECT * FROM videos WHERE id IN (" + filteredIds.map(() => "?").join(",") + ") AND (title IS NOT NULL AND title != '')", filteredIds);
 
   if (matched.length === 0) {
     section.style.display = 'none';
@@ -1154,7 +1263,7 @@ function loadRelatedVideos(video) {
     LEFT JOIN tags t ON vt.tag_id = t.id
     LEFT JOIN video_sections vs ON v.id = vs.video_id
     LEFT JOIN sections s ON vs.section_id = s.id
-    WHERE v.id != ? AND (t.name IN (${videoTags.map(() => "?").join(",")}) OR s.name IN (${videoSections.map(() => "?").join(",")}))
+    WHERE v.id != ? AND (v.title IS NOT NULL AND v.title != '') AND (t.name IN (${videoTags.map(() => "?").join(",")}) OR s.name IN (${videoSections.map(() => "?").join(",")}))
     GROUP BY v.id
     ORDER BY score DESC
     LIMIT 10
@@ -1268,7 +1377,7 @@ function openProfile(user, pushToHistory = true) {
   }
 
   showPage('profile', false);
-  const vRes = queryDB("SELECT * FROM videos WHERE channel_name = ? AND (substr(publish_date, 1, 4) <= ? OR publish_date IS NULL) ORDER BY publish_date DESC", [user, globalMaxYear]);
+  const vRes = queryDB("SELECT * FROM videos WHERE channel_name = ? AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL) ORDER BY publish_date DESC", [user, globalMaxYear]);
   const avatar = getChannelAvatar(user);
   const userVideos = vRes;
   const sorted = [...userVideos];
@@ -1380,7 +1489,7 @@ function renderModernProfileTabContent(user, tab) {
   const container = document.getElementById('modern-profile-content');
   if (!container) return;
 
-  const videos = queryDB("SELECT * FROM videos WHERE channel_name = ? AND (substr(publish_date, 1, 4) <= ? OR publish_date IS NULL)", [user, globalMaxYear]);
+  const videos = queryDB("SELECT * FROM videos WHERE channel_name = ? AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL)", [user, globalMaxYear]);
 
   if (tab === 'home') {
     renderModernChannelHome(user, container, videos);
@@ -1567,27 +1676,30 @@ function setGlobalMaxYear(year) {
 }
 
 function getActiveVideos(forHome = false, limit = null) {
-  const cacheKey = `activeVideos_${currentVideoMode}_${globalMaxYear}_${forHome}_${limit}`;
+  const cacheKey = `activeVideos_${appMode}_${currentVideoMode}_${globalMaxYear}_${forHome}_${limit}`;
   return getCachedQuery(cacheKey, () => {
     let whereClauses = [];
     let params = [];
 
     if (currentVideoMode === "ytp") {
-      whereClauses.push("is_source = 0");
+      // already routed to dbYTP
     } else if (currentVideoMode === "sources") {
-      whereClauses.push("is_source = 1");
+      // already routed to dbSources
     } else {
       if (forHome) {
-        whereClauses.push("is_source = 0");
+        // already routed to dbYTP
       }
     }
 
     if (forHome) {
-      whereClauses.push("status IN ('downloaded', 'available')");
+      // status filter removed
     }
 
     whereClauses.push("(CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL)");
     params.push(globalMaxYear);
+
+    // Filter out entries without a name
+    whereClauses.push("(title IS NOT NULL AND title != '')");
 
     let sql = "SELECT * FROM videos";
     if (whereClauses.length > 0) {
@@ -1624,7 +1736,7 @@ function renderHomePage() {
 
   if (!featuredContainer) return;
 
-  const validVideos = ytData.filter(v => v.status === 'downloaded' || v.status === 'available');
+  const validVideos = ytData;
   if (validVideos.length === 0) {
     featuredContainer.innerHTML = '<div class="empty" style="padding:40px; text-align:center; color:var(--text-muted);">Nessun video trovato.</div>';
     if (modernContainer) modernContainer.innerHTML = '<div class="empty" style="padding:40px; text-align:center; color:var(--text-muted);">Nessun video trovato.</div>';
@@ -1655,6 +1767,7 @@ function setModernHomeTab(tab, btn) {
     chips.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
     if (btn) btn.classList.add('active');
   }
+  renderedHomeVideoIds.clear();
   renderModernGrid();
 }
 
@@ -1664,12 +1777,21 @@ function renderModernGrid() {
 
   // Modern grid usually shows a limited set per tab
   const ytData = getActiveVideos(true, 200);
-  const validVideos = ytData.filter(v => v.status === 'downloaded' || v.status === 'available');
+  const validVideos = ytData; // Status filter removed, all indexed videos are considered available
   if (validVideos.length === 0) return;
 
   let videos;
-  if (currentModernTab === 'featured') {
+  if (currentModernTab === 'ytp') {
     videos = shuffleArray(validVideos).slice(0, 24);
+  } else if (currentModernTab === 'random') {
+    const dbs = [dbYTP, dbSources, dbYTPMV, dbCollabs];
+    let allRand = [];
+    for (const db of dbs) {
+      if (!db) continue;
+      const res = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 10", [], db);
+      allRand.push(...res);
+    }
+    videos = shuffleArray(allRand).slice(0, 24);
   } else if (currentModernTab === 'subscribed') {
     const subs = new Set(getSubscriptions());
     videos = shuffleArray(validVideos.filter(v => subs.has(v.channel_name))).slice(0, 24);
@@ -1684,14 +1806,29 @@ function renderModernGrid() {
   } else if (currentModernTab === 'favorited') {
     videos = [...validVideos].sort((a, b) => (b.like_count || 0) - (a.like_count || 0)).slice(0, 24);
   } else if (currentModernTab === 'ytpmv') {
-    const kw = ['YTPMV', 'MAD'];
-    videos = shuffleArray(validVideos.filter(v => {
-      const t = (v.title || '').toUpperCase();
-      const d = (v.description || '').toUpperCase();
-      return kw.some(k => t.includes(k) || d.includes(k));
-    })).slice(0, 24);
+    if (dbYTPMV) {
+      const sql = "SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 24";
+      videos = queryDB(sql, [], dbYTPMV);
+    } else {
+      // Fallback to keyword search in main DB if specialized DB not yet loaded
+      const kw = ['YTPMV', 'MAD'];
+      videos = shuffleArray(validVideos.filter(v => {
+        const t = (v.title || '').toUpperCase();
+        const d = (v.description || '').toUpperCase();
+        return kw.some(k => t.includes(k) || d.includes(k));
+      })).slice(0, 24);
+    }
     if (videos.length === 0) {
       modernContainer.innerHTML = '<div class="empty-subs" style="padding:40px; text-align:center; color:var(--text-muted);">Nessun video YTPMV/MAD trovato.</div>';
+      return;
+    }
+  } else if (currentModernTab === 'collabs') {
+    if (dbCollabs) {
+      const sql = "SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 24";
+      videos = queryDB(sql, [], dbCollabs);
+    }
+    if (!videos || videos.length === 0) {
+      modernContainer.innerHTML = '<div class="empty-subs" style="padding:40px; text-align:center; color:var(--text-muted);">Nessun video Collab trovato.</div>';
       return;
     }
   } else if (currentModernTab === 'acid') {
@@ -1721,14 +1858,24 @@ function setFeaturedTab(tab) {
   const clickedTab = document.querySelector(`.yt-tab[onclick*="${tab}"]`);
   if (clickedTab) clickedTab.classList.add('active');
 
+  renderedHomeVideoIds.clear();
   const ytData = getActiveVideos(true);
-  const validVideos = ytData.filter(v => v.status === 'downloaded' || v.status === 'available');
+  const validVideos = ytData;
   const featuredContainer = document.getElementById('featured-videos');
   if (!featuredContainer || validVideos.length === 0) return;
 
   let videos;
-  if (tab === 'featured') {
+  if (tab === 'ytp') {
     videos = shuffleArray(validVideos).slice(0, 8);
+  } else if (tab === 'random') {
+    const dbs = [dbYTP, dbSources, dbYTPMV, dbCollabs];
+    let allRand = [];
+    for (const db of dbs) {
+      if (!db) continue;
+      const res = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 4", [], db);
+      allRand.push(...res);
+    }
+    videos = shuffleArray(allRand).slice(0, 8);
   } else if (tab === 'views') {
     videos = [...validVideos].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 8);
   } else if (tab === 'discussed') {
@@ -1744,14 +1891,28 @@ function setFeaturedTab(tab) {
       return;
     }
   } else if (tab === 'ytpmv') {
-    const kw = ['YTPMV', 'MAD'];
-    videos = shuffleArray(validVideos.filter(v => {
-      const t = (v.title || '').toUpperCase();
-      const d = (v.description || '').toUpperCase();
-      return kw.some(k => t.includes(k) || d.includes(k));
-    })).slice(0, 8);
+    if (dbYTPMV) {
+      const sql = "SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 8";
+      videos = queryDB(sql, [], dbYTPMV);
+    } else {
+      const kw = ['YTPMV', 'MAD'];
+      videos = shuffleArray(validVideos.filter(v => {
+        const t = (v.title || '').toUpperCase();
+        const d = (v.description || '').toUpperCase();
+        return kw.some(k => t.includes(k) || d.includes(k));
+      })).slice(0, 8);
+    }
     if (videos.length === 0) {
       featuredContainer.innerHTML = '<div class="empty-subs" style="padding:20px; color:var(--text-muted);">Nessun video YTPMV/MAD trovato.</div>';
+      return;
+    }
+  } else if (tab === 'collabs') {
+    if (dbCollabs) {
+      const sql = "SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 8";
+      videos = queryDB(sql, [], dbCollabs);
+    }
+    if (!videos || videos.length === 0) {
+      featuredContainer.innerHTML = '<div class="empty-subs" style="padding:20px; color:var(--text-muted);">Nessun video Collab trovato.</div>';
       return;
     }
   } else if (tab === 'acid') {
@@ -1775,7 +1936,7 @@ function loadMoreHomeVideos() {
   const modernContainer = document.getElementById('modern-videos-grid');
   if (!featuredContainer || !modernContainer) return;
 
-  const validVideos = getActiveVideos(true).filter(v => v.status === 'downloaded' || v.status === 'available');
+  const validVideos = getActiveVideos(true);
   const available = validVideos.filter(v => !renderedHomeVideoIds.has(v.id));
   if (available.length === 0) return;
 
@@ -2130,9 +2291,9 @@ function buildFilterOptions() {
     FROM sections s
     JOIN video_sections vs ON s.id = vs.section_id
     JOIN videos v ON vs.video_id = v.id
-    WHERE v.is_source = ?
+    WHERE 1=1
     ORDER BY s.name ASC
-  `, [isSource]);
+  `, [], isSource ? dbSources : dbYTP);
 
   const sections = sectionsRes.map(r => r.name === 'Scraped Channel' ? 'Youtube' : r.name);
   const secHtml = '<option value="">All Sections</option>' + [...new Set(sections)].map(s => `<option value="${s}">${s}</option>`).join('');
@@ -2140,13 +2301,13 @@ function buildFilterOptions() {
   if (sectionSelSearch) sectionSelSearch.innerHTML = secHtml;
 
   // 2. Build Channels
-  const channelsRes = queryDB("SELECT DISTINCT channel_name FROM videos WHERE is_source = ? AND channel_name IS NOT NULL AND channel_name != '' ORDER BY channel_name ASC", [isSource]);
+  const channelsRes = queryDB("SELECT DISTINCT channel_name FROM videos WHERE channel_name IS NOT NULL AND channel_name != '' ORDER BY channel_name ASC", [], isSource ? dbSources : dbYTP);
   if (channelDatalist) {
     channelDatalist.innerHTML = channelsRes.map(r => `<option value="${escAttr(r.channel_name)}">`).join('');
   }
 
   // 3. Build Years
-  const yearsRes = queryDB("SELECT DISTINCT substr(publish_date, 1, 4) as y FROM videos WHERE is_source = ? AND publish_date IS NOT NULL ORDER BY y ASC", [isSource]);
+  const yearsRes = queryDB("SELECT DISTINCT substr(publish_date, 1, 4) as y FROM videos WHERE publish_date IS NOT NULL ORDER BY y ASC", [], isSource ? dbSources : dbYTP);
   const years = yearsRes.map(r => r.y);
 
   const minYearHtml = '<option value="">Min</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
@@ -2197,7 +2358,7 @@ function loadFacade(id) {
   const currentData = appMode === 'sources' ? allSources : allVideos;
   const v = currentData.find(x => x.id === id);
 
-  if (v && v.status === 'downloaded' && v.local_file) {
+  if (v && v.local_file) {
     const src = getLocalVideoPath(v);
     el.innerHTML = `<video controls autoplay style="width:100%; height:100%; object-fit:contain; background:#000;">
       <source src="${src}" type="video/mp4">
@@ -2210,7 +2371,6 @@ function loadFacade(id) {
 
 function applyFilters() {
   const q = document.getElementById('search-input').value.trim();
-  const status = document.getElementById('filter-status').value;
   const section = document.getElementById('filter-section').value;
   const channel = document.getElementById('filter-channel').value;
   const viewsMin = parseInt(document.getElementById('filter-views-min').value) || 0;
@@ -2225,19 +2385,16 @@ function applyFilters() {
   const excludeYTP = document.getElementById('filter-exclude-ytp') ? document.getElementById('filter-exclude-ytp').checked : false;
   showVideoEmbed = document.getElementById('filter-show-embed') ? document.getElementById('filter-show-embed').checked : false;
 
-  let whereClauses = ["is_source = ?"];
-  let params = [isSource];
+  let whereClauses = ["(title IS NOT NULL AND title != '')"];
+  let params = [];
 
   if (q) {
-    const { clause: searchClause, params: searchParams } = buildSearchClause(q);
+    const { clause: searchClause, params: searchParams } = buildSearchClause(q, false);
     whereClauses.push(searchClause);
     params.push(...searchParams);
   }
 
-  if (status) {
-    whereClauses.push("status = ?");
-    params.push(status);
-  }
+  // status filter removed
 
   if (section) {
     whereClauses.push("id IN (SELECT video_id FROM video_sections vs JOIN sections s ON vs.section_id = s.id WHERE s.name = ?)");
@@ -2293,6 +2450,7 @@ function applyFilters() {
     filteredVideos = queryCache.get(filterKey);
   } else {
     let sql = "SELECT * FROM videos WHERE " + whereClauses.join(" AND ");
+    console.log("[Manager Search] SQL:", sql, "Params:", params);
 
     // Sorting
     const sortMap = {
@@ -2301,7 +2459,6 @@ function applyFilters() {
       'channel_name': 'channel_name',
       'view_count': 'view_count',
       'like_count': 'like_count',
-      'status': 'status',
       'language': 'language'
     };
     const orderCol = sortMap[sortField] || 'publish_date';
@@ -2365,7 +2522,7 @@ function setupScrollObserver() {
 }
 
 function getEmbedHtml(v) {
-  const isDownloaded = v.status === 'downloaded' && v.local_file;
+  const isDownloaded = v.local_file;
   if (isDownloaded) {
     const localPath = getLocalVideoPath(v);
     return `<video controls preload="metadata" style="width:240px; aspect-ratio:16/9; display:block; margin-top:8px; border-radius:4px; background:#000;">
@@ -2390,7 +2547,7 @@ function renderTable(append = false) {
 
   if (viewMode === 'table') {
     const html = slice.map(v => {
-      const statusClass = 'status-' + (v.status || 'unavailable');
+      const statusClass = v.local_file ? 'status-downloaded' : 'status-available';
 
       const ytpifHtml = (v.source_pages || [])
         .filter(sp => !sp.includes('channel_scrape'))
@@ -2411,7 +2568,7 @@ function renderTable(append = false) {
         titleContent += getEmbedHtml(v);
       }
 
-      const playAction = (v.status === 'downloaded' && v.local_file)
+      const playAction = v.local_file
         ? `<a class="btn-play" href="${getLocalVideoPath(v)}" target="_blank" title="Play local file">▶</a>`
         : '';
 
@@ -2434,13 +2591,12 @@ function renderTable(append = false) {
             ` : '-'}
           </td>
           <td data-label="Date">${fmtDate(v.publish_date)}</td>
-          <td data-label="Status" title="${v.status || '-'}">${getStatusEmoji(v.status)}</td>
           <td data-label="Lang" title="${v.language || '-'}">${getLanguageFlag(v.language)}</td>
           <td class="num" data-label="Views">${fmtNum(v.view_count)}</td>
           <td class="num" data-label="Likes">${fmtNum(v.like_count)}</td>
           <td data-label="Actions" onclick="event.stopPropagation();">${playAction} <a class="btn-yt" href="${v.url || `https://www.youtube.com/watch?v=${v.id}`}" target="_blank" rel="noopener noreferrer">YT</a>${ytpifHtml}</td>
         </tr>`;
-    }).join('') || (append ? '' : `<tr><td colspan="8" class="empty">No videos match your filters</td></tr>`);
+    }).join('') || (append ? '' : `<tr><td colspan="7" class="empty">No videos match your filters</td></tr>`);
 
     if (append) {
       tbody.insertAdjacentHTML('beforeend', html);
@@ -2449,7 +2605,7 @@ function renderTable(append = false) {
     }
   } else {
     const html = slice.map(v => {
-      const statusClass = 'status-' + (v.status || 'unavailable');
+      const statusClass = v.local_file ? 'status-downloaded' : 'status-available';
       const fallbackTitle = (v.thread_titles && v.thread_titles[0]) ? v.thread_titles[0] : null;
       const titleText = v.title || fallbackTitle || v.id;
       const dateText = v.publish_date ? fmtDate(v.publish_date) : 'Unknown Date';
@@ -2457,7 +2613,7 @@ function renderTable(append = false) {
       const chText = v.channel_name || '-';
 
       const thumbUrl = `https://i.ytimg.com/vi/${v.id}/mqdefault.jpg`;
-      const facadeHtml = v.status === 'available' || v.status === 'pending' || v.status === 'downloaded'
+      const facadeHtml = (true) // All videos are considered available or downloaded
         ? `<div class="yt-facade" id="facade-${v.id}" onclick="loadFacade('${v.id}')">
              <img src="${thumbUrl}" alt="Thumbnail" loading="lazy">
              <div class="play-btn"></div>
@@ -2480,8 +2636,8 @@ function renderTable(append = false) {
             ${viewsText ? `<span>${viewsText}</span>` : ''}
             <span>${dateText}</span>
           </div>
-          <div class="vid-status-row" title="${v.status || '-'}">
-            ${getStatusEmoji(v.status)} ${getLanguageFlag(v.language)}
+          <div class="vid-status-row" title="${v.local_file ? 'downloaded' : 'available'}">
+            ${getStatusEmoji(v.local_file ? 'downloaded' : 'available')} ${getLanguageFlag(v.language)}
           </div>
         </div>
       </div>`;
@@ -2712,15 +2868,15 @@ function selectChannel(name) {
 
   // Build video list HTML
   const videoListHtml = sortedVideos.map(v => {
-    const statusClass = 'status-' + (v.status || 'unavailable');
-    const playAction = (v.status === 'downloaded' && v.local_file)
+    const statusClass = v.local_file ? 'status-downloaded' : 'status-available';
+    const playAction = v.local_file
       ? `<a class="btn-play" href="${getLocalVideoPath(v)}" target="_blank" title="Play local file">▶</a>`
       : '';
 
     return `<tr>
       <td class="title-cell"><a href="watch?v=${v.id}" onclick="event.preventDefault(); openVideo('${v.id}')" style="color:var(--text);text-decoration:none">${escHtml(v.title || v.id)}</a></td>
       <td>${fmtDate(v.publish_date)}</td>
-      <td title="${v.status || '-'}">${getStatusEmoji(v.status)}</td>
+      <td title="${v.local_file ? 'downloaded' : 'available'}">${getStatusEmoji(v.local_file ? 'downloaded' : 'available')}</td>
       <td class="num">${fmtNum(v.view_count)}</td>
       <td class="num">${fmtNum(v.like_count)}</td>
       <td>${playAction} <a class="btn-yt" href="${v.url || `https://www.youtube.com/watch?v=${v.id}`}" target="_blank" rel="noopener noreferrer">YT</a></td>
@@ -2773,7 +2929,13 @@ function selectChannel(name) {
     });
     charts['ch-status'] = new Chart(document.getElementById('ch-status-chart'), {
       type: 'doughnut',
-      data: { labels: Object.keys(statusCount), datasets: [{ data: Object.values(statusCount), backgroundColor: [STATUS_COLORS.available, STATUS_COLORS.unavailable, STATUS_COLORS.pending, '#888'] }] },
+      data: { 
+        labels: Object.keys(statusCount), 
+        datasets: [{ 
+          data: Object.values(statusCount), 
+          backgroundColor: Object.keys(statusCount).map(s => STATUS_COLORS[s] || '#888') 
+        }] 
+      },
       options: { ...pieOpts(), plugins: { ...pieOpts().plugins, title: { display: false } } }
     });
   }, 50);
@@ -2850,9 +3012,9 @@ function selectYear(year) {
   const topTags = tagCountsRes.filter(r => !TAG_BLOCKLIST.has(r.name.toLowerCase())).map(r => [r.name, r.c]);
 
   // Status counts
-  const statusCountRes = queryDB("SELECT status, COUNT(*) as c FROM videos WHERE substr(publish_date, 1, 4) = ? GROUP BY status", [year]);
+  const statusCountRes = queryDB("SELECT (CASE WHEN local_file IS NOT NULL THEN 'downloaded' ELSE 'available' END) as status, COUNT(*) as c FROM videos WHERE (CAST(substr(publish_date, 1, 4) AS INTEGER) = ?) GROUP BY status", [year]);
   const statusCount = {};
-  statusCountRes.forEach(r => statusCount[r.status || 'unknown'] = r.c);
+  statusCountRes.forEach(r => statusCount[r.status] = r.c);
 
   // Monthly breakdown
   const byMonthRes = queryDB("SELECT substr(publish_date, 6, 2) as m, COUNT(*) as c FROM videos WHERE substr(publish_date, 1, 4) = ? GROUP BY m", [year]);
@@ -3013,9 +3175,11 @@ const PALETTE = ['#6c63ff', '#ff6584', '#43e97b', '#f7971e', '#38f9d7', '#fa709a
 const STATUS_COLORS = { available: '#43e97b', unavailable: '#ff6584', pending: '#f7971e', unknown: '#888' };
 
 function updateBadges() {
-  const totalVideos = queryDBRow("SELECT COUNT(*) as c FROM videos WHERE is_source = 0").c || 0;
-  const totalSources = queryDBRow("SELECT COUNT(*) as c FROM videos WHERE is_source = 1").c || 0;
-  const totalChannels = queryDBRow("SELECT COUNT(*) as c FROM channels").c || 0;
+  const totalVideos = queryDBRow("SELECT COUNT(*) as c FROM videos", [], dbYTP).c || 0;
+  const totalSources = queryDBRow("SELECT COUNT(*) as c FROM videos", [], dbSources).c || 0;
+  const totalYTPMV = queryDBRow("SELECT COUNT(*) as c FROM videos", [], dbYTPMV).c || 0;
+  const totalCollabs = queryDBRow("SELECT COUNT(*) as c FROM videos", [], dbCollabs).c || 0;
+  const totalChannels = queryDBRow("SELECT COUNT(*) as c FROM channels", [], dbPoopers).c || 0;
   const totalYears = queryDBRow("SELECT COUNT(DISTINCT substr(publish_date, 1, 4)) as c FROM videos WHERE publish_date IS NOT NULL").c || 0;
 
   const bV = document.getElementById('badge-videos');
@@ -3036,8 +3200,8 @@ function buildOverview() {
       SUM(CASE WHEN view_count IS NOT NULL THEN 1 ELSE 0 END) as withViewsCount,
       SUM(view_count) as totalViews,
       SUM(like_count) as totalLikes,
-      SUM(CASE WHEN status = 'available' THEN 1 ELSE 0 END) as available
-    FROM videos WHERE is_source = 0
+      SUM(CASE WHEN local_file IS NULL THEN 1 ELSE 0 END) as available
+    FROM videos
   `);
 
   const total = stats.total || 1;
@@ -3047,7 +3211,7 @@ function buildOverview() {
   const totalLikes = stats.totalLikes || 0;
   const available = stats.available || 0;
 
-  const channelsCount = queryDBRow("SELECT COUNT(DISTINCT channel_name) as c FROM videos WHERE is_source = 0").c || 0;
+  const channelsCount = queryDBRow("SELECT COUNT(DISTINCT channel_name) as c FROM videos").c || 0;
   const sectionsCount = queryDBRow("SELECT COUNT(*) as c FROM sections").c || 0;
 
   document.getElementById('overview-stats').innerHTML = [
@@ -3060,7 +3224,7 @@ function buildOverview() {
   ].map(c => `<div class="stat-card"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`).join('');
 
   // Videos by year
-  const yearRes = queryDB("SELECT substr(publish_date, 1, 4) as y, COUNT(*) as c FROM videos WHERE is_source = 0 AND publish_date IS NOT NULL GROUP BY y ORDER BY y ASC");
+  const yearRes = queryDB("SELECT substr(publish_date, 1, 4) as y, COUNT(*) as c FROM videos WHERE publish_date IS NOT NULL GROUP BY y ORDER BY y ASC");
   const years = yearRes.map(r => r.y);
   makeChart('chart-year', 'bar', years, [{
     label: 'Videos', data: yearRes.map(r => r.c),
@@ -3069,7 +3233,7 @@ function buildOverview() {
   }], chartOpts(''));
 
   // Status doughnut
-  const statusRes = queryDB("SELECT status, COUNT(*) as c FROM videos WHERE is_source = 0 GROUP BY status");
+  const statusRes = queryDB("SELECT (CASE WHEN local_file IS NOT NULL THEN 'downloaded' ELSE 'available' END) as status, COUNT(*) as c FROM videos GROUP BY status");
   const statusLabels = statusRes.map(r => r.status || 'unknown');
   makeChart('chart-status', 'doughnut',
     statusLabels,
@@ -3077,14 +3241,14 @@ function buildOverview() {
     pieOpts());
 
   // Top channels
-  const topChRes = queryDB("SELECT channel_name, COUNT(*) as c FROM videos WHERE is_source = 0 GROUP BY channel_name ORDER BY c DESC LIMIT 15");
+  const topChRes = queryDB("SELECT channel_name, COUNT(*) as c FROM videos GROUP BY channel_name ORDER BY c DESC LIMIT 15");
   makeChart('chart-top-channels', 'bar', topChRes.map(c => c.channel_name), [{
     label: 'Videos', data: topChRes.map(c => c.c),
     backgroundColor: PALETTE[0] + 'bb', borderRadius: 4
   }], { ...chartOpts(''), indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: gridScales().x, y: { ...gridScales().y, ticks: { color: '#8892b0', font: { size: 10 } } } } });
 
   // Sections bar
-  const topSecRes = queryDB("SELECT s.name, COUNT(*) as c FROM sections s JOIN video_sections vs ON s.id = vs.section_id JOIN videos v ON vs.video_id = v.id WHERE v.is_source = 0 GROUP BY s.name ORDER BY c DESC");
+  const topSecRes = queryDB("SELECT s.name, COUNT(*) as c FROM sections s JOIN video_sections vs ON s.id = vs.section_id JOIN videos v ON vs.video_id = v.id GROUP BY s.name ORDER BY c DESC");
   makeChart('chart-sections', 'bar', topSecRes.map(s => s.name), [{
     label: 'Videos', data: topSecRes.map(s => s.c),
     backgroundColor: PALETTE[1] + 'bb', borderRadius: 4
@@ -3100,7 +3264,7 @@ function buildOverview() {
       SUM(CASE WHEN view_count >= 10000 AND view_count < 100000 THEN 1 ELSE 0 END) as v100k,
       SUM(CASE WHEN view_count >= 100000 AND view_count < 1000000 THEN 1 ELSE 0 END) as v1m,
       SUM(CASE WHEN view_count >= 1000000 THEN 1 ELSE 0 END) as v1mp
-    FROM videos WHERE is_source = 0
+    FROM videos
   `);
   const buckets = { '0': distRes.v0, '1-100': distRes.v100, '100-1K': distRes.v1k, '1K-10K': distRes.v10k, '10K-100K': distRes.v100k, '100K-1M': distRes.v1m, '1M+': distRes.v1mp };
 
@@ -3110,7 +3274,7 @@ function buildOverview() {
   }], pieOpts());
 
   // Top by views
-  const topViews = queryDB("SELECT * FROM videos WHERE is_source = 0 AND view_count IS NOT NULL ORDER BY view_count DESC LIMIT 10");
+  const topViews = queryDB("SELECT * FROM videos WHERE view_count IS NOT NULL ORDER BY view_count DESC LIMIT 10");
   if (topViews.length > 0) {
     makeChart('chart-top-views', 'bar',
       topViews.map(v => (v.title || v.id).slice(0, 25) + '…'),
@@ -3119,7 +3283,7 @@ function buildOverview() {
   }
 
   // Top by likes
-  const topLikes = queryDB("SELECT * FROM videos WHERE is_source = 0 AND like_count IS NOT NULL ORDER BY like_count DESC LIMIT 10");
+  const topLikes = queryDB("SELECT * FROM videos WHERE like_count IS NOT NULL ORDER BY like_count DESC LIMIT 10");
   if (topLikes.length > 0) {
     makeChart('chart-top-likes', 'bar',
       topLikes.map(v => (v.title || v.id).slice(0, 25) + '…'),
@@ -3203,8 +3367,7 @@ function timeAgo(timestamp) {
 }
 function getStatusEmoji(status) {
   if (status === 'downloaded') return '✅';
-  if (status === 'unavailable') return '❌';
-  return '⏳';
+  return '🌐';
 }
 
 function getLanguageFlag(lang) {

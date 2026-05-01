@@ -26,7 +26,7 @@ const PORT = parseInt(process.env.PORT || '4000', 10);
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DB_DIR = path.join(__dirname, 'db');
 const VIDEOS_DIR = path.join(DB_DIR, 'videos');
-const DB_PATH = path.join(PUBLIC_DIR, 'museum.db');
+const DB_PATH = path.join(PUBLIC_DIR, 'ytp.db');
 const SOURCES_DIR = path.join(__dirname, 'sources');
 const DB_MANAGER = path.join(__dirname, 'scripts', 'db_manager.py');
 
@@ -274,7 +274,7 @@ function onRequest(req, res) {
   if (fs.existsSync(filePath) && fs.statSync(filePath).isFile()) {
     const ext = path.extname(filePath).toLowerCase();
     const stat = fs.statSync(filePath);
-    
+
     // Cache headers for DB files and static assets
     let headers = {
       'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
@@ -288,7 +288,7 @@ function onRequest(req, res) {
     }
 
     const acceptEncoding = req.headers['accept-encoding'] || '';
-    
+
     // Compress text and DB files
     const shouldCompress = ['.html', '.js', '.css', '.json', '.db'].includes(ext);
 
