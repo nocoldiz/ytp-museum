@@ -85,7 +85,7 @@ def load_channels_from_md(filepath):
     return channels
 
 # Load channels from centralized MD file
-CHANNELS_MD_PATH = os.path.join(DEFAULT_DOCS_DIR, "channels_by_language.md")
+CHANNELS_MD_PATH = os.path.join(PROJECT_ROOT, "db", "channels_by_language.md")
 loaded_channels = load_channels_from_md(CHANNELS_MD_PATH)
 
 DISALLOWED_CHANNELS = loaded_channels["DISALLOWED_CHANNELS"]
@@ -409,8 +409,8 @@ def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, 
 
     print(f"\n>>> Scraping complete. {new_entries} total matches added.")
 
-    # Removed automatic download:
-    # do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, limit_channels=channels_list, language_filter=language)
+    # Restored automatic download:
+    do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, limit_channels=channels_list, language_filter=language)
 
 def is_disallowed_channel(channel_name):
     if not channel_name:
@@ -645,6 +645,59 @@ class VideoIndex:
                 if vid in self.data:
                     del self.data[vid]
             self.save()
+
+    def resort_videos(self):
+        """
+        Resorts videos between main index and sources index based on YTP_KEYWORDS_LIST.
+        Matches against both title and description.
+        """
+        print(f"\n  [Resort] Starting re-sorting of all videos...")
+        all_videos = {**self.data, **self.sources_data}
+        new_data = {}
+        new_sources_data = {}
+        
+        moved_to_videos = 0
+        moved_to_sources = 0
+        
+        total = len(all_videos)
+        processed = 0
+        
+        for vid, info in all_videos.items():
+            if vid in self.actually_excluded_ids:
+                continue
+                
+            title = info.get("title") or ""
+            desc = info.get("description") or ""
+            text_to_check = f"{title} {desc}"
+            
+            is_ytp = False
+            if YTP_KEYWORDS.search(text_to_check):
+                is_ytp = True
+            
+            if is_ytp:
+                new_data[vid] = info
+                if vid in self.sources_data:
+                    moved_to_videos += 1
+            else:
+                new_sources_data[vid] = info
+                if vid in self.data:
+                    moved_to_sources += 1
+            
+            processed += 1
+            if processed % 500 == 0:
+                print(f"\r    Processed {processed}/{total}...", end="", flush=True)
+                    
+        self.data = new_data
+        self.sources_data = new_sources_data
+        
+        clear_line()
+        print(f"  [Resort] Completed.")
+        print(f"    - Moved to Videos:  {moved_to_videos}")
+        print(f"    - Moved to Sources: {moved_to_sources}")
+        print(f"    - Total Videos:     {len(self.data)}")
+        print(f"    - Total Sources:    {len(self.sources_data)}")
+        
+        self.save()
 
     def save(self):
         try:
@@ -3004,13 +3057,15 @@ def main():
                    help="Do not update the JSON database with download status")
     p.add_argument("--workers",         type=int, default=4,
                    help="Number of parallel workers for downloading")
+    p.add_argument("--resort",          action="store_true",
+                   help="Resort videos between main index and sources index based on keywords")
     args, _ = p.parse_known_args()
 
     if not os.path.isdir(args.site_dir):
         print(f"[!] site_dir not found: {args.site_dir}")
         sys.exit(1)
 
-    if args.stats or args.chronology or args.dump_poopers or args.find_mirrors or args.scrape_comments or args.scrape_profiles or args.download_italian or args.forum_scrape:
+    if args.stats or args.chronology or args.dump_poopers or args.find_mirrors or args.scrape_comments or args.scrape_profiles or args.download_italian or args.forum_scrape or args.resort:
         index = VideoIndex(args.video_dir, args.docs_dir)
         index.load()
         if args.stats:
@@ -3028,6 +3083,8 @@ def main():
             do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, ITALIAN_CHANNELS, "italian", year_limit=args.year_limit, skip_scan=False)
         if args.forum_scrape:
             do_forum_scrape(index, args.site_dir)
+        if args.resort:
+            index.resort_videos()
         
         # Call migration after operations that change data
         if not (args.stats or args.chronology or args.dump_poopers):
@@ -3079,6 +3136,9 @@ def main():
     print("  f  Forum Scrape (Site Mirror)")
     print("       Crawl archived forum folders to extract legacy YouTube links.")
     print()
+    print("  r  Resort Videos")
+    print("       Re-scan all indices and sort videos by keywords.")
+    print()
     print("  s  Full Scrape Run (Standard Cycle)")
     print("       Discovery: Scrape channels -> Metadata -> Profiles -> Comments.")
     print()
@@ -3093,8 +3153,8 @@ def main():
     print()
     print("  q  Quit")
     print()
-    choice = ask("  Choice [1-11/f/s/d/p/a/q]: ",
-                 {"1","2","3","4","5","6","7","8","9","10","11","f","s","d","p","a","q"})
+    choice = ask("  Choice [1-11/f/r/s/d/p/a/q]: ",
+                 {"1","2","3","4","5","6","7","8","9","10","11","f","r","s","d","p","a","q"})
 
     if choice == "q":
         sys.exit(0)
@@ -3197,6 +3257,9 @@ def main():
 
     if choice == "f":
         do_forum_scrape(index, args.site_dir)
+
+    if choice == "r":
+        index.resort_videos()
 
     if choice == "s":
         do_full_scrape_run(index, args)

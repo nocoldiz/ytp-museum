@@ -114,6 +114,10 @@ async function autoLoad() {
   const sources = queryDB("SELECT DISTINCT channel_name FROM videos WHERE is_source = 1");
   sourceChannels = new Set(sources.map(s => s.channel_name));
 
+  // Populate global caches for Timeline and legacy components
+  allVideos = queryDB("SELECT * FROM videos WHERE is_source = 0");
+  allSources = queryDB("SELECT * FROM videos WHERE is_source = 1");
+
   initApp();
 
   // Detect server mode for management features
@@ -2850,17 +2854,21 @@ function buildOverview() {
 
   // Top by views
   const topViews = allVideos.filter(v => v.view_count).sort((a, b) => b.view_count - a.view_count).slice(0, 10);
-  makeChart('chart-top-views', 'bar',
-    topViews.map(v => (v.title || v.id).slice(0, 25) + '…'),
-    [{ label: 'Views', data: topViews.map(v => v.view_count), backgroundColor: PALETTE[2] + 'bb', borderRadius: 4 }],
-    { ...chartOpts(''), indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ...gridScales().x, ticks: { callback: v => fmtBig(v), color: '#8892b0' } }, y: { ...gridScales().y, ticks: { color: '#8892b0', font: { size: 9 } } } } });
+  if (topViews.length > 0) {
+    makeChart('chart-top-views', 'bar',
+      topViews.map(v => (v.title || v.id).slice(0, 25) + '…'),
+      [{ label: 'Views', data: topViews.map(v => v.view_count), backgroundColor: PALETTE[2] + 'bb', borderRadius: 4 }],
+      { ...chartOpts(''), indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ...gridScales().x, ticks: { callback: v => fmtBig(v), color: '#8892b0' } }, y: { ...gridScales().y, ticks: { color: '#8892b0', font: { size: 9 } } } } });
+  }
 
   // Top by likes
   const topLikes = allVideos.filter(v => v.like_count).sort((a, b) => b.like_count - a.like_count).slice(0, 10);
-  makeChart('chart-top-likes', 'bar',
-    topLikes.map(v => (v.title || v.id).slice(0, 25) + '…'),
-    [{ label: 'Likes', data: topLikes.map(v => v.like_count), backgroundColor: PALETTE[3] + 'bb', borderRadius: 4 }],
-    { ...chartOpts(''), indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ...gridScales().x, ticks: { callback: v => fmtBig(v), color: '#8892b0' } }, y: { ...gridScales().y, ticks: { color: '#8892b0', font: { size: 9 } } } } });
+  if (topLikes.length > 0) {
+    makeChart('chart-top-likes', 'bar',
+      topLikes.map(v => (v.title || v.id).slice(0, 25) + '…'),
+      [{ label: 'Likes', data: topLikes.map(v => v.like_count), backgroundColor: PALETTE[3] + 'bb', borderRadius: 4 }],
+      { ...chartOpts(''), indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ...gridScales().x, ticks: { callback: v => fmtBig(v), color: '#8892b0' } }, y: { ...gridScales().y, ticks: { color: '#8892b0', font: { size: 9 } } } } });
+  }
 }
 
 // ─── CHART HELPERS ────────────────────────────────────────────────────────
