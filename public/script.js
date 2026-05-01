@@ -25,7 +25,8 @@ const dbName = 'YTPArchiveDB';
 const storeName = 'savedVideos';
 const playlistStoreName = 'playlists';
 let idb; // IndexedDB
-let sqlDB; // SQLite DB
+let dbYTP, dbSources, dbPoopers; // Split SQLite DBs
+let sqlDB; // Reference to main DB for compatibility
 
 // ─── QUERY CACHING ────────────────────────────────────────────────────────
 const queryCache = new Map();
@@ -46,18 +47,50 @@ async function initSQLite() {
   };
   const SQL = await initSqlJs(config);
 
-  const response = await fetch('museum.db');
-  const arrayBuffer = await response.arrayBuffer();
-  const uInt8Array = new Uint8Array(arrayBuffer);
-  sqlDB = new SQL.Database(uInt8Array);
-  console.log("SQLite database loaded successfully.");
+  console.log("Fetching databases...");
+  const [resYTP, resSources, resPoopers] = await Promise.all([
+    fetch('ytp.db'),
+    fetch('sources.db'),
+    fetch('ytpoopers.db')
+  ]);
+
+  const [bufYTP, bufSources, bufPoopers] = await Promise.all([
+    resYTP.arrayBuffer(),
+    resSources.arrayBuffer(),
+    resPoopers.arrayBuffer()
+  ]);
+
+  dbYTP = new SQL.Database(new Uint8Array(bufYTP));
+  dbSources = new SQL.Database(new Uint8Array(bufSources));
+  dbPoopers = new SQL.Database(new Uint8Array(bufPoopers));
+  
+  sqlDB = dbYTP; // Default to YTP for compatibility
+  console.log("SQLite databases (ytp, sources, ytpoopers) loaded successfully.");
   return sqlDB;
 }
 
-function queryDB(sql, params = []) {
-  if (!sqlDB) return [];
+function queryDB(sql, params = [], targetDB = null) {
+  let db = targetDB;
+  
+  if (!db) {
+    const lowerSql = sql.toLowerCase();
+    // Intelligent Routing
+    if (lowerSql.includes('from channels')) {
+      db = dbPoopers;
+    } else if (lowerSql.includes('from source_pages') || lowerSql.includes('from video_sources')) {
+      db = dbSources;
+    } else if (appMode === 'sources' && (lowerSql.includes('from videos') || lowerSql.includes('from tags') || lowerSql.includes('from sections'))) {
+      db = dbSources;
+    } else if (lowerSql.includes('is_source = 1')) {
+      db = dbSources;
+    } else {
+      db = dbYTP;
+    }
+  }
+
+  if (!db) return [];
   try {
-    const stmt = sqlDB.prepare(sql);
+    const stmt = db.prepare(sql);
     stmt.bind(params);
     const results = [];
     while (stmt.step()) {
