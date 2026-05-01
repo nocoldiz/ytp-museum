@@ -32,7 +32,7 @@ PROJECT_ROOT = SCRIPT_PATH.parent.parent if SCRIPT_PATH.parent.name == "scripts"
 
 DEFAULT_VIDEO_DIR = str(PROJECT_ROOT / "videos")
 DEFAULT_SITE_DIR = str(PROJECT_ROOT / "site_mirror")
-DEFAULT_DOCS_DIR = str(PROJECT_ROOT / "db")
+DEFAULT_DOCS_DIR = str(PROJECT_ROOT / "scripts/db")
 DEFAULT_SOURCES_DIR = str(PROJECT_ROOT / "sources")
 DEFAULT_FORMAT = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
 
@@ -85,7 +85,7 @@ def load_channels_from_md(filepath):
     return channels
 
 # Load channels from centralized MD file
-CHANNELS_MD_PATH = os.path.join(DEFAULT_DOCS_DIR, "channels_by_language.md")
+CHANNELS_MD_PATH = os.path.join(PROJECT_ROOT, "db", "channels_by_language.md")
 loaded_channels = load_channels_from_md(CHANNELS_MD_PATH)
 
 DISALLOWED_CHANNELS = loaded_channels["DISALLOWED_CHANNELS"]
@@ -116,31 +116,32 @@ import re
 YTP_KEYWORDS_LIST = [
     r'YTP(?:H|HSHORT|BR|FR|ITA|PL|RU|ES|PT|RO|GR|NL|HU|JP)?',
     r'YTPV', r'YTPMV(?:\s+ITA|BR|RU|PL)?',
-    r'san\'itario', r's\.itario', r's\.antonino',
-    r'catena\s+di', r'CATENA\s+S\.\s+ANTONIO',
+    r'san\'itario', r's\.itario', r's\.antonino',r'Reuploaded',
+    r'catena\s+di', r'CATENA\s+S\.\s+ANTONIO',r'Reupload',
     r'Shitstorm\s+Pt\.', r'Otomad', r'音MAD', r'MAD\s+Movie', r'YTPM',
     r'YTP\s+(?:Tennis|Soccer|Ping\s+pong)', r'YTP(?:Tennis|Soccer|Pingpong)',
     r'RYTP', r'STP', r'Pytp', r'YouTube\s+Kacke', r'YouTube\s+Kaka',
-    r'YTK', r'YTM', r'Youtube\s+poop(?:\s+ITA)?'
+    r'YTK', r'Sparta remix',  r'WEEGEE',r'YTM',r'You tube poop', r'Youtube\s+poop(?:\s+ITA)?'
 ]
 
-MEME_KEYWORDS_LIST = [
-    # Italian
+MEME_KEYWORDS_IT = [
     r'matteo\s+montesi', r'avventure', r'Zeb(?:89)?', r'Collegio', r'Bigazzi', 
     r'Soccer', r'Ganon', r'Billy\s+Mays', r'Branduardi', r'Luigi', r'Ambrogio', 
-    r'Risotto', r'Peppa', r'Grylls', r'Favij', r'Testoh', r'Pingu', 
+    r'Risotto', r'Peppa', r'Ascanio', r'Grylls', r'Favij', r'Testoh', r'Pingu', 
     r'Dipr[eè]', r'Bello\s+Figo', r'Germano', r'Grillo', r'Ges[uù]', r'Nabbo', 
     r'Yotobi', r'Berlusconi', r'Muniz', r'Travaglio', r'Nemesis', r'Testo', r'Papa', 
     r'Super\s+Quark', r'Sentence\s+Mix', r'Ear\s?rape', r'G-Major', r'Mondo\s+emo', 
     r'Pubblicit[aà]', r'Spot', r'Spongebob', r'Reverse', r'Masking', r'Pitch\s+Shift', 
-    r'Mosconi', r'Benson', r'Brumotti', r'Master\s?chef', r'Mister\s+Lui', 
+    r'Mosconi', r'Benson',r'Canzone iraniana', r'Brumotti', r'Sottotitolato',r'Canzone italianizzata', r'Master\s?chef', r'Mister\s+Lui', 
     r'Pappalardo', r'Sgarbi', r'Razzi', r'Salvini', r'Renzi', r'Rio\s+mare', 
     r'Gerry\s+Scotti', r'Fazio', r'Kabu', r'Nocoldiz', r'Poldo', r'Cloroformio', 
     r'Game of thrones', r'Re Robert', r'Giannino', r'Gianni\s+Morandi', r'Doraemon', 
     r'Me\s+cont[ro]o\s+Te', r'Capobastone', r'Croix89', r'Maurizio\s+Mosca', 
     r'Mike\s+Bongiorno', r'De\s+Sica', r'Boldi', r'Checco\s+Zalone', 
-    r'Aldo\s+Giovanni\s+e\s+Giacomo', r'Maccio\s+Capatonda', r'Magalli', r'Camera\s+Caf[eè]',
-    # Global
+    r'Aldo\s+Giovanni\s+e\s+Giacomo', r'Maccio\s+Capatonda', r'Magalli', r'Camera\s+Caf[eè]'
+]
+
+MEME_KEYWORDS_INT = [
     r'Pingas', r'CD-i', r'Morshu', r'Mah\s+Boi', r'He[\s-]?Man', r'Sparta\s+Remix', 
     r'Scad', r'Stutter', r'Patrick', r'Jack\s+Black', r'Gourmet', r'The\s+king', 
     r'Weegee', r'Spadinner', r'Michael\s+Rosen', r'Viacom', r'Skooks', r'Flex\s+Tape', 
@@ -150,33 +151,48 @@ MEME_KEYWORDS_LIST = [
     r'Gabe\s+Newell', r'TF2', r'Gmod', r'Fnaf', r'Markiplier', r'Pewdiepie', 
     r'Asdfmovie', r'Nyan\s+Cat', r'Leeroy\s+Jenkins', r'Chuck\s+Norris', r'Over\s+9000', 
     r'LazyTown', r'Robbie\s+Rotten', r'We\s+Are\s+Number\s+One', r'Big\s+Chungus', 
-    r'Ugandan\s+Knuckles', r'Thomas\s+the\s+Tank\s+Engine', r'Yee',
-    # Spanish
+    r'Ugandan\s+Knuckles', r'Thomas\s+the\s+Tank\s+Engine', r'Yee'
+]
+
+MEME_KEYWORDS_ES = [
     r'Chavo\s+del\s+8', r'Don\s+Ramon', r'Quico', r'Pelea\s+de\s+invalidos', 
     r'Vete\s+a\s+la\s+Versh', r'Pooppa[ñn]ol', r'El\s+bananero', r'Dross', 
     r'Edgar\s+se\s+cae', r'Fua', r'Tano\s+Pasman', r'Loquendo', r'El\s+Risitas', 
-    r'Fernanfloo', r'Rubius', r'Vegetta777', r'Caso\s+Cerrado', r'Doctora\s+Polo',
-    # French
+    r'Fernanfloo', r'Rubius', r'Vegetta777', r'Caso\s+Cerrado', r'Doctora\s+Polo'
+]
+
+MEME_KEYWORDS_FR = [
     r'Brocante', r'Joueur\s+du\s+Grenier', r'JDG', r'Koh\s+Lanta', r'Denis\s+Brogniart', 
     r'David\s+Goodenough', r'Antoine\s+Daniel', r'What\s+The\s+Cut', r'WTC', 
     r'Mister\s+V', r'Cyprien', r'Norman', r'Squeezie', r'Kaamelott', r'OSS\s+117', 
     r'Jean\s+Dujardin', r'Baptiste', r'T\'es\s+pas\s+net', r'Morsay', r'Sylvain\s+Durif', 
-    r'Christ\s+Cosmique',
-    # German
+    r'Christ\s+Cosmique'
+]
+
+MEME_KEYWORDS_DE = [
     r'Marcell\s+D\'Avis', r'Peter\s+Zwegat', r'Kinski', r'Löwenzahn', r'Peter\s+Lustig', 
     r'1&1', r'Andreas\s+Kieling', r'Frauentausch', r'Halt\s+Stop', r'Psycho\s+Andreas', 
     r'Domian', r'Money\s+Boy', r'Haftbefehl', r'Drachenlord', r'Gronkh', r'Coldmirror', 
-    r'Fresh\s+D',
-    # Russian
+    r'Fresh\s+D'
+]
+
+MEME_KEYWORDS_RU = [
     r'Поцык', r'Повар', r'Сашко', r'Гамаз', r'Пенек', r'Влад\s+Борщ', r'Буйный\s+Славик', 
     r'Дед\s+Бом-бом', r'Кандибобер', r'Ивангай', r'\+100500', r'Макс\s+Голополосов', 
-    r'This\s+is\s+Хорошо', r'Стас\s+Давыдов', r'Никита\s+Литвинков',
-    # Brazilian
+    r'This\s+is\s+Хорошо', r'Стас\s+Давыдов', r'Никита\s+Литвинков'
+]
+
+MEME_KEYWORDS_BR = [
     r'Bambam', r'Rodrigo\s+Faro', r'Fausto\s+Silva', r'Faust[aã]o', r'Ratinho', 
     r'Silvio\s+Santos', r'Galo\s+Cego', r'Jailson\s+Mendes', r'Urso\s+Peludo', 
     r'Paulo\s+Guina', r'Chaves', r'Seu\s+Madruga', r'Away\s+de\s+Petr[oó]polis', 
     r'Gil\s+Brother', r'Dollynho'
 ]
+
+MEME_KEYWORDS_LIST = (
+    MEME_KEYWORDS_IT + MEME_KEYWORDS_INT + MEME_KEYWORDS_ES + 
+    MEME_KEYWORDS_FR + MEME_KEYWORDS_DE + MEME_KEYWORDS_RU + MEME_KEYWORDS_BR
+)
 
 YTP_KEYWORDS = re.compile("|".join(YTP_KEYWORDS_LIST), re.IGNORECASE)
 MEME_KEYWORDS = re.compile("|".join(MEME_KEYWORDS_LIST), re.IGNORECASE)
@@ -196,6 +212,9 @@ def get_target_index(title):
         return "sources"
     return "none"
 
+RESTRICTED_ITALIAN_KEYWORDS = re.compile(
+    r'(?i)(Youtube poop ita|You tube poop ita|YTP ITA|Youtube merda|YTM|S\.Itario|Shitstorm pt\.)'
+)
 
 NON_YTP_KEYWORDS = re.compile(
     r'(?i)('
@@ -307,7 +326,32 @@ def clear_line():
     cols = shutil.get_terminal_size((80, 24)).columns
     print("\r" + " " * cols + "\r", end="", flush=True)
 
-def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, channels_list, language, year_limit=None, skip_scan=False):
+def find_video_on_disk(video_id, search_dirs):
+    """
+    Recursively search search_dirs for files like * [ID].mp4 or * - ID.mp4.
+    Returns the path to the first matching file, or None.
+    """
+    patterns = [
+        f"* [{video_id}].*",
+        f"* - {video_id}.*",
+        f"{video_id}.*"
+    ]
+    
+    for s_dir in search_dirs:
+        s_path = Path(s_dir)
+        if not s_path.exists():
+            continue
+            
+        for pattern in patterns:
+            # Use rglob for recursive search
+            for match in s_path.rglob(pattern):
+                # Avoid matching thumbnails
+                if match.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp", ".json"}:
+                    continue
+                return str(match)
+    return None
+
+def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, channels_list, language, year_limit=None, skip_scan=False, restricted_mode=False):
     # Check if the skip flag is True before doing anything else
     if skip_scan:
         print(f"\n>>> Skipping Language Scan as requested.")
@@ -331,6 +375,10 @@ def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, 
 
                 # Keyword Match Check
                 target = get_target_index(v_title)
+                
+                if restricted_mode and not RESTRICTED_ITALIAN_KEYWORDS.search(v_title):
+                    target = "none"
+                    
                 if target != "none":
                     if v_id not in index.data and v_id not in index.sources_data and v_id not in index.actually_excluded_ids:
                         index.add_video(
@@ -354,12 +402,15 @@ def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, 
                             print(f"    [LOG] Auto-saved index ({new_entries} new matches found so far)")
         except Exception as e:
             print(f"    [!] Error scraping {chan_url}: {e}")
+        
+        # Save after each channel
+        if new_entries > 0:
+            index.save()
 
-    index.save()
     print(f"\n>>> Scraping complete. {new_entries} total matches added.")
 
-    # Removed automatic download:
-    # do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, limit_channels=channels_list, language_filter=language)
+    # Restored automatic download:
+    do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, limit_channels=channels_list, language_filter=language)
 
 def is_disallowed_channel(channel_name):
     if not channel_name:
@@ -528,7 +579,53 @@ class VideoIndex:
         if os.path.exists(self.sources_filepath):
             with open(self.sources_filepath, encoding="utf-8") as f:
                 self.sources_data = json.load(f)
+        
+        # Enhanced Skipping Logic: Verify disk existence for pending videos
+        self.check_disk_existence()
+        
         self.cleanup_index()
+
+    def check_disk_existence(self):
+        """Checks if pending videos exist on disk and updates their status."""
+        search_dirs = [DEFAULT_VIDEO_DIR, DEFAULT_SOURCES_DIR]
+        
+        pending_ids = [vid for vid, e in self.data.items() if e.get("status") == "pending"]
+        pending_sources = [vid for vid, e in self.sources_data.items() if e.get("status") == "pending"]
+        
+        checked = 0
+        found = 0
+        
+        total_to_check = len(pending_ids) + len(pending_sources)
+        if total_to_check > 0:
+            print(f"  [Disk Check] Verifying existence for {total_to_check} pending videos...")
+            
+        for vid in pending_ids:
+            path = find_video_on_disk(vid, search_dirs)
+            if path:
+                rel = os.path.relpath(path, ".")
+                self.set_downloaded(vid, rel)
+                found += 1
+            checked += 1
+            if checked % 100 == 0:
+                print(f"\r    Checked {checked}/{total_to_check}...", end="", flush=True)
+
+        for vid in pending_sources:
+            path = find_video_on_disk(vid, search_dirs)
+            if path:
+                rel = os.path.relpath(path, ".")
+                # Update sources_data directly as set_downloaded works on self.data
+                self.sources_data[vid]["status"] = "downloaded"
+                self.sources_data[vid]["local_file"] = rel
+                found += 1
+            checked += 1
+            if checked % 100 == 0:
+                print(f"\r    Checked {checked}/{total_to_check}...", end="", flush=True)
+                
+        if total_to_check > 0:
+            clear_line()
+            print(f"  [Disk Check] Found {found} videos already on disk.")
+            if found > 0:
+                self.save()
 
     def cleanup_index(self):
         """
@@ -548,6 +645,59 @@ class VideoIndex:
                 if vid in self.data:
                     del self.data[vid]
             self.save()
+
+    def resort_videos(self):
+        """
+        Resorts videos between main index and sources index based on YTP_KEYWORDS_LIST.
+        Matches against both title and description.
+        """
+        print(f"\n  [Resort] Starting re-sorting of all videos...")
+        all_videos = {**self.data, **self.sources_data}
+        new_data = {}
+        new_sources_data = {}
+        
+        moved_to_videos = 0
+        moved_to_sources = 0
+        
+        total = len(all_videos)
+        processed = 0
+        
+        for vid, info in all_videos.items():
+            if vid in self.actually_excluded_ids:
+                continue
+                
+            title = info.get("title") or ""
+            desc = info.get("description") or ""
+            text_to_check = f"{title} {desc}"
+            
+            is_ytp = False
+            if YTP_KEYWORDS.search(text_to_check):
+                is_ytp = True
+            
+            if is_ytp:
+                new_data[vid] = info
+                if vid in self.sources_data:
+                    moved_to_videos += 1
+            else:
+                new_sources_data[vid] = info
+                if vid in self.data:
+                    moved_to_sources += 1
+            
+            processed += 1
+            if processed % 500 == 0:
+                print(f"\r    Processed {processed}/{total}...", end="", flush=True)
+                    
+        self.data = new_data
+        self.sources_data = new_sources_data
+        
+        clear_line()
+        print(f"  [Resort] Completed.")
+        print(f"    - Moved to Videos:  {moved_to_videos}")
+        print(f"    - Moved to Sources: {moved_to_sources}")
+        print(f"    - Total Videos:     {len(self.data)}")
+        print(f"    - Total Sources:    {len(self.sources_data)}")
+        
+        self.save()
 
     def save(self):
         try:
@@ -828,12 +978,14 @@ class Scanner:
 
                 ids, nickname = self.scan_file(fpath)
                 new_this_file = 0
-                for vid in ids:
-                    was_new = vid not in index.data
-                    index.add_video(vid, sec, rel, thread_title, nickname=nickname)
-                    if was_new:
-                        new_found += 1
-                        new_this_file += 1
+                target = get_target_index(thread_title)
+                if target != "none":
+                    for vid in ids:
+                        was_new = vid not in index.data and vid not in index.sources_data
+                        index.add_video(vid, sec, rel, thread_title, nickname=nickname, target=target)
+                        if was_new:
+                            new_found += 1
+                            new_this_file += 1
 
                 if scan_cache:
                     scan_cache.mark_scanned(rel, ids, new_this_file)
@@ -986,6 +1138,9 @@ def download_video(video_id, output_dir, yt_format, rate_limit,
         if is_exists:
             return "exists", local_file, title
         if proc.returncode == 0:
+            if not local_file:
+                # Fallback check if --print didn't work as expected
+                local_file = find_video_on_disk(video_id, [output_dir])
             return "ok", local_file, title
 
         return "error", None, None
@@ -1288,7 +1443,8 @@ def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping
                         channel_url=channel_url
                     )
                     
-                    if not quiet: print(f"    [+] New {target} match: {title} ({vid})")
+                    # Always log new matches regardless of quiet mode
+                    print(f"    [+] New {target} match: {title} ({vid})")
                     found_in_this_search += 1
                     total_new += 1
                     
@@ -1305,6 +1461,11 @@ def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping
             if not quiet: print("    [!] Search timed out.")
         except Exception as e:
             if not quiet: print(f"    [!] Error during search: {e}")
+            
+        # Save after each search query
+        if total_new > 0:
+            index.save()
+            sync_ytpoopers_index(index)
 
     if total_new > 0:
         index.save()
@@ -1340,9 +1501,51 @@ def do_keyword_search_scraping(index):
         clean = clean.replace('\\', '').replace("'", "").replace(".", "").replace("+", "")
         return clean.strip()
 
+    print("\nSelect language for Meme Keywords:")
+    print("1. Italian (IT)")
+    print("2. English/Global (INT)")
+    print("3. Spanish (ES)")
+    print("4. French (FR)")
+    print("5. German (DE)")
+    print("6. Russian (RU)")
+    print("7. Brazilian (BR)")
+    print("8. All")
+    
+    lang_choice = ask("Choice [1-8]: ", {"1","2","3","4","5","6","7","8"})
+    
+    meme_source = []
+    lang_label = "ALL"
+    if lang_choice == "1": 
+        meme_source = MEME_KEYWORDS_IT
+        lang_label = "Italian"
+    elif lang_choice == "2": 
+        meme_source = MEME_KEYWORDS_INT
+        lang_label = "Global/English"
+    elif lang_choice == "3": 
+        meme_source = MEME_KEYWORDS_ES
+        lang_label = "Spanish"
+    elif lang_choice == "4": 
+        meme_source = MEME_KEYWORDS_FR
+        lang_label = "French"
+    elif lang_choice == "5": 
+        meme_source = MEME_KEYWORDS_DE
+        lang_label = "German"
+    elif lang_choice == "6": 
+        meme_source = MEME_KEYWORDS_RU
+        lang_label = "Russian"
+    elif lang_choice == "7": 
+        meme_source = MEME_KEYWORDS_BR
+        lang_label = "Brazilian"
+    else: 
+        meme_source = MEME_KEYWORDS_LIST
+        lang_label = "All Languages"
+
     # Clean the lists
-    ytp_clean = sorted(list(set(clean_kw(k) for k in YTP_KEYWORDS_LIST)))
-    meme_clean = sorted(list(set(clean_kw(k) for k in MEME_KEYWORDS_LIST)))
+    # Deep Keyword Discovery uses a specific limited selection for the YTP base
+    ytp_search_base = ["YTP", "YTP ITA", "Youtube poop", "YTPMV", "Youtube merda"]
+    ytp_clean = sorted(list(set(ytp_search_base)))
+    
+    meme_clean = sorted(list(set(clean_kw(k) for k in meme_source)))
     
     # Generate combinations
     all_combinations = []
@@ -1355,10 +1558,10 @@ def do_keyword_search_scraping(index):
                 all_combinations.append(query)
     
     if not all_combinations:
-        print("\n  All combinations have already been scraped.")
+        print(f"\n  All combinations for {lang_label} have already been scraped.")
         return
 
-    print(f"\n--- Keyword Search Scraping (Combinations) ---")
+    print(f"\n--- Keyword Search Scraping ({lang_label}) ---")
     print(f"  Found {len(all_combinations)} new combinations to search.")
     print(f"  (Total potential: {len(ytp_clean) * len(meme_clean)}, Already scraped: {len(scraped_queries)})")
     
@@ -1394,16 +1597,27 @@ def do_keyword_search_scraping(index):
 
 
 def do_scrape_channels(index):
-    """Scans channels from ALLOWED_CHANNELS for new YTP videos matching keywords."""
+    """Scans channels from ALLOWED_CHANNELS and ytpoopers_index.json for new YTP videos matching keywords."""
     
-    channels_to_scrape = ALLOWED_CHANNELS
+    poopers_path = os.path.join(index.docs_dir, "ytpoopers_index.json")
+    channels_to_scrape = set(ALLOWED_CHANNELS)
+    
+    if os.path.exists(poopers_path):
+        try:
+            with open(poopers_path, "r", encoding="utf-8") as f:
+                poopers_data = json.load(f)
+                channels_to_scrape.update(poopers_data.keys())
+        except Exception as e:
+            print(f"  [!] Error loading {poopers_path}: {e}")
+    
+    channels_to_scrape = sorted(list(channels_to_scrape))
     
     if not channels_to_scrape:
-        print("  No channels defined to scrape in ALLOWED_CHANNELS.")
+        print("  No channels defined to scrape.")
         return
         
     total_channels = len(channels_to_scrape)
-    print(f"  Found {total_channels} channel(s) to scrape from ALLOWED_CHANNELS.")
+    print(f"  Found {total_channels} channel(s) to scrape (ALLOWED_CHANNELS + pooper registry).")
     new_total = 0
     
     for i, ch_url in enumerate(channels_to_scrape, 1):
@@ -1435,12 +1649,14 @@ def do_scrape_channels(index):
                         title = d.get("title", "")
                         
                         # Match logic based on get_target_index or NOCOLDIZ_BLACKLIST
-                        target = "none"
-                        if nocoldiz:
-                            if not NOCOLDIZ_BLACKLIST.search(title):
+                        target = get_target_index(title)
+                        
+                        if nocoldiz and target == "none":
+                            # For nocoldiz, if it wasn't caught by YTP/Meme/Non-YTP keywords,
+                            # we still include it if it's not explicitly in the nocoldiz blacklist
+                            # and doesn't match the general non-YTP filter.
+                            if not NOCOLDIZ_BLACKLIST.search(title) and not NON_YTP_KEYWORDS.search(title):
                                 target = "video"
-                        else:
-                            target = get_target_index(title)
 
                         # If it matches and is not already in the index (and not excluded), log and add it
                         if target != "none" and vid and vid not in index.data and vid not in index.sources_data and vid not in index.actually_excluded_ids:
@@ -1455,6 +1671,11 @@ def do_scrape_channels(index):
                         
                 clear_line()
                 print(f"    Done scanning {total_videos} videos.")
+                
+                # Save periodically after each channel
+                if new_total > 0:
+                    index.save()
+                    sync_ytpoopers_index(index)
             else:
                 clear_line()
                 print(f"    [!] No videos found or yt-dlp returned an error for {ch_url}")
@@ -1466,11 +1687,6 @@ def do_scrape_channels(index):
             clear_line()
             print(f"    [!] Error scraping {ch_url}: {e}")
 
-    # Save all new entries to the index
-    if new_total > 0:
-        index.save()
-        sync_ytpoopers_index(index)
-        
     print(f"\n  Finished scraping channels. Added {new_total} new videos to the index.")
 def do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, limit_channels=None, language_filter=None):
     if retry_failed:
@@ -2353,13 +2569,18 @@ def do_scrape_profiles(index, docs_dir):
         except Exception:
             existing = {}
 
-    # Map for processing loop (needs both existing and current index)
+    # Map for processing loop (needs both existing, current index, and pooper registry)
     channel_map = {}
     for e in index.data.values():
         ch_url = e.get("channel_url")
         ch_name = e.get("channel_name")
         if ch_url and ch_url not in channel_map:
             channel_map[ch_url] = ch_name or existing.get(ch_url, {}).get("channel_name")
+
+    # Ensure all channels from ytpoopers_index.json are included
+    for ch_url, info in existing.items():
+        if ch_url not in channel_map:
+            channel_map[ch_url] = info.get("channel_name")
 
     thumb_dir = os.path.join(docs_dir, "profile_thumbnails")
     os.makedirs(thumb_dir, exist_ok=True)
@@ -2635,8 +2856,8 @@ def do_full_scrape_run(index, args):
     do_scrape_sources_metadata(index)
     create_progressive_backup(index, "step2_metadata")
     
-    print("\nStep 3: Scrape Thumbnails and Tag Missing Profiles (Option 7)")
-    do_scrape_thumbnails(index, args.docs_dir)
+    print("\nStep 3: Scrape Channel Profiles and Thumbnails (Option 7)")
+    do_scrape_profiles(index, args.docs_dir)
     create_progressive_backup(index, "step3_thumbnails")
     
     print("\nStep 4: Scrape Comments (Option 6)")
@@ -2684,6 +2905,89 @@ def do_full_download_parallel():
     
     print("\n>>> All processes launched.")
 
+def do_download_parallel_internal(index, video_dir, yt_format, rate_limit, workers=4, no_db_update=False):
+    """
+    Internal parallel download logic using ThreadPoolExecutor.
+    Downloads and then immediately calls compress_videos.process_video.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import compress_videos
+
+    pending = index.pending()
+    if not pending:
+        print("  Nothing to download.")
+        return
+
+    total = len(pending)
+    print(f"\n>>> Starting Parallel Download ({workers} workers, no_db_update={no_db_update})")
+    print(f"    Target: {total} videos\n")
+
+    def download_worker(vid):
+        try:
+            e = index.data[vid]
+            ch_name = e.get("channel_name")
+            folder_name = safe_filename(ch_name) if ch_name else "Unknown Channel"
+            out_dir = os.path.join(video_dir, folder_name)
+
+            # 1. Download
+            status, local_file, dl_title = download_video(
+                vid, out_dir, yt_format, rate_limit, 0, 0 # Progress handled elsewhere
+            )
+
+            if status in ("ok", "exists"):
+                # 2. Compress
+                if local_file and os.path.exists(local_file):
+                    print(f"    [Compressing] {os.path.basename(local_file)}")
+                    compressed_path = compress_videos.process_video(local_file)
+                    local_file = str(compressed_path)
+
+                # 3. Update DB
+                if not no_db_update:
+                    rel = os.path.relpath(local_file, ".") if local_file else None
+                    index.set_downloaded(vid, rel, dl_title)
+                    return "ok", vid
+                return "ok_no_db", vid
+            elif status == "unavailable":
+                if not no_db_update:
+                    index.set_unavailable(vid)
+                return "unavailable", vid
+            else:
+                if not no_db_update:
+                    index.set_failed(vid)
+                return "error", vid
+        except Exception as ex:
+            print(f"    [!] Error in worker for {vid}: {ex}")
+            return "error", vid
+
+    ok_count = 0
+    err_count = 0
+    unavail_count = 0
+    
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = {executor.submit(download_worker, vid): vid for vid in pending}
+        
+        for i, future in enumerate(as_completed(futures), 1):
+            res_status, vid = future.result()
+            if res_status in ("ok", "ok_no_db"):
+                ok_count += 1
+            elif res_status == "unavailable":
+                unavail_count += 1
+            else:
+                err_count += 1
+            
+            if i % 5 == 0 or i == total:
+                print(f"    Progress: {i}/{total} (OK: {ok_count}, Fail: {err_count}, Unavail: {unavail_count})")
+                if not no_db_update:
+                    index.save()
+
+    if not no_db_update:
+        index.save()
+    
+    print("\n>>> Parallel download complete.")
+    print(f"    Succeeded:   {ok_count}")
+    print(f"    Failed:      {err_count}")
+    print(f"    Unavailable: {unavail_count}")
+
 
 # ── Menu helpers ──────────────────────────────────────────────────────────────
 
@@ -2693,6 +2997,20 @@ def ask(prompt, choices):
         if ans in choices:
             return ans
         print(f"  Please enter one of: {' / '.join(choices)}")
+
+
+def run_migration():
+    """Calls migrate_to_sqlite.py to sync JSON data to the SQLite database."""
+    print("\n[Sync] Running database migration...")
+    migration_script = os.path.join(os.path.dirname(__file__), "migrate_to_sqlite.py")
+    if os.path.exists(migration_script):
+        try:
+            subprocess.run([sys.executable, migration_script], check=True)
+            print("[Sync] Migration completed successfully.")
+        except subprocess.CalledProcessError as e:
+            print(f"[Sync] Error during migration: {e}")
+    else:
+        print(f"[Sync] Migration script not found: {migration_script}")
 
 
 def print_header():
@@ -2735,13 +3053,19 @@ def main():
                    help="Analyze every folder in site_mirror and sort videos")
     p.add_argument("--year-limit",      type=int, default=2016,
                    help="Limit downloads to videos published until this year (for language mode)")
+    p.add_argument("--no-db-update",    action="store_true",
+                   help="Do not update the JSON database with download status")
+    p.add_argument("--workers",         type=int, default=4,
+                   help="Number of parallel workers for downloading")
+    p.add_argument("--resort",          action="store_true",
+                   help="Resort videos between main index and sources index based on keywords")
     args, _ = p.parse_known_args()
 
     if not os.path.isdir(args.site_dir):
         print(f"[!] site_dir not found: {args.site_dir}")
         sys.exit(1)
 
-    if args.stats or args.chronology or args.dump_poopers or args.find_mirrors or args.scrape_comments or args.scrape_profiles or args.download_italian or args.forum_scrape:
+    if args.stats or args.chronology or args.dump_poopers or args.find_mirrors or args.scrape_comments or args.scrape_profiles or args.download_italian or args.forum_scrape or args.resort:
         index = VideoIndex(args.video_dir, args.docs_dir)
         index.load()
         if args.stats:
@@ -2759,6 +3083,13 @@ def main():
             do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, ITALIAN_CHANNELS, "italian", year_limit=args.year_limit, skip_scan=False)
         if args.forum_scrape:
             do_forum_scrape(index, args.site_dir)
+        if args.resort:
+            index.resort_videos()
+        
+        # Call migration after operations that change data
+        if not (args.stats or args.chronology or args.dump_poopers):
+            run_migration()
+            
         return
 
     print_header()
@@ -2770,55 +3101,60 @@ def main():
     print("  What do you want to do?")
     print()
     print("  1  Fetch missing metadata")
-    print("       Fetch missing metadata. Will NOT fetch new videos.")
+    print("       Update titles, descriptions, and channel info for indexed videos.")
     print()
     print("  2  Download indexed videos")
-    print("       Download pending videos.")
+    print("       Download pending video files for both YTP and Sources.")
     print()
-    print("  3  Scrape channels")
-    print("       Scrape all index channels + allowed-channel list;")
-    print("       add YTP matches to 'Youtube' section.")
+    print("  3  Scrape channels (Discover New)")
+    print("       Scan channels in channels_by_language.md for new content.")
     print()
-    print("  4  Download YTPs from selected language")
-    print("       Download videos from ALLOWED_CHANNELS, 'YTP nostrane', or 'YTP fai da te'.")
+    print("  4  Language-Specific Download")
+    print("       Batch download videos for a specific language (e.g. Italian).")
     print()
-    print("  5  Find mirror videos")
-    print("       Search YouTube for reuploads of unavailable videos.")
+    print("  5  Find Mirror Videos")
+    print("       Search for reuploads of unavailable or deleted videos.")
     print()
-    print("  6  Scrape comments")
-    print("       Fetch comments for every indexed video in sources_index.json.")
+    print("  6  Scrape Comments")
+    print("       Archival: Fetch and save YouTube comments for indexed sources.")
     print()
-    print("  7  Scrape thumbnails and tag missing profiles")
-    print("       Download profile pictures for channels in ytpoopers_index.json and channels_by_language.md")
+    print("  7  Scrape Profiles & Thumbnails")
+    print("       Download channel avatars and update the Pooper registry.")
     print()
-    print("  8  Auto languages")
-    print("       Automatically tag languages for all videos.")
+    print("  8  Auto Language Tagger")
+    print("       Automatically assign languages (ITA, ENG, etc.) to videos.")
     print()
-    print("  9  Stats  →  stats.md")
-    print("       Section & channel breakdown (sources_index.json only).")
+    print("  9  Generate Stats  →  stats.md")
+    print("       Collection breakdown: total videos, channels, and active creators.")
     print()
-    print("  10 YouTube Search Scraping")
-    print("       Scrape videos based on YouTube searches.")
+    print("  10 Custom YouTube Search")
+    print("       Search for specific terms or YTP acronyms to expand the collection.")
     print()
-    print("  11 Keyword Search Scraping")
-    print("       Scrape videos based on all MEME_KEYWORDS.")
+    print("  11 Deep Keyword Discovery (Combinations)")
+    print("       Exhaustive scan: Search every combination of YTP + Meme keywords.")
     print()
-    print("  f  Forum Scrape")
-    print("       Analyze every folder in site_mirror to find YouTube videos.")
+    print("  f  Forum Scrape (Site Mirror)")
+    print("       Crawl archived forum folders to extract legacy YouTube links.")
     print()
-    print("  s  Full Scrape Run")
-    print("       Sequential: Option 3 -> 1 -> 7 -> 6.")
+    print("  r  Resort Videos")
+    print("       Re-scan all indices and sort videos by keywords.")
     print()
-    print("  d  Full Download (Parallel)")
-    print("       Parallel: Option 6, Option 4 (ITA), compress_videos.py.")
+    print("  s  Full Scrape Run (Standard Cycle)")
+    print("       Discovery: Scrape channels -> Metadata -> Profiles -> Comments.")
     print()
-    print("  a  Full Cycle")
-    print("       Full Scrape Run followed by Full Download (Parallel).")
+    print("  d  Full Download (Parallel Processing)")
+    print("       Parallel: Italian YTPs, comments, and video compression.")
+    print()
+    print("  p  Internal Parallel Download & Compression")
+    print("       Use ThreadPoolExecutor for fast downloads + automatic compression.")
+    print()
+    print("  a  Full Automation (Scrape + Download)")
+    print("       The works: Run Full Scrape Cycle followed by Full Download.")
     print()
     print("  q  Quit")
     print()
-    choice = ask("  Choice [1-10/f/s/d/a/q]: ",
-                 {"1","2","3","4","5","6","7","8","9","10","f","s","d","a","q"})
+    choice = ask("  Choice [1-11/f/r/s/d/p/a/q]: ",
+                 {"1","2","3","4","5","6","7","8","9","10","11","f","r","s","d","p","a","q"})
 
     if choice == "q":
         sys.exit(0)
@@ -2861,12 +3197,14 @@ def main():
         print("4. German")
         print("5. French")
         print("6. Russian")
-        lang_choice = input("Language Choice [1-6]: ").strip()
+        print("7. Restricted Italian (Strict Keywords)")
+        lang_choice = input("Language Choice [1-7]: ").strip()
         skip_input = input("Skip the scan? (y/n): ").strip().lower()
         should_skip = skip_input == 'y'
         
         selected_list = []
         lang_name = None
+        restricted = False
         if lang_choice == "1": 
             selected_list = ITALIAN_CHANNELS
             lang_name = "italian"
@@ -2885,9 +3223,13 @@ def main():
         elif lang_choice == "6": 
             selected_list = RUSSIAN_CHANNELS
             lang_name = "russian"
+        elif lang_choice == "7":
+            selected_list = ITALIAN_CHANNELS
+            lang_name = "italian"
+            restricted = True
         
         if lang_name:
-            do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, selected_list, lang_name, year_limit=args.year_limit, skip_scan=should_skip)
+            do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, selected_list, lang_name, year_limit=args.year_limit, skip_scan=should_skip, restricted_mode=restricted)
         else:
             print("Invalid language selection.")
 
@@ -2898,7 +3240,7 @@ def main():
         do_scrape_comments(index, args.docs_dir)
 
     if choice == "7":
-        do_scrape_thumbnails(index, args.docs_dir)
+        do_scrape_profiles(index, args.docs_dir)
 
     if choice == "8":
         do_auto_languages(index)
@@ -2916,17 +3258,25 @@ def main():
     if choice == "f":
         do_forum_scrape(index, args.site_dir)
 
+    if choice == "r":
+        index.resort_videos()
+
     if choice == "s":
         do_full_scrape_run(index, args)
 
     if choice == "d":
         do_full_download_parallel()
 
+    if choice == "p":
+        do_download_parallel_internal(index, args.video_dir, args.format, args.rate_limit, workers=args.workers, no_db_update=args.no_db_update)
+
     if choice == "a":
         do_full_scrape_run(index, args)
         do_full_download_parallel()
 
-
+    # Call migration after any operation (unless it's just stats or quit)
+    if choice not in ("9", "q"):
+        run_migration()
 
     print()
 

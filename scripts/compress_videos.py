@@ -1,6 +1,7 @@
 import os
 import subprocess
 import json
+import argparse
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
@@ -9,8 +10,8 @@ from threading import Lock
 SCRIPT_DIR = Path(__file__).parent
 PROJECT_ROOT = SCRIPT_DIR.parent
 VIDEO_DIR = PROJECT_ROOT / "db" / "videos"
-CACHE_FILE = SCRIPT_DIR / "converted_cache.json"
-MAX_WORKERS = 2 
+CACHE_FILE = SCRIPT_DIR / "db/converted_cache.json"
+DEFAULT_MAX_WORKERS = 2 
 
 # FFmpeg settings for Maximum NVENC Compression
 FFMPEG_CMD = [
@@ -44,16 +45,29 @@ def load_cache():
 
 def save_to_cache(video_name):
     with cache_lock:
-        processed = list(load_cache())
-        if video_name not in processed:
-            processed.append(video_name)
-            with open(CACHE_FILE, "w") as f:
-                json.dump(processed, f, indent=4)
+        try:
+            processed = list(load_cache())
+            if video_name not in processed:
+                processed.append(video_name)
+                with open(CACHE_FILE, "w") as f:
+                    json.dump(processed, f, indent=4)
+        except Exception as e:
+            print(f"Error saving to cache: {e}")
 
 def get_size(file_path):
-    return file_path.stat().st_size
+    return Path(file_path).stat().st_size
 
-def process_video(vid):
+def process_video(vid_path):
+    """
+    Compresses a single video file.
+    vid_path: string or Path object.
+    Returns: Path to the resulting file.
+    """
+    vid = Path(vid_path)
+    if not vid.exists():
+        print(f"  [ERROR] File not found: {vid}")
+        return vid
+
     temp_output = vid.with_suffix(".temp_h265.mp4")
     print(f"Processing (High Compression): {vid.name}")
     
@@ -75,18 +89,37 @@ def process_video(vid):
                 temp_output.rename(final_name)
                 # Save the new name to cache
                 save_to_cache(final_name.name)
+                return final_name
             else:
                 print(f"  [SKIP] {vid.name}: No size benefit. Keeping original.")
                 temp_output.unlink()
                 # Even if we keep the original, mark it as "checked" in cache
                 save_to_cache(vid.name)
+                return vid
                 
     except Exception as e:
         print(f"  [ERROR] {vid.name}: {e}")
         if temp_output.exists():
             temp_output.unlink()
+    return vid
 
 def main():
+    parser = argparse.ArgumentParser(description="Batch or single video H.265/NVENC compression.")
+    parser.add_argument("-f", "--file", type=str, help="Compress a single video file.")
+    parser.add_argument("-w", "--workers", type=int, default=DEFAULT_MAX_WORKERS, help="Number of parallel workers for batch mode.")
+    args = parser.parse_args()
+
+    if args.file:
+        # Single file mode
+        file_path = Path(args.file)
+        if not file_path.exists():
+            print(f"Error: File {file_path} does not exist.")
+            return
+        process_video(file_path)
+        print("\n--- Single file task complete ---")
+        return
+
+    # Batch mode
     if not VIDEO_DIR.exists():
         print(f"Error: Folder {VIDEO_DIR} does not exist.")
         return
@@ -102,12 +135,16 @@ def main():
     if skipped_count > 0:
         print(f"Skipping {skipped_count} already processed videos.")
 
-    print(f"Found {len(video_files)} new videos. Starting Maximum H.265 Compression...\n")
+    if not video_files:
+        print("No new videos found to compress.")
+        return
 
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    print(f"Found {len(video_files)} new videos. Starting Maximum H.265 Compression with {args.workers} workers...\n")
+
+    with ThreadPoolExecutor(max_workers=args.workers) as executor:
         executor.map(process_video, video_files)
 
     print("\n--- All high-compression tasks complete ---")
 
 if __name__ == "__main__":
-    main()
+    main()
