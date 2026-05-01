@@ -63,7 +63,7 @@ async function initSQLite() {
   dbYTP = new SQL.Database(new Uint8Array(bufYTP));
   dbSources = new SQL.Database(new Uint8Array(bufSources));
   dbPoopers = new SQL.Database(new Uint8Array(bufPoopers));
-  
+
   sqlDB = dbYTP; // Default to YTP for compatibility
   console.log("SQLite databases (ytp, sources, ytpoopers) loaded successfully.");
   return sqlDB;
@@ -71,7 +71,7 @@ async function initSQLite() {
 
 function queryDB(sql, params = [], targetDB = null) {
   let db = targetDB;
-  
+
   if (!db) {
     const lowerSql = sql.toLowerCase();
     // Intelligent Routing
@@ -261,7 +261,7 @@ function initApp() {
       optionsHtml += `<option value="${y}">${y}</option>`;
     }
     optionsHtml += `<option value="9999">All time</option>`;
-    
+
     yearSelectors.forEach(sel => {
       if (sel) {
         sel.innerHTML = optionsHtml;
@@ -1508,7 +1508,7 @@ function getActiveVideos(forHome = false, limit = null) {
     if (whereClauses.length > 0) {
       sql += " WHERE " + whereClauses.join(" AND ");
     }
-    
+
     if (limit) {
       sql += ` LIMIT ${limit}`;
     }
@@ -1600,6 +1600,28 @@ function renderModernGrid() {
     videos = [...validVideos].sort((a, b) => (b.comment_count || b.view_count || 0) - (a.comment_count || a.view_count || 0)).slice(0, 24);
   } else if (currentModernTab === 'favorited') {
     videos = [...validVideos].sort((a, b) => (b.like_count || 0) - (a.like_count || 0)).slice(0, 24);
+  } else if (currentModernTab === 'ytpmv') {
+    const kw = ['YTPMV', 'MAD'];
+    videos = shuffleArray(validVideos.filter(v => {
+      const t = (v.title || '').toUpperCase();
+      const d = (v.description || '').toUpperCase();
+      return kw.some(k => t.includes(k) || d.includes(k));
+    })).slice(0, 24);
+    if (videos.length === 0) {
+      modernContainer.innerHTML = '<div class="empty-subs" style="padding:40px; text-align:center; color:var(--text-muted);">Nessun video YTPMV/MAD trovato.</div>';
+      return;
+    }
+  } else if (currentModernTab === 'acid') {
+    const kw = ['ACID', 'ACID POOP', 'LSD'];
+    videos = shuffleArray(validVideos.filter(v => {
+      const t = (v.title || '').toUpperCase();
+      const d = (v.description || '').toUpperCase();
+      return kw.some(k => t.includes(k) || d.includes(k));
+    })).slice(0, 24);
+    if (videos.length === 0) {
+      modernContainer.innerHTML = '<div class="empty-subs" style="padding:40px; text-align:center; color:var(--text-muted);">Nessun video Acid Poop trovato.</div>';
+      return;
+    }
   }
 
   if (!videos) {
@@ -1636,6 +1658,28 @@ function setFeaturedTab(tab) {
     videos = shuffleArray(validVideos.filter(v => subs.has(v.channel_name))).slice(0, 12);
     if (videos.length === 0) {
       featuredContainer.innerHTML = '<div class="empty-subs" style="padding:20px; color:var(--text-muted);">Nessun video dai canali seguiti.</div>';
+      return;
+    }
+  } else if (tab === 'ytpmv') {
+    const kw = ['YTPMV', 'MAD'];
+    videos = shuffleArray(validVideos.filter(v => {
+      const t = (v.title || '').toUpperCase();
+      const d = (v.description || '').toUpperCase();
+      return kw.some(k => t.includes(k) || d.includes(k));
+    })).slice(0, 8);
+    if (videos.length === 0) {
+      featuredContainer.innerHTML = '<div class="empty-subs" style="padding:20px; color:var(--text-muted);">Nessun video YTPMV/MAD trovato.</div>';
+      return;
+    }
+  } else if (tab === 'acid') {
+    const kw = ['ACID', 'ACID POOP'];
+    videos = shuffleArray(validVideos.filter(v => {
+      const t = (v.title || '').toUpperCase();
+      const d = (v.description || '').toUpperCase();
+      return kw.some(k => t.includes(k) || d.includes(k));
+    })).slice(0, 8);
+    if (videos.length === 0) {
+      featuredContainer.innerHTML = '<div class="empty-subs" style="padding:20px; color:var(--text-muted);">Nessun video Acid Poop trovato.</div>';
       return;
     }
   }
@@ -2532,7 +2576,7 @@ function renderChannelGrid(append = false) {
 
   const total = channels.length;
   document.getElementById('channels-count-label').textContent = `${total} channels`;
-  
+
   if (!append) {
     currentChannelPage = 1;
     document.getElementById('channel-grid').innerHTML = '';
