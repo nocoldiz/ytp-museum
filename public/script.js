@@ -6,7 +6,9 @@ let filteredVideos = [];
 let appMode = 'videos';
 let isServerMode = false;
 let currentPage = 1;
+let currentChannelPage = 1;
 const PAGE_SIZE = 50;
+const CHANNELS_PAGE_SIZE = 40;
 let selectedChannel = null;
 let selectedSection = null;
 let charts = {};
@@ -24,6 +26,18 @@ const storeName = 'savedVideos';
 const playlistStoreName = 'playlists';
 let idb; // IndexedDB
 let sqlDB; // SQLite DB
+
+// ─── QUERY CACHING ────────────────────────────────────────────────────────
+const queryCache = new Map();
+function getCachedQuery(key, queryFn) {
+  if (queryCache.has(key)) return queryCache.get(key);
+  const result = queryFn();
+  queryCache.set(key, result);
+  return result;
+}
+function clearQueryCache() {
+  queryCache.clear();
+}
 
 // ─── SQLITE INITIALIZATION ────────────────────────────────────────────────
 async function initSQLite() {
@@ -113,10 +127,6 @@ async function autoLoad() {
 
   const sources = queryDB("SELECT DISTINCT channel_name FROM videos WHERE is_source = 1");
   sourceChannels = new Set(sources.map(s => s.channel_name));
-
-  // Populate global caches for Timeline and legacy components
-  allVideos = queryDB("SELECT * FROM videos WHERE is_source = 0");
-  allSources = queryDB("SELECT * FROM videos WHERE is_source = 1");
 
   initApp();
 
@@ -391,6 +401,10 @@ function showPage(name, pushToHistory = true) {
   document.body.classList.remove('sidebar-open');
 
   if (name === 'timeline' && typeof initTimeline === 'function') {
+    if (allVideos.length === 0) {
+      allVideos = queryDB("SELECT * FROM videos WHERE is_source = 0");
+      allSources = queryDB("SELECT * FROM videos WHERE is_source = 1");
+    }
     initTimeline();
   }
   if (name === 'youtube') {
@@ -959,12 +973,7 @@ async function openVideo(vidId, pushToHistory = true) {
 
   const moreContainer = document.getElementById('more-from-channel');
   if (moreContainer) {
-    const currentYear = new Date().getFullYear();
-    const moreVids = ytData.filter(x => {
-      if (x.channel_name !== v.channel_name || x.id === v.id) return false;
-      if (!x.publish_date) return globalMaxYear === currentYear;
-      return parseInt(x.publish_date.slice(0, 4)) <= globalMaxYear;
-    }).slice(0, 5);
+    const moreVids = queryDB("SELECT * FROM videos WHERE channel_name = ? AND id != ? AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL) LIMIT 5", [v.channel_name, v.id, globalMaxYear]);
     moreContainer.innerHTML = moreVids.map(x => renderVideoItem(x, 'grid')).join('');
   }
   updateSaveButton(vidId);
@@ -1406,6 +1415,7 @@ function toggleVideoMode() {
   if (q && document.getElementById('page-search').classList.contains('active')) {
     performSearch(q);
   }
+  clearQueryCache();
 }
 
 function setGlobalMaxYear(year) {
@@ -1435,40 +1445,49 @@ function setGlobalMaxYear(year) {
     }
     if (user) openProfile(decodeURIComponent(user), false);
   }
+  clearQueryCache();
 }
 
-function getActiveVideos(forHome = false) {
-  let whereClauses = [];
-  let params = [];
+function getActiveVideos(forHome = false, limit = null) {
+  const cacheKey = `activeVideos_${currentVideoMode}_${globalMaxYear}_${forHome}_${limit}`;
+  return getCachedQuery(cacheKey, () => {
+    let whereClauses = [];
+    let params = [];
 
-  if (currentVideoMode === "ytp") {
-    // Exclude source channels
-    whereClauses.push("is_source = 0");
-  } else if (currentVideoMode === "sources") {
-    whereClauses.push("is_source = 1");
-  } else {
-    // all
-    if (forHome) {
+    if (currentVideoMode === "ytp") {
       whereClauses.push("is_source = 0");
+    } else if (currentVideoMode === "sources") {
+      whereClauses.push("is_source = 1");
+    } else {
+      if (forHome) {
+        whereClauses.push("is_source = 0");
+      }
     }
-  }
 
-  // Global year limit
-  whereClauses.push("(CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL)");
-  params.push(globalMaxYear);
+    if (forHome) {
+      whereClauses.push("status IN ('downloaded', 'available')");
+    }
 
-  let sql = "SELECT * FROM videos";
-  if (whereClauses.length > 0) {
-    sql += " WHERE " + whereClauses.join(" AND ");
-  }
+    whereClauses.push("(CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL)");
+    params.push(globalMaxYear);
 
-  const results = queryDB(sql, params);
-  return results;
+    let sql = "SELECT * FROM videos";
+    if (whereClauses.length > 0) {
+      sql += " WHERE " + whereClauses.join(" AND ");
+    }
+    
+    if (limit) {
+      sql += ` LIMIT ${limit}`;
+    }
+
+    return queryDB(sql, params);
+  });
 }
 
 function renderHomePage() {
   renderedHomeVideoIds.clear();
-  const ytData = getActiveVideos(true);
+  // Fetch a reasonable number of videos for home page
+  const ytData = getActiveVideos(true, 500);
   const featuredContainer = document.getElementById('featured-videos');
   const popularContainer = document.getElementById('popular-videos');
   const modernContainer = document.getElementById('modern-videos-grid');
@@ -1527,7 +1546,8 @@ function renderModernGrid() {
   const modernContainer = document.getElementById('modern-videos-grid');
   if (!modernContainer) return;
 
-  const ytData = getActiveVideos(true);
+  // Modern grid usually shows a limited set per tab
+  const ytData = getActiveVideos(true, 200);
   const validVideos = ytData.filter(v => v.status === 'downloaded' || v.status === 'available');
   if (validVideos.length === 0) return;
 
@@ -2111,22 +2131,29 @@ function applyFilters() {
   whereClauses.push("(CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL)");
   params.push(globalMaxYear);
 
-  let sql = "SELECT * FROM videos WHERE " + whereClauses.join(" AND ");
+  const filterKey = JSON.stringify({ whereClauses, params, sortField, sortDir, appMode });
+  if (queryCache.has(filterKey)) {
+    filteredVideos = queryCache.get(filterKey);
+  } else {
+    let sql = "SELECT * FROM videos WHERE " + whereClauses.join(" AND ");
 
-  // Sorting
-  const sortMap = {
-    'publish_date': 'publish_date',
-    'title': 'title',
-    'channel_name': 'channel_name',
-    'view_count': 'view_count',
-    'like_count': 'like_count',
-    'status': 'status',
-    'language': 'language'
-  };
-  const orderCol = sortMap[sortField] || 'publish_date';
-  sql += ` ORDER BY ${orderCol} ${sortDir === 1 ? 'ASC' : 'DESC'}`;
+    // Sorting
+    const sortMap = {
+      'publish_date': 'publish_date',
+      'title': 'title',
+      'channel_name': 'channel_name',
+      'view_count': 'view_count',
+      'like_count': 'like_count',
+      'status': 'status',
+      'language': 'language'
+    };
+    const orderCol = sortMap[sortField] || 'publish_date';
+    sql += ` ORDER BY ${orderCol} ${sortDir === 1 ? 'ASC' : 'DESC'}`;
 
-  filteredVideos = queryDB(sql, params);
+    filteredVideos = queryDB(sql, params);
+    queryCache.set(filterKey, filteredVideos);
+  }
+
   currentPage = 1;
   renderTable(false);
   setupScrollObserver();
@@ -2325,24 +2352,27 @@ function renderPagination(total) {
 
 // ─── CHANNELS ─────────────────────────────────────────────────────────────
 function buildChannelData() {
-  const sql = `
-    SELECT 
-      channel_name as name, 
-      channel_url as url, 
-      COUNT(*) as videoCount, 
-      SUM(view_count) as totalViews, 
-      SUM(like_count) as totalLikes,
-      MIN(substr(publish_date, 1, 4)) as firstYear
-    FROM videos 
-    WHERE channel_name IS NOT NULL AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL)
-    GROUP BY channel_name 
-    ORDER BY videoCount DESC
-  `;
-  const res = queryDB(sql, [globalMaxYear]);
-  return res.map(r => ({
-    ...r,
-    videos: { length: r.videoCount } // Mock for backward compatibility
-  }));
+  const cacheKey = `channelData_${globalMaxYear}`;
+  return getCachedQuery(cacheKey, () => {
+    const sql = `
+      SELECT 
+        channel_name as name, 
+        channel_url as url, 
+        COUNT(*) as videoCount, 
+        SUM(view_count) as totalViews, 
+        SUM(like_count) as totalLikes,
+        MIN(substr(publish_date, 1, 4)) as firstYear
+      FROM videos 
+      WHERE channel_name IS NOT NULL AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL)
+      GROUP BY channel_name 
+      ORDER BY videoCount DESC
+    `;
+    const res = queryDB(sql, [globalMaxYear]);
+    return res.map(r => ({
+      ...r,
+      videos: { length: r.videoCount } // Mock for backward compatibility
+    }));
+  });
 }
 
 function renderChannelCard(c, mode = 'grid') {
@@ -2428,7 +2458,34 @@ function toggleFilters() {
   if (bar) bar.classList.toggle('active');
 }
 
-function renderChannelGrid() {
+let channelScrollObserver = null;
+function setupChannelScrollObserver() {
+  if (channelScrollObserver) channelScrollObserver.disconnect();
+  const sentinel = document.getElementById('channel-scroll-sentinel');
+  if (!sentinel) return;
+
+  channelScrollObserver = new IntersectionObserver((entries) => {
+    if (entries[0].isIntersecting) {
+      const q = (document.getElementById('channel-search').value || '').toLowerCase();
+      const minYear = parseInt(document.getElementById('channel-year-min').value) || null;
+      const maxYear = parseInt(document.getElementById('channel-year-max').value) || null;
+      const channels = buildChannelData().filter(c => {
+        if (q && !c.name.toLowerCase().includes(q)) return false;
+        if (minYear && (!c.firstYear || c.firstYear < minYear)) return false;
+        if (maxYear && (!c.firstYear || c.firstYear > maxYear)) return false;
+        return true;
+      });
+
+      if (currentChannelPage * CHANNELS_PAGE_SIZE < channels.length) {
+        currentChannelPage++;
+        renderChannelGrid(true);
+      }
+    }
+  }, { rootMargin: '400px' });
+  channelScrollObserver.observe(sentinel);
+}
+
+function renderChannelGrid(append = false) {
   const q = (document.getElementById('channel-search').value || '').toLowerCase();
   const minYear = parseInt(document.getElementById('channel-year-min').value) || null;
   const maxYear = parseInt(document.getElementById('channel-year-max').value) || null;
@@ -2439,8 +2496,36 @@ function renderChannelGrid() {
     if (maxYear && (!c.firstYear || c.firstYear > maxYear)) return false;
     return true;
   });
-  document.getElementById('channels-count-label').textContent = `${channels.length} channels`;
-  document.getElementById('channel-grid').innerHTML = channels.map(c => renderChannelCard(c)).join('') || `<div class="empty">No channels found</div>`;
+
+  const total = channels.length;
+  document.getElementById('channels-count-label').textContent = `${total} channels`;
+  
+  if (!append) {
+    currentChannelPage = 1;
+    document.getElementById('channel-grid').innerHTML = '';
+  }
+
+  const start = (currentChannelPage - 1) * CHANNELS_PAGE_SIZE;
+  const slice = channels.slice(start, start + CHANNELS_PAGE_SIZE);
+  const html = slice.map(c => renderChannelCard(c)).join('');
+
+  const container = document.getElementById('channel-grid');
+  if (append) {
+    container.insertAdjacentHTML('beforeend', html);
+  } else {
+    container.innerHTML = html || `<div class="empty">No channels found</div>`;
+    setupChannelScrollObserver();
+  }
+
+  // Ensure sentinel is at the bottom
+  let sentinel = document.getElementById('channel-scroll-sentinel');
+  if (!sentinel) {
+    sentinel = document.createElement('div');
+    sentinel.id = 'channel-scroll-sentinel';
+    sentinel.style.height = '10px';
+    sentinel.style.width = '100%';
+  }
+  container.after(sentinel);
 }
 
 function selectChannel(name) {
@@ -2853,7 +2938,7 @@ function buildOverview() {
   }], pieOpts());
 
   // Top by views
-  const topViews = allVideos.filter(v => v.view_count).sort((a, b) => b.view_count - a.view_count).slice(0, 10);
+  const topViews = queryDB("SELECT * FROM videos WHERE is_source = 0 AND view_count IS NOT NULL ORDER BY view_count DESC LIMIT 10");
   if (topViews.length > 0) {
     makeChart('chart-top-views', 'bar',
       topViews.map(v => (v.title || v.id).slice(0, 25) + '…'),
@@ -2862,7 +2947,7 @@ function buildOverview() {
   }
 
   // Top by likes
-  const topLikes = allVideos.filter(v => v.like_count).sort((a, b) => b.like_count - a.like_count).slice(0, 10);
+  const topLikes = queryDB("SELECT * FROM videos WHERE is_source = 0 AND like_count IS NOT NULL ORDER BY like_count DESC LIMIT 10");
   if (topLikes.length > 0) {
     makeChart('chart-top-likes', 'bar',
       topLikes.map(v => (v.title || v.id).slice(0, 25) + '…'),
