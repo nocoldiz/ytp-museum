@@ -693,8 +693,18 @@ function onGlobalSearchInput() {
     // Search channels
     const channels = queryDB("SELECT channel_name as text FROM channels WHERE channel_name LIKE ? LIMIT 5", [qp]);
 
-    // Search video titles
-    const videos = queryDB("SELECT title as text FROM videos WHERE title LIKE ? LIMIT 10", [qp]);
+    // Search video titles across all active databases
+    const videoDBs = [dbYTP, dbSources, dbYTPMV, dbCollabs];
+    let allVideos = [];
+    for (const db of videoDBs) {
+      if (db) {
+        const results = queryDB("SELECT title as text FROM videos WHERE title LIKE ? LIMIT 10", [qp], db);
+        allVideos = allVideos.concat(results);
+      }
+    }
+    
+    // Sort combined videos and limit to top 10
+    const videos = allVideos.slice(0, 10);
 
     let results = [
       ...channels.map(c => ({ ...c, type: 'channel' })),
@@ -1056,13 +1066,24 @@ function performSearch(query) {
     }
 
     let sql = "SELECT * FROM videos WHERE " + whereClauses.join(" AND ");
-    console.log(`[Global Search] DB: ${db === dbSources ? 'Sources' : 'YTP'} SQL:`, sql, "Params:", params);
+    console.log(`[Global Search] DB Query:`, sql, "Params:", params);
     return queryDB(sql, params, db);
   };
 
-  const resultsYTP = buildVideoQuery(dbYTP);
-  const resultsSources = buildVideoQuery(dbSources);
-  let merged = [...resultsYTP, ...resultsSources];
+  const videoDBs = [
+    { db: dbYTP, name: 'YTP' },
+    { db: dbYTPMV, name: 'YTPMV' },
+    { db: dbCollabs, name: 'Collabs' },
+    { db: dbSources, name: 'Other' }
+  ];
+
+  let merged = [];
+  for (const item of videoDBs) {
+    if (item.db) {
+      const results = buildVideoQuery(item.db);
+      merged = merged.concat(results);
+    }
+  }
 
   // ── High-Precision Ranking ──────────────────────────────────────────
   merged.forEach(v => {

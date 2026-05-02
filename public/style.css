@@ -3386,15 +3386,26 @@
 
     body.theme-old #masthead-search {
       width: 100%;
+      flex: 0 0 100%;
+      order: -1;
+      padding: 8px 10px;
+      margin-bottom: 5px;
+      border-bottom: 1px solid #999;
+      box-sizing: border-box;
+      display: flex;
+      justify-content: center;
     }
 
     body.theme-old .search-form {
       flex-direction: row;
       justify-content: center;
+      width: 100%;
+      max-width: none;
     }
 
     body.theme-old .search-term {
-      width: 100% !important;
+      flex: 1;
+      width: auto !important;
       max-width: none;
     }
 
@@ -3737,8 +3748,12 @@
     }
 
     #masthead-nav-right {
-      display: none !important;
-      /* Hide right nav on very small screens if it overlaps logo */
+      display: flex !important;
+      position: static;
+      transform: none;
+      width: 100%;
+      order: 3;
+      margin-top: 5px;
     }
   }
 
