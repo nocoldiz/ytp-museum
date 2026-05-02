@@ -33,7 +33,7 @@ PROJECT_ROOT = SCRIPT_PATH.parent.parent if SCRIPT_PATH.parent.name == "scripts"
 
 DEFAULT_VIDEO_DIR = str(PROJECT_ROOT / "videos")
 DEFAULT_SITE_DIR = str(PROJECT_ROOT / "site_mirror")
-DEFAULT_DOCS_DIR = str(PROJECT_ROOT / "scripts/db")
+DEFAULT_DOCS_DIR = str(PROJECT_ROOT / "public" / "db")
 DEFAULT_SOURCES_DIR = str(PROJECT_ROOT / "sources")
 DEFAULT_FORMAT = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
 
@@ -85,8 +85,8 @@ def load_channels_from_md(filepath):
                     channels[current_section].append(url)
     return channels
 
-# Load channels from centralized MD file
-CHANNELS_MD_PATH = os.path.join(PROJECT_ROOT, "db", "channels_by_language.md")
+# Load channels from centralized MD file (moved to scripts/db)
+CHANNELS_MD_PATH = os.path.join(PROJECT_ROOT, "scripts", "db", "channels_by_language.md")
 loaded_channels = load_channels_from_md(CHANNELS_MD_PATH)
 
 DISALLOWED_CHANNELS = loaded_channels["DISALLOWED_CHANNELS"]
@@ -132,22 +132,96 @@ COLLABS_KEYWORDS_LIST = [
 ]
 
 MEME_KEYWORDS_IT = [
-    r'matteo\s+montesi', r'avventure', r'Sparta remix', r'Zeb(?:89)?', r'Collegio', r'Bigazzi', 
-    r'Soccer', r'Ganon', r'Billy\s+Mays', r'Branduardi', r'Luigi', r'Ambrogio', 
-    r'Risotto', r'Peppa', r'Ascanio', r'Grylls', r'Favij', r'Testoh', r'Pingu', 
-    r'Dipr[eè]', r'Bello\s+Figo', r'Germano', r'Grillo', r'Ges[uù]', r'Nabbo', 
-    r'Yotobi', r'Berlusconi', r'Muniz', r'Travaglio', r'Nemesis', r'Testo', r'Papa', 
-    r'Super\s+Quark', r'Sentence\s+Mix', r'Ear\s?rape', r'G-Major', r'Mondo\s+emo', 
-    r'Pubblicit[aà]', r'Spot', r'Spongebob', r'Reverse', r'Masking', r'Pitch\s+Shift', 
-    r'Mosconi', r'Benson',r'Canzone iraniana', r'Brumotti', r'Sottotitolato',r'Canzone italianizzata', r'Master\s?chef', r'Mister\s+Lui', 
-    r'Pappalardo', r'Sgarbi', r'Razzi', r'Salvini', r'Renzi', r'Rio\s+mare', 
-    r'Gerry\s+Scotti', r'Fazio', r'Kabu', r'Nocoldiz', r'Poldo', r'Cloroformio', 
-    r'Game of thrones', r'Re Robert', r'Giannino', r'Gianni\s+Morandi', r'Doraemon', 
-    r'Me\s+cont[ro]o\s+Te', r'Capobastone', r'Croix89', r'Maurizio\s+Mosca', 
-    r'Mike\s+Bongiorno', r'De\s+Sica', r'Boldi', r'Checco\s+Zalone', 
-    r'Aldo\s+Giovanni\s+e\s+Giacomo', r'Maccio\s+Capatonda', r'Magalli', r'Camera\s+Caf[eè]'
+    r'Lyon', r'Sdrumox', r'Blur', r'Sio', r'Scottecs', r'Ciccio(?:Gamer)?(?:89)?',
+    r'Dexter', r'Ilvostrocarodexter', r'Fano', r'Kabu', r'Nabbo', r'Testoh?',
+    
+    # =========================================================================
+    # 2. THE "TRASH WEB" 
+    # =========================================================================
+    r'Matteo\s+Montesi', r'Dipr[eè]', r'Giuseppe\s+Simone', r'Rosario\s+Muniz',
+    r'Gemma\s+del\s+Sud', r'Trucebaldazzi', r'Bello\s+Figo(?:_Gu)?', 
+    r'Spitty\s+Cash', r'Osvaldo\s+Paniccia', r'Peppe\s+Fetish', r'Don\s+Al[iì]',
+    r'Andrea\s+Alongi', r'Prat{1,2}ic[oò]', r'Saluta\s+Andonio', r'Follettina',
+    r'Franchino', r'Angela\s+(?:da\s+Mondello|Chianello)', 
+    r'Non\s+ce\s+n\'?[\sèe]+coviddi', r'Biggiogero', r'Kissy\s+Teramo',
+    r'Centodiciotto', r'Mario\s+Vanni', r'Viva\s+i\'?dduce', r'Pacciani', 
+    r'Lotti', r'Gabriellone', r'118', r'Con\s+sto\s+cazzo',
+    
+    # =========================================================================
+    # 3. DEITIES ANS MUSIC
+    # =========================================================================
+    r'Germano', r'Mosconi', r'Richard\s+Benson', r'Pino\s+Scotto', 
+    r'Vittorio\s+Sgarbi', r'Sgarbi', r'Ascanio', r'Branduardi',
+    r'Canzone\s+iraniana', r'Canzone\s+italianizzata',r'Cancaro\s+man',
+    
+    # =========================================================================
+    # 4. INSTITUTIONAL TELEVISION, PRESENTERS & BROADCASTING ARTIFACTS
+    # =========================================================================
+    r'Luca\s+Giurato', r'Sorca\s+piena', r'A\s+pra\s+foco', r'A\s+bumbaia',
+    r'Magalli', r'Gerry\s+Scotti', r'Paolo\s+Bonolis', r'Luca\s+Laurenti',
+    r'Barbara\s+D\'?Urso', r'Maria\s+De\s+Filippi', r'Pippo\s+Baudo',
+    r'Mike\s+Bongiorno', r'Maurizio\s+Mosca', r'Biscardi', r'Trapattoni',
+    r'Strunz', r'Alberto\s+Malesani', r'Cazo', r'Bigazzi', r'Fazio',
+    r'Pappalardo', r'Zequila', r'Mughini', r'Mister\s+Lui', r'Ambrogio',
+    r'Pubblicit[aà]', r'Spot', r'Rio\s+mare', r'Super\s+Quark',
+    r'Piero\s+Angela', r'Alberto\s+Angela', r'Giovanni\s+Mucciaccia',
+    r'Art\s+Attack', r'Neil\s+Buchanan', r'Billy\s+Mays', r'Bear\s+Grylls',
+    r'Grylls', r'Brumotti', r'Trash\s+Italiano', r'Pomeriggio\s+Cinque',
+    
+    # =========================================================================
+    # 5. CULINARY TELEVISION (MASTERCHEF & GASTRO-MEMES)
+    # =========================================================================
+    r'Master\s?chef', r'Barbieri', r'Cracco', r'Cannavacciuolo', r'Bastianich',
+    r'Mappazzone', r'Risotto', r'Vuoi\s+che\s+muoro', r'Crema\s+di\s+piselli',
+    r'Ti\s+sei\s+mosso\s+bene', r'Cucine\s+da\s+incubo', r'45\s+ossa',
+    r'Noce\s+moscata', r'Pasta\s+cotta', r'Per\s+me\s+[eè]\s+un\s+no',
+    
+    # =========================================================================
+    # 6. ITALIAN CINEMA, FICTION, COMEDY & POP MUSIC
+    # =========================================================================
+    r'De\s+Sica', r'Boldi', r'Checco\s+Zalone', r'Aldo\s+Giovanni\s+e\s+Giacomo',
+    r'Maccio\s+Capatonda', r'Camera\s+Caf[eè]', r'Boris', r'Ita(?:liano|lia)\s+Medio',
+    r'Adrian', r'Gianni\s+Morandi', r'Giannino',
+    
+    # =========================================================================
+    # 7. THE POLITICAL CARNIVAL & RELIGIOUS FIGURES
+    # =========================================================================
+    r'Berlusconi', r'Renzi', r'Shish', r'Salvini', r'Ruspa', r'Di\s+Maio',
+    r'Giuseppe\s+Conte', r'Giuseppi', r'Razzi', r'Borghezio', r'Giovanardi',
+    r'Grillo', r'La\s+Russa', r'Meloni', r'Prodi', r'D\'?Alema', r'Fassino',
+    r'Mussolini', r'Fascio', r'Papa\s+(?:Francesco|Ratzinger|Giovanni)', 
+    r'Ges[uù]', r'Papa', r'Travaglio',
+    
+    # =========================================================================
+    # 8. LA ZANZARA CINEMATIC UNIVERSE
+    # =========================================================================
+    r'Cruciani', r'Parenzo', r'Mauro\s+da\s+Mantova', r'Brasile', r'Longoni',
+    r'Spatalino', r'Gottardo', r'Demone\s+Scimmia', r'Maurizia\s+Paradiso',
+    
+    # =========================================================================
+    # 9. ANIMATION, ANIME & FICTIONAL LOCALIZATIONS
+    # =========================================================================
+    r'Peppa(?:\s+Pig)?', r'Spongebob', r'Pingu', r'Doraemon', 
+    r'Dragon\s+Ball', r'Ken\s+il\s+guerriero', r'Game\s+of\s+thrones', 
+    r'Re\s+Robert', r'Attack\s+on\s+Titan', r'Attacco\s+dei\s+giganti',
+    r'Demon\s+Slayer', r'Full\s+Metal\s+Alchemist', r'Il\s+Re\s+Leone',
+    r'Shrek', r'Sonic', r'Spiderman', r'Uomo\s+Ragno', r'Nemesis',
+    
+    # =========================================================================
+    # 10. YTP TECHNIQUES, EDITING JARGON & FORMATS
+    # =========================================================================
+    r'Sparta\s+remix', r'Sentence\s+Mix', r'Ear\s?rape', r'G-Major', 
+    r'Reverse', r'Masking', r'Pitch\s+Shift', r'Mondo\s+emo', r'Sottotitolato',
+    r'Avventure', r'Collegio', r'Soccer', r'Tennis', r'Ping\s+pong',
+    r'Collab', r'Shitstorm', r'Catena\s+di',
+    
+    # =========================================================================
+    # 11. LINGUISTIC TROPES, CATCHPHRASES & MODERN BRAINROT
+    # =========================================================================
+    r'18\+15', r'18\+15\s+non\s+fa\s+36', r'Rotture\s+della\s+Lidl', 
+    r'5\s+minuti\s+di\s+ritardo', r'Italian\s+Brainrot', r'Maranza', 
+    r'Auto\s+Blu', r'James\s+Dogs', r'Kirchificazione', r'Gli\s+animali\s+Brainrot'
 ]
-
 MEME_KEYWORDS_INT = [
     r'Pingas', r'CD-i', r'Morshu', r'Mah\s+Boi', r'He[\s-]?Man', r'Sparta\s+Remix', 
     r'Scad', r'Stutter', r'Patrick', r'Jack\s+Black', r'Gourmet', r'The\s+king', 
@@ -162,10 +236,31 @@ MEME_KEYWORDS_INT = [
 ]
 
 MEME_KEYWORDS_ES = [
-    r'Chavo\s+del\s+8', r'Don\s+Ramon', r'Quico', r'Pelea\s+de\s+invalidos', 
-    r'Vete\s+a\s+la\s+Versh', r'Pooppa[ñn]ol', r'El\s+bananero', r'Dross', 
-    r'Edgar\s+se\s+cae', r'Fua', r'Tano\s+Pasman', r'Loquendo', r'El\s+Risitas', 
-    r'Fernanfloo', r'Rubius', r'Vegetta777', r'Caso\s+Cerrado', r'Doctora\s+Polo'
+    r'Quico', r'Pelea\s+de\s+inv[aá]lidos', 
+    r'Vete\s+a\s+la\s+Versh', r'Poop(?:pa[ñn]ol)?', r'YTPH', r'Sentence\s+Mix',
+    r'El\s+bananero', r'Dross', r'Edgar\s+se\s+cae', r'Fua', r'Tano\s+Pasman', 
+    r'Loquendo', r'El\s+Risitas', r'Fernanfloo', r'Rubius', r'Vegetta777', 
+    r'Auronplay', r'Luisito\s+Comunica', r'Yuya', r'Badabun',
+    r'Caso\s+Cerrado', r'Doctora\s+Polo', 
+    
+    # Creadores Poopers Hispanos
+    r'Catdanny100', r'Parodiadoranimado', r'Fistroman', r'Iluminatus', 
+    r'Randomware', r'OrbisDerideo', r'Adan\s+Blaze', r'HomeroX3', r'CriticalShock',
+    r'De\s+T[oó]\s+un\s+Poop', r'JuacoProductionsX', 
+    
+    # Fuentes de TV, Películas y Animación comunes en YTPH
+    r'Bob\s+Esponja', r'Los\s+Simpson', r'Homero', r'Dragon\s+Ball', r'Goku', 
+    r'Un\s+show\s+m[aá]s', r'Skips', r'Timmy', r'Padrinos\s+M[aá]gicos',
+    r'Megamente', r'Encanto', r'Spider-?Man', r'Harry\s+Pott?er', r'Red', 
+    r'Mi\s+Villano\s+Favorito', r'Madagascar', r'Hotel\s+Transilvania', 
+    r'Ratatouille', r'Osito\s+Bimbo',
+    
+    # Memes Clásicos (España y Latinoamérica)
+    r'La\s+he\s+liado\s+parda', r'Baptisterio\s+romano', r'Pim\s+pam\s+toma\s+lacasitos',
+    r'Se\s+va\s+a\s+haber\s+un\s+foll[oó]n', r'Est[aá]\s+muerto\s+vivo', 
+    r'Si\s+ya\s+saben\s+c[oó]mo\s+me\s+pongo', r'Por\s+qu[eé]\s+no\s+te\s+callas',
+    r'Ecce\s+Homo', r'Yao\s+Ming', r'Troll\s+face', r'Mother\s+of\s+God',
+    r'Ni[ñn]a\s+del\s+desastre', r'Perro\s+Sanxe', r'Ayuwoki', r'Ni[ñn]o\s+del\s+Oxxo'
 ]
 
 MEME_KEYWORDS_FR = [
@@ -524,12 +619,12 @@ class VideoIndex:
         self.video_dir = video_dir
         self.docs_dir = docs_dir or DEFAULT_DOCS_DIR
         
-        # Split DB Paths
-        self.ytp_db_path = os.path.join(PROJECT_ROOT, "public", "ytp.db")
-        self.sources_db_path = os.path.join(PROJECT_ROOT, "public", "other.db")
-        self.poopers_db_path = os.path.join(PROJECT_ROOT, "public", "ytpoopers.db")
-        self.ytpmv_db_path = os.path.join(PROJECT_ROOT, "public", "ytpmv.db")
-        self.collabs_db_path = os.path.join(PROJECT_ROOT, "public", "collabs.db")
+        # Split DB Paths (now located in public/db)
+        self.ytp_db_path = os.path.join(PROJECT_ROOT, "public", "db", "ytp.db")
+        self.sources_db_path = os.path.join(PROJECT_ROOT, "public", "db", "other.db")
+        self.poopers_db_path = os.path.join(PROJECT_ROOT, "public", "db", "ytpoopers.db")
+        self.ytpmv_db_path = os.path.join(PROJECT_ROOT, "public", "db", "ytpmv.db")
+        self.collabs_db_path = os.path.join(PROJECT_ROOT, "public", "db", "collabs.db")
         
         self.data = {}
         self.sources_data = {}
@@ -1717,7 +1812,7 @@ def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping
 
 def do_keyword_search_scraping(index):
     """Scrapes YouTube for every combination of YTP_KEYWORDS_LIST and MEME_KEYWORDS_LIST."""
-    scrape_log_path = os.path.join(os.path.dirname(index.filepath), "keyword_scrape.json")
+    scrape_log_path = "./keyword_scrape.json"
     scraped_queries = set()
     if os.path.exists(scrape_log_path):
         try:
@@ -3381,25 +3476,25 @@ def main():
         restricted = False
         if lang_choice == "1": 
             selected_list = ITALIAN_CHANNELS
-            lang_name = "italian"
+            lang_name = "it"
         elif lang_choice == "2": 
             selected_list = ENGLISH_CHANNELS
-            lang_name = "english"
+            lang_name = "en"
         elif lang_choice == "3": 
             selected_list = SPANISH_CHANNELS
-            lang_name = "spanish"
+            lang_name = "es"
         elif lang_choice == "4": 
             selected_list = GERMAN_CHANNELS
-            lang_name = "german"
+            lang_name = "de"
         elif lang_choice == "5": 
             selected_list = FRENCH_CHANNELS
-            lang_name = "french"
+            lang_name = "fr"
         elif lang_choice == "6": 
             selected_list = RUSSIAN_CHANNELS
-            lang_name = "russian"
+            lang_name = "ru"
         elif lang_choice == "7":
             selected_list = ITALIAN_CHANNELS
-            lang_name = "italian"
+            lang_name = "it"
             restricted = True
         
         if lang_name:

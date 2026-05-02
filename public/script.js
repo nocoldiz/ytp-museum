@@ -3402,12 +3402,13 @@ function getStatusEmoji(status) {
 function getLanguageFlag(lang) {
   if (!lang) return '-';
   const maps = {
-    'english': '🇬🇧',
-    'italian': '🇮🇹',
-    'spanish': '🇪🇸',
-    'russian': '🇷🇺',
-    'french': '🇫🇷',
-    'german': '🇩🇪'
+    'en': '🇬🇧',
+    'it': '🇮🇹',
+    'es': '🇪🇸',
+    'ru': '🇷🇺',
+    'fr': '🇫🇷',
+    'de': '🇩🇪',
+    'pt': '🇵🇹'
   };
   return maps[lang.toLowerCase()] || '🌐';
 }
