@@ -45,6 +45,14 @@ SCAN_SECTIONS = [
 
 DISALLOWED_CHANNELS = []
 
+# Channels whose videos should be preserved even if they don't have YTP/YTPMV/Collabs
+CHANNELS_TO_PRESERVE = [
+    "https://www.youtube.com/@Michela_life_oac",
+    "https://www.youtube.com/@piersvensk",
+    "https://www.youtube.com/@danilovalla",
+    "https://www.youtube.com/@BrigateBenson",
+]
+
 # NocoldizTV: scrape everything except videos whose title matches these words
 NOCOLDIZ_BLACKLIST = re.compile(
     r'(?i)(gameplay|hypernet|devlog|gioco|em\.Path|em\.Brace|Dwarf)'
@@ -103,6 +111,26 @@ def get_channels_by_language(index, language):
         except Exception:
             pass
     return urls
+
+
+def load_excluded_channels():
+    """Load excluded channels from excluded_channels.json to prevent re-fetching."""
+    excluded = set()
+    excluded_json_path = os.path.join(PROJECT_ROOT, "scripts", "db", "excluded_channels.json")
+    
+    if os.path.exists(excluded_json_path):
+        try:
+            with open(excluded_json_path, 'r', encoding='utf-8') as f:
+                excluded_data = json.load(f)
+                for item in excluded_data:
+                    if isinstance(item, dict) and 'url' in item:
+                        norm_url = normalize_channel_url(item['url'])
+                        if norm_url:
+                            excluded.add(norm_url)
+        except Exception as e:
+            print(f"  [!] Error loading excluded_channels.json: {e}")
+    
+    return excluded
 
 
 def get_all_registered_channels(index):
@@ -686,11 +714,13 @@ class VideoIndex:
         self.ytpmv_ids = set()
         self.collabs_ids = set()
         self.excluded_ids = set()
+        self.excluded_channels = set()  # Load excluded channels from JSON
         
         # ── Backup Databases ──────────────────────────────────────────────────
         self.backup_databases()
         
-
+        # Load excluded channels before other operations
+        self.excluded_channels = load_excluded_channels()
         self.load_excluded()
 
     def backup_databases(self):
@@ -1082,6 +1112,13 @@ class VideoIndex:
         if video_id in self.actually_excluded_ids:
             # Skip only hard-blacklisted videos during scanning
             return
+        
+        # Check if channel is in excluded list
+        if channel_url:
+            norm_channel = normalize_channel_url(channel_url)
+            if norm_channel in self.excluded_channels:
+                # Skip videos from excluded channels
+                return
 
         # Check if video exists in ANY of the stores
         # If it exists in a different store than 'target', we skip adding it to honor the "no duplicates" rule
@@ -2004,6 +2041,12 @@ def do_scrape_channels(index):
     new_total = 0
     
     for i, ch_url in enumerate(channels_to_scrape, 1):
+        # Skip excluded channels
+        norm_ch_url = normalize_channel_url(ch_url)
+        if norm_ch_url in index.excluded_channels:
+            print(f"\n  [{i}/{total_channels}] Skipping excluded channel: {ch_url}")
+            continue
+        
         print(f"\n  Scraping Channel [{i}/{total_channels}]: {ch_url}")
         videos_url = channel_videos_url(ch_url)
         nocoldiz = is_nocoldiz_channel(ch_url)
@@ -2626,11 +2669,6 @@ def sync_ytpoopers_index(index):
     gather_from_db('ytp')
     gather_from_db('sources')
     
-    # 2. Include ALLOWED_CHANNELS
-    for url in ALLOWED_CHANNELS:
-        if url not in all_channels:
-            all_channels[url] = None
-
     # 3. Sync to ytpoopers.db
     added = 0
     updated = 0
@@ -2649,6 +2687,242 @@ def sync_ytpoopers_index(index):
     conn_poopers.close()
     if added or updated:
         print(f"  [sync] ytpoopers.db updated: {added} added, {updated} updated.")
+
+
+def do_cleanup_other_db(index):
+    """
+    Cleanup other.db: Delete all entries for a channel if that channel doesn't have 
+    any videos in ytp.db, ytpmv.db, or collabs.db, except for channels in CHANNELS_TO_PRESERVE.
+    Also removes channels from ytpoopers.db and saves them to excluded_channels.json.
+    """
+    print("\n[Cleanup] Scanning other.db for orphaned channels...")
+    
+    # Normalize preserve list
+    preserved_channels = set()
+    for url in CHANNELS_TO_PRESERVE:
+        norm_url = normalize_channel_url(url)
+        if norm_url:
+            preserved_channels.add(norm_url)
+    
+    # Get all channels from ytp.db, ytpmv.db, collabs.db
+    channels_in_main_dbs = set()
+    channels_metadata = {}  # norm_url -> {url, name}
+    
+    for db_type in ['ytp', 'ytpmv', 'collabs']:
+        try:
+            conn = index.get_conn(db_type)
+            cursor = conn.cursor()
+            cursor.execute("SELECT DISTINCT channel_url, channel_name FROM videos WHERE channel_url IS NOT NULL")
+            for row in cursor.fetchall():
+                channel_url = row[0]
+                channel_name = row[1] if len(row) > 1 else None
+                if channel_url:
+                    norm_url = normalize_channel_url(channel_url)
+                    if norm_url:
+                        channels_in_main_dbs.add(norm_url)
+                        if norm_url not in channels_metadata:
+                            channels_metadata[norm_url] = {
+                                "url": channel_url,
+                                "name": channel_name
+                            }
+            conn.close()
+        except Exception as e:
+            print(f"  [!] Error reading {db_type}.db: {e}")
+    
+    # Get all channels from ytpoopers.db for reference
+    poopers_channels = {}  # normalized_url -> {url, name}
+    try:
+        conn = index.get_conn('poopers')
+        cursor = conn.cursor()
+        cursor.execute("SELECT channel_url, channel_name FROM channels WHERE channel_url IS NOT NULL")
+        for row in cursor.fetchall():
+            channel_url = row[0]
+            channel_name = row[1]
+            if channel_url:
+                norm_url = normalize_channel_url(channel_url)
+                if norm_url:
+                    poopers_channels[norm_url] = {
+                        "url": channel_url,
+                        "name": channel_name
+                    }
+        conn.close()
+    except Exception as e:
+        print(f"  [!] Error reading ytpoopers.db: {e}")
+    
+    # Get all channels from other.db (sources)
+    channels_in_other_db = {}  # normalized_url -> {url, name}
+    try:
+        conn = index.get_conn('sources')
+        cursor = conn.cursor()
+        cursor.execute("SELECT DISTINCT channel_url, channel_name FROM videos WHERE channel_url IS NOT NULL")
+        for row in cursor.fetchall():
+            channel_url = row[0]
+            channel_name = row[1] if len(row) > 1 else None
+            if channel_url:
+                norm_url = normalize_channel_url(channel_url)
+                if norm_url:
+                    channels_in_other_db[norm_url] = {
+                        "url": channel_url,
+                        "name": channel_name
+                    }
+        conn.close()
+    except Exception as e:
+        print(f"  [!] Error reading other.db: {e}")
+    
+    # Find all channels that don't have videos in main DBs (excluding preserved channels)
+    orphaned_channels = []
+    for norm_url, channel_info in poopers_channels.items():
+        if norm_url not in channels_in_main_dbs and norm_url not in preserved_channels:
+            orphaned_channels.append(channel_info)
+    
+    if not orphaned_channels:
+        print("  No orphaned channels found.")
+        return
+    
+    print(f"\n  Found {len(orphaned_channels)} orphaned channel(s):")
+    for channel_info in orphaned_channels:
+        name = channel_info.get("name") or "Unknown"
+        print(f"    - {channel_info['url']} ({name})")
+    
+    # Confirm deletion
+    confirm = input(f"\n  Delete these {len(orphaned_channels)} channel(s) from ytpoopers.db and other.db? (y/n): ").strip().lower()
+    if confirm != 'y':
+        print("  Cancelled.")
+        return
+    
+    excluded_channels = []
+    deleted_from_other_db = 0
+    deleted_from_poopers = 0
+    excluded_video_ids = []
+    
+    # Perform deletion from other.db
+    try:
+        conn = index.get_conn('sources')
+        cursor = conn.cursor()
+        
+        for channel_info in orphaned_channels:
+            channel_url = channel_info['url']
+            
+            # First, collect video IDs to exclude
+            cursor.execute("SELECT id FROM videos WHERE channel_url = ?", (channel_url,))
+            video_ids = [row[0] for row in cursor.fetchall()]
+            excluded_video_ids.extend(video_ids)
+            
+            # Delete videos and their associated data
+            cursor.execute("DELETE FROM videos WHERE channel_url = ?", (channel_url,))
+            deleted_videos = cursor.rowcount
+            
+            # Delete video tags, sections, and sources for these videos
+            cursor.execute("""
+                DELETE FROM video_tags WHERE video_id IN (
+                    SELECT id FROM videos WHERE channel_url = ?
+                )
+            """, (channel_url,))
+            
+            cursor.execute("""
+                DELETE FROM video_sections WHERE video_id IN (
+                    SELECT id FROM videos WHERE channel_url = ?
+                )
+            """, (channel_url,))
+            
+            cursor.execute("""
+                DELETE FROM video_sources WHERE video_id IN (
+                    SELECT id FROM videos WHERE channel_url = ?
+                )
+            """, (channel_url,))
+            
+            deleted_from_other_db += deleted_videos
+            print(f"    [other.db] {channel_url} -> {deleted_videos} video(s) deleted")
+        
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"  [!] Error during other.db deletion: {e}")
+        try:
+            conn.rollback()
+            conn.close()
+        except:
+            pass
+    
+    # Add deleted videos to excluded.db
+    if excluded_video_ids:
+        try:
+            conn = index.get_conn('ytp')
+            cursor = conn.cursor()
+            
+            for vid in excluded_video_ids:
+                cursor.execute("INSERT OR IGNORE INTO excluded_videos (id) VALUES (?)", (vid,))
+            
+            conn.commit()
+            conn.close()
+            print(f"    [excluded.db] {len(excluded_video_ids)} video(s) added to excluded_videos")
+        except Exception as e:
+            print(f"  [!] Error adding videos to excluded_videos: {e}")
+            try:
+                conn.rollback()
+                conn.close()
+            except:
+                pass
+    
+    # Perform deletion from ytpoopers.db
+    try:
+        conn = index.get_conn('poopers')
+        cursor = conn.cursor()
+        
+        for channel_info in orphaned_channels:
+            channel_url = channel_info['url']
+            cursor.execute("DELETE FROM channels WHERE channel_url = ?", (channel_url,))
+            deleted_from_poopers += cursor.rowcount
+            print(f"    [ytpoopers.db] {channel_url} deleted")
+            
+            # Add to excluded list
+            excluded_channels.append({
+                "url": channel_url,
+                "name": channel_info.get("name") or "Unknown",
+                "excluded_date": datetime.datetime.now().isoformat()
+            })
+        
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f"  [!] Error during ytpoopers.db deletion: {e}")
+        try:
+            conn.rollback()
+            conn.close()
+        except:
+            pass
+    
+    # Save excluded channels to JSON
+    excluded_json_path = os.path.join(PROJECT_ROOT, "scripts", "db", "excluded_channels.json")
+    os.makedirs(os.path.dirname(excluded_json_path), exist_ok=True)
+    
+    # Load existing excluded channels if file exists
+    existing_excluded = []
+    if os.path.exists(excluded_json_path):
+        try:
+            with open(excluded_json_path, 'r', encoding='utf-8') as f:
+                existing_excluded = json.load(f)
+        except Exception as e:
+            print(f"  [!] Error reading existing excluded_channels.json: {e}")
+    
+    # Add new excluded channels (avoid duplicates)
+    existing_urls = {item['url'] for item in existing_excluded}
+    for channel in excluded_channels:
+        if channel['url'] not in existing_urls:
+            existing_excluded.append(channel)
+    
+    try:
+        with open(excluded_json_path, 'w', encoding='utf-8') as f:
+            json.dump(existing_excluded, f, indent=2, ensure_ascii=False)
+        print(f"\n>>> Excluded channels saved to {excluded_json_path}")
+    except Exception as e:
+        print(f"  [!] Error saving excluded_channels.json: {e}")
+    
+    print(f"\n>>> Cleanup complete:")
+    print(f"    - {deleted_from_other_db} video(s) deleted from other.db")
+    print(f"    - {len(excluded_video_ids)} video(s) added to excluded_videos")
+    print(f"    - {deleted_from_poopers} channel(s) deleted from ytpoopers.db")
+    print(f"    - {len(excluded_channels)} channel(s) added to excluded_channels.json")
 
 
 def do_scrape_thumbnails(index, docs_dir):
@@ -3409,13 +3683,15 @@ def main():
                    help="Number of parallel workers for downloading")
     p.add_argument("--resort",          action="store_true",
                    help="Resort videos between main index and sources index based on keywords")
+    p.add_argument("--cleanup-other-db", action="store_true",
+                   help="Cleanup other.db: delete channels with no videos in main databases")
     args, _ = p.parse_known_args()
 
     if not os.path.isdir(args.site_dir):
         print(f"[!] site_dir not found: {args.site_dir}")
         sys.exit(1)
 
-    if args.stats or args.chronology or args.dump_poopers or args.find_mirrors or args.scrape_comments or args.scrape_profiles or args.download_italian or args.forum_scrape or args.resort:
+    if args.stats or args.chronology or args.dump_poopers or args.find_mirrors or args.scrape_comments or args.scrape_profiles or args.download_italian or args.forum_scrape or args.resort or args.cleanup_other_db:
         index = VideoIndex(args.video_dir, args.docs_dir)
         index.load()
         if args.stats:
@@ -3436,6 +3712,8 @@ def main():
         if args.resort:
             print("\n>>> Launching Resort Videos (CLI)...")
             index.resort_videos()
+        if args.cleanup_other_db:
+            do_cleanup_other_db(index)
         
         # No migration needed for SQL version
         pass
@@ -3483,6 +3761,9 @@ def main():
     print("  11 Deep Keyword Discovery (Combinations)")
     print("       Exhaustive scan: Search every combination of YTP + Meme keywords.")
     print()
+    print("  12 Cleanup Orphaned Channels")
+    print("       Remove channels from other.db and ytpoopers.db that have no videos in main databases.")
+    print()
     print("  f  Forum Scrape (Site Mirror)")
     print("       Crawl archived forum folders to extract legacy YouTube links.")
     print()
@@ -3503,8 +3784,8 @@ def main():
     print()
     print("  q  Quit")
     print()
-    choice = ask("  Choice [1-11/f/r/s/d/p/a/q]: ",
-                 {"1","2","3","4","5","6","7","8","9","10","11","f","r","s","d","p","a","q"})
+    choice = ask("  Choice [1-12/f/r/s/d/p/a/q]: ",
+                 {"1","2","3","4","5","6","7","8","9","10","11","12","f","r","s","d","p","a","q"})
 
     if choice == "q":
         sys.exit(0)
@@ -3604,6 +3885,9 @@ def main():
 
     if choice == "11":
         do_keyword_search_scraping(index)
+
+    if choice == "12":
+        do_cleanup_other_db(index)
 
     if choice == "f":
         do_forum_scrape(index, args.site_dir)
