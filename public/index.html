@@ -204,23 +204,27 @@
         <div class="layout-2col" id="youtube-old-layout">
           <div class="home-main">
             <div id="homepage-featured-heading">
-              <h2 class="yt-featured-title">Featured Videos</h2>
+              <h2 class="yt-featured-title"></h2>
               <div class="yt-tab-bar">
-                <a href="#" class="yt-tab active" onclick="setFeaturedTab('all');return false;">All</a>
-                <span class="yt-tab-sep">|</span>
-                <a href="#" class="yt-tab" onclick="setFeaturedTab('ytp');return false;">YTP</a>
-                <span class="yt-tab-sep">|</span>
-                <a href="#" class="yt-tab" onclick="setFeaturedTab('ytpmv');return false;">YTPMV</a>
-                <span class="yt-tab-sep">|</span>
-                <a href="#" class="yt-tab" onclick="setFeaturedTab('acid');return false;">Acid Poop</a>
-                <span class="yt-tab-sep">|</span>
-                <a href="#" class="yt-tab" onclick="setFeaturedTab('subscribed');return false;">Subscribed</a>
-                <span class="yt-tab-sep">|</span>
-                <a href="#" class="yt-tab" onclick="setFeaturedTab('views');return false;">Most Viewed</a>
-                <span class="yt-tab-sep">|</span>
-                <a href="#" class="yt-tab" onclick="setFeaturedTab('discussed');return false;">Most Discussed</a>
-                <span class="yt-tab-sep">|</span>
-                <a href="#" class="yt-tab" onclick="setFeaturedTab('favorited');return false;">Top Favorited</a>
+                <div class="yt-tab-group">
+                  <a href="#" class="yt-tab active" onclick="setFeaturedTab('all');return false;">All</a>
+                  <span class="yt-tab-sep">|</span>
+                  <a href="#" class="yt-tab" onclick="setFeaturedTab('ytp');return false;">YTP</a>
+                  <span class="yt-tab-sep">|</span>
+                  <a href="#" class="yt-tab" onclick="setFeaturedTab('ytpmv');return false;">YTPMV</a>
+                  <span class="yt-tab-sep">|</span>
+                  <a href="#" class="yt-tab" onclick="setFeaturedTab('acid');return false;">Acid Poop</a>
+                </div>
+                <span class="yt-tab-sep yt-tab-group-sep">|</span>
+                <div class="yt-tab-group">
+                  <a href="#" class="yt-tab" onclick="setFeaturedTab('subscribed');return false;">Subscribed</a>
+                  <span class="yt-tab-sep">|</span>
+                  <a href="#" class="yt-tab" onclick="setFeaturedTab('views');return false;">Most Viewed</a>
+                  <span class="yt-tab-sep">|</span>
+                  <a href="#" class="yt-tab" onclick="setFeaturedTab('discussed');return false;">Most Discussed</a>
+                  <span class="yt-tab-sep">|</span>
+                  <a href="#" class="yt-tab" onclick="setFeaturedTab('favorited');return false;">Top Favorited</a>
+                </div>
               </div>
             </div>
             <div id="featured-videos"></div>
@@ -506,7 +510,8 @@
           <span class="yt-tab-sep">|</span>
           <a href="#" class="yt-tab" id="manager-tab-collabs" onclick="showPage('collabs'); return false;">Collabs</a>
           <span class="yt-tab-sep">|</span>
-          <a href="#" class="yt-tab" id="manager-tab-sources" onclick="showPage('sources'); return false;">Other videos</a>
+          <a href="#" class="yt-tab" id="manager-tab-sources" onclick="showPage('sources'); return false;">Other
+            videos</a>
         </div>
         <div class="section-header">
           <h2>Video Search</h2>
@@ -894,21 +899,26 @@
         <button onclick="closeSourcesModal()">&times;</button>
       </div>
       <div class="modal-body">
-        <p style="margin-bottom: 15px; font-size: 14px; color: var(--text-muted);">Enable or disable database sources to load in the archive.</p>
+        <p style="margin-bottom: 15px; font-size: 14px; color: var(--text-muted);">Enable or disable database sources to
+          load in the archive.</p>
         <div id="sources-list" style="display: flex; flex-direction: column; gap: 12px;">
-          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; font-weight: bold;">
+          <label
+            style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; font-weight: bold;">
             <input type="checkbox" id="source-ytp" checked onchange="toggleSourceState('ytp')">
             <span>YouTube Poops (ytp.db)</span>
           </label>
-          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; font-weight: bold;">
+          <label
+            style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; font-weight: bold;">
             <input type="checkbox" id="source-ytpmv" checked onchange="toggleSourceState('ytpmv')">
             <span>YTPMVs (ytpmv.db)</span>
           </label>
-          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; font-weight: bold;">
+          <label
+            style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; font-weight: bold;">
             <input type="checkbox" id="source-collabs" checked onchange="toggleSourceState('collabs')">
             <span>Collabs (collabs.db)</span>
           </label>
-          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; font-weight: bold;">
+          <label
+            style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; font-weight: bold;">
             <input type="checkbox" id="source-other" checked onchange="toggleSourceState('other')">
             <span>Other Videos (other.db)</span>
           </label>
