@@ -43,72 +43,123 @@ SCAN_SECTIONS = [
     "Club sportivo della foca grassa", "Biografie YTP"
 ]
 
-def load_channels_from_md(filepath):
-    """Parses a markdown file for channel lists."""
-    channels = {
-        "DISALLOWED_CHANNELS": [],
-        "ITALIAN_CHANNELS": [],
-        "ENGLISH_CHANNELS": [],
-        "SPANISH_CHANNELS": [],
-        "GERMAN_CHANNELS": [],
-        "FRENCH_CHANNELS": [],
-        "RUSSIAN_CHANNELS": []
-    }
-    if not os.path.exists(filepath):
-        return channels
+DISALLOWED_CHANNELS = []
 
-    def extract_handle(url):
-        if not url.startswith("http"): return url
-        url = url.split("?")[0].rstrip("/")
-        if "/@" in url: return url.split("/@")[-1]
-        if "/user/" in url: return url.split("/user/")[-1]
-        if "/c/" in url: return url.split("/c/")[-1]
-        if "/channel/" in url: return url.split("/channel/")[-1]
-        return url
-
-    current_section = None
-    with open(filepath, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line: continue
-            if line.startswith("#"):
-                section_name = line.lstrip("#").strip()
-                if section_name in channels:
-                    current_section = section_name
-                else:
-                    current_section = None
-            elif current_section:
-                url = line.strip()
-                if current_section == "DISALLOWED_CHANNELS":
-                    channels[current_section].append(extract_handle(url))
-                else:
-                    channels[current_section].append(url)
-    return channels
-
-# Load channels from centralized MD file (moved to scripts/db)
-CHANNELS_MD_PATH = os.path.join(PROJECT_ROOT, "scripts", "db", "channels_by_language.md")
-loaded_channels = load_channels_from_md(CHANNELS_MD_PATH)
-
-DISALLOWED_CHANNELS = loaded_channels["DISALLOWED_CHANNELS"]
-ITALIAN_CHANNELS = loaded_channels["ITALIAN_CHANNELS"]
-ENGLISH_CHANNELS = loaded_channels["ENGLISH_CHANNELS"]
-SPANISH_CHANNELS = loaded_channels["SPANISH_CHANNELS"]
-GERMAN_CHANNELS = loaded_channels["GERMAN_CHANNELS"]
-FRENCH_CHANNELS = loaded_channels["FRENCH_CHANNELS"]
-RUSSIAN_CHANNELS = loaded_channels["RUSSIAN_CHANNELS"]
-
-ALLOWED_CHANNELS = (
-    RUSSIAN_CHANNELS + 
-    GERMAN_CHANNELS + 
-    FRENCH_CHANNELS + 
-    SPANISH_CHANNELS + 
-    ITALIAN_CHANNELS +
-    ENGLISH_CHANNELS
-)
 # NocoldizTV: scrape everything except videos whose title matches these words
 NOCOLDIZ_BLACKLIST = re.compile(
     r'(?i)(gameplay|hypernet|devlog|gioco|em\.Path|em\.Brace|Dwarf)'
 )
+
+
+def normalize_channel_url(url):
+    if not url:
+        return None
+    url = url.strip().rstrip("/")
+    url = url.split("/featured")[0]
+    url = url.replace("http://", "https://")
+    if url.startswith("https://youtube.com"):
+        url = url.replace("https://youtube.com", "https://www.youtube.com", 1)
+    return url.lower()
+
+
+def get_channel_language_map(index):
+    channel_lang_map = {}
+    try:
+        conn = index.get_conn('poopers')
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT channel_url, language FROM channels WHERE channel_url IS NOT NULL")
+        for row in cursor.fetchall():
+            norm_url = normalize_channel_url(row['channel_url'])
+            lang = row['language']
+            if norm_url and lang:
+                channel_lang_map[norm_url] = lang.strip().lower()
+    except Exception as e:
+        print(f"  [!] Error reading channel languages from ytpoopers.db: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    return channel_lang_map
+
+
+def get_channels_by_language(index, language):
+    urls = []
+    if not language:
+        return urls
+    language = language.strip().lower()
+    try:
+        conn = index.get_conn('poopers')
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT channel_url FROM channels WHERE lower(language) = ?", (language,))
+        urls = [row['channel_url'] for row in cursor.fetchall() if row['channel_url']]
+    except Exception as e:
+        print(f"  [!] Error loading channels for language '{language}' from ytpoopers.db: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    return urls
+
+
+def get_all_registered_channels(index):
+    urls = set()
+    try:
+        conn = index.get_conn('poopers')
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT channel_url FROM channels WHERE channel_url IS NOT NULL")
+        urls.update(row['channel_url'] for row in cursor.fetchall() if row['channel_url'])
+    except Exception as e:
+        print(f"  [!] Error loading registered channels from ytpoopers.db: {e}")
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    return urls
+
+
+def update_channel_language(index, channel_url, language, channel_name=None):
+    if not channel_url or not language:
+        return False
+    norm_target = normalize_channel_url(channel_url)
+    if not norm_target:
+        return False
+    try:
+        conn = index.get_conn('poopers')
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        cursor.execute("SELECT channel_url, language FROM channels")
+        rows = cursor.fetchall()
+        matched = None
+        for row in rows:
+            if normalize_channel_url(row['channel_url']) == norm_target:
+                matched = row['channel_url']
+                existing_lang = row['language']
+                break
+        if matched:
+            if not existing_lang:
+                cursor.execute("UPDATE channels SET language = ? WHERE channel_url = ?", (language, matched))
+                conn.commit()
+                return True
+            return False
+        cursor.execute(
+            "INSERT OR IGNORE INTO channels (channel_url, channel_name, aliases, language) VALUES (?, ?, ?, ?)",
+            (channel_url, channel_name or channel_url, '[]', language)
+        )
+        conn.commit()
+        return True
+    except Exception:
+        return False
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
 
 # ── Keywords ──────────────────────────────────────────────────────────────────
 
@@ -1929,10 +1980,10 @@ def do_keyword_search_scraping(index):
 
 
 def do_scrape_channels(index):
-    """Scans channels from ALLOWED_CHANNELS and ytpoopers_index.json for new YTP videos matching keywords."""
+    """Scans channels from ytpoopers.db and ytpoopers_index.json for new YTP videos matching keywords."""
     
     poopers_path = os.path.join(index.docs_dir, "ytpoopers_index.json")
-    channels_to_scrape = set(ALLOWED_CHANNELS)
+    channels_to_scrape = set(get_all_registered_channels(index))
     
     if os.path.exists(poopers_path):
         try:
@@ -1942,14 +1993,14 @@ def do_scrape_channels(index):
         except Exception as e:
             print(f"  [!] Error loading {poopers_path}: {e}")
     
-    channels_to_scrape = sorted(list(channels_to_scrape))
+    channels_to_scrape = sorted([url for url in channels_to_scrape if url])
     
     if not channels_to_scrape:
         print("  No channels defined to scrape.")
         return
         
     total_channels = len(channels_to_scrape)
-    print(f"  Found {total_channels} channel(s) to scrape (ALLOWED_CHANNELS + pooper registry).")
+    print(f"  Found {total_channels} channel(s) to scrape (ytpoopers.db + pooper registry).")
     new_total = 0
     
     for i, ch_url in enumerate(channels_to_scrape, 1):
@@ -2717,7 +2768,7 @@ def do_auto_languages(index):
     import re
     from collections import defaultdict
 
-    # ── Build channel_url → language lookup from the known channel lists ──
+    # ── Build channel_url → language lookup from ytpoopers.db matched against known channel lists ──
     def _normalize_url(url):
         """Normalize a channel URL for reliable matching."""
         url = url.strip().rstrip("/")
@@ -2729,42 +2780,47 @@ def do_auto_languages(index):
 
     channel_lang_map = {}  # normalized_url → language
     lang_channel_lists = {
-        "italian":  ITALIAN_CHANNELS,
-        "english":  ENGLISH_CHANNELS,
-        "spanish":  SPANISH_CHANNELS,
-        "german":   GERMAN_CHANNELS,
-        "french":   FRENCH_CHANNELS,
-        "russian":  RUSSIAN_CHANNELS,
+        "it":  ITALIAN_CHANNELS,
+        "en":  ENGLISH_CHANNELS,
+        "es":  SPANISH_CHANNELS,
+        "de":   GERMAN_CHANNELS,
+        "fr":   FRENCH_CHANNELS,
+        "ru":  RUSSIAN_CHANNELS,
     }
-    for lang, ch_list in lang_channel_lists.items():
-        for url in ch_list:
-            norm = _normalize_url(url)
-            # First entry wins — don't overwrite if already mapped
-            if norm not in channel_lang_map:
+
+    # Get channels from ytpoopers.db
+    conn = index.get_conn('poopers')
+    cursor = conn.cursor()
+    cursor.execute("SELECT channel_url FROM channels")
+    channels_in_db = [row[0] for row in cursor.fetchall()]
+    conn.close()
+
+    # Map languages for channels in ytpoopers.db
+    for url in channels_in_db:
+        norm = _normalize_url(url)
+        for lang, ch_list in lang_channel_lists.items():
+            if any(_normalize_url(u) == norm for u in ch_list):
                 channel_lang_map[norm] = lang
+                break
 
-    print(f"  Loaded {len(channel_lang_map)} unique channel URLs across {len(lang_channel_lists)} languages.")
+    print(f"  Loaded {len(channel_lang_map)} unique channel URLs from ytpoopers.db across {len(lang_channel_lists)} languages.")
 
-    # ── Keyword-based fallback patterns ──
+    # ── Keyword-based patterns ──
     patterns = {
-        "spanish": [
-            r'YTPH|YTPBR|Chavo\s+del\s+8|Loquendo|Pelea\s+de\s+invalidos|Vete\s+a\s+la\s+Versh|Pooppa[ñn]ol'
+        "es": [
+            r'YTPH|Pooppa[ñn]ol|YouTube\s+Poop(?:\s+en\s+español)?'
         ],
-        "french": [
-            r'YTPFR|YTP\s+FR|Brocante|Joueur\s+du\s+Grenier|JDG|Koh\s+Lanta|Denis\s+Brogniart|David\s+Goodenough'
+        "fr": [
+            r'YTPFR|YTP\s+FR|YouTube\s+Poop(?:\s+FR)?'
         ],
-        "german": [
-            r'YouTube\s+Kacke|Marcell\s+D\'Avis|Peter\s+Zwegat|Kinski|Löwenzahn|Peter\s+Lustig|1&1'
+        "de": [
+            r'YouTube\s+Kacke|YouTube\s+Kaka'
         ],
-        "russian": [
-            r'RYTP|РУТП|Поцык|Повар|Сашко|Гамаз|Пенек'
+        "ru": [
+            r'RYTP|РУТП'
         ],
-        "italian": [
-            r'matteo\s+montesi|avventure|Zeb|Collegio|Bigazzi|Soccer|Ganon|Billy\s+Mays|Branduardi|Luigi|Ambrogio|Risotto|ariete|Harry\s+potter|Round|Peppa|Grylls|Tennis|Acid|Favij|Testoh|Pingu',
-            r'Dipr[eè]|Bello\s+Figo|Germano|Grillo|Gesù|Nabbo|Yotobi|Berlusconi|Muniz|Travaglio|Nemesis|Testo|Papa|Super\s+Quark|Iscritti|YTM|YTG|MLG|YTK',
-            r'Sentence\s+Mix|Ear\s?rape|G-Major|Mondo\s+emo|Pubblicità|Spot|Spongebob|Reverse|Masking|Pitch\s+Shift',
-            r'Mosconi|Benson|Brumotti|Master\s?chef|Mister\s+Lui|Pappalardo|Sgarbi|Razzi|Salvini|Renzi|Rio\s+mare|Gerry\s+Scotti|Fazio',
-            r'Kabu|Nocoldiz|Poldo|Cloroformio|Giannino|Gianni\s+Morandi|Doraemon|Me\s+cont[ro]o\s+Te'
+        "it": [
+            r'YTP\s?ITA|YTM|YTG|YTK|YouTube\s+Poop(?:\s+ITA)?|Sentence\s+Mix|Ear\s?rape|G-Major|Reverse|Pitch\s+Shift|YTP\s+(?:Tennis|Soccer|Ping\s+pong|Round)'
         ]
     }
 
@@ -2779,7 +2835,10 @@ def do_auto_languages(index):
     tagged_counts = {lang: 0 for lang in lang_channel_lists}
     channels_by_lang = defaultdict(set)
 
-    for video_id, video in index.data.items():
+    # Combine all video data from all databases
+    all_ytp = {**index.data, **index.sources_data, **index.ytpmv_data, **index.collabs_data}
+
+    for video_id, video in all_ytp.items():
         if video.get('language'):
             continue
         title = video.get('title')
@@ -2788,29 +2847,28 @@ def do_auto_languages(index):
 
         matched_lang = None
 
-        # ── Priority 1: match by known channel lists ──
-        if channel_url:
+        # ── Priority 1: keyword regex matching on title/thread_titles ──
+        search_text = []
+        if title:
+            search_text.append(title)
+        if thread_titles:
+            search_text.extend(thread_titles)
+
+        full_text = " ".join(search_text)
+
+        if full_text:
+            for lang, regex in compiled_patterns.items():
+                if regex.search(full_text):
+                    matched_lang = lang
+                    keyword_match_count += 1
+                    break
+
+        # ── Priority 2: match by channel in ytpoopers.db ──
+        if not matched_lang and channel_url:
             norm_url = _normalize_url(channel_url)
             matched_lang = channel_lang_map.get(norm_url)
             if matched_lang:
                 channel_match_count += 1
-
-        # ── Priority 2: keyword regex fallback ──
-        if not matched_lang:
-            search_text = []
-            if title:
-                search_text.append(title)
-            if thread_titles:
-                search_text.extend(thread_titles)
-
-            full_text = " ".join(search_text)
-
-            if full_text:
-                for lang, regex in compiled_patterns.items():
-                    if regex.search(full_text):
-                        matched_lang = lang
-                        keyword_match_count += 1
-                        break
 
         if matched_lang:
             video['language'] = matched_lang
@@ -2821,11 +2879,16 @@ def do_auto_languages(index):
                 channels_by_lang[matched_lang].add(channel_url)
 
     print(f"  Finished tagging. Total videos updated: {count}")
-    print(f"    (channel-list matches: {channel_match_count}, keyword matches: {keyword_match_count})")
+    print(f"    (keyword matches: {keyword_match_count}, channel matches: {channel_match_count})")
     for lang, c in sorted(tagged_counts.items()):
         print(f"    - {lang}: {c}")
 
     index.save()
+
+    # Save sources_index.json if modified
+    src_path = os.path.join(index.docs_dir, "sources_index.json")
+    with open(src_path, "w", encoding="utf-8") as f:
+        json.dump(index.sources_data, f, separators=(',', ':'), ensure_ascii=False)
 
     channels_file = os.path.join(index.docs_dir, 'channels_by_language.txt')
     print(f"  Exporting channels to {channels_file}...")
