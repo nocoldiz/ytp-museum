@@ -6,7 +6,4 @@ __pycache__
 *.pyc
 *.bak
 quickstart.md
-db/video_index - Copia.json
 docs
-/public/ytp.db
-!/public/ytp.db.part*

@@ -73,67 +73,13 @@ async function saveStoredDB(name, buffer) {
   store.put(buffer, name);
 }
 
-/**
- * Combines multiple .partX files into a single ArrayBuffer.
- */
-async function fetchChunks(name) {
-  const chunks = [];
-  let partNum = 1;
-  console.log(`Fetching chunks for ${name}...`);
-  
-  while (true) {
-    const chunkName = `${name}.part${partNum}`;
-    try {
-      const res = await fetch(chunkName);
-      if (!res.ok) {
-        if (partNum === 1) throw new Error(`Primary chunk ${chunkName} not found (Status: ${res.status})`);
-        break; // End of chunks
-      }
-      const buffer = await res.arrayBuffer();
-      if (buffer.byteLength === 0) {
-        console.warn(`Chunk ${chunkName} is empty.`);
-        break;
-      }
-      chunks.push(buffer);
-      partNum++;
-    } catch (e) {
-      if (partNum === 1) throw e;
-      console.warn(`Error fetching chunk ${partNum}, stopping.`, e);
-      break;
-    }
-  }
-
-  if (chunks.length === 0) throw new Error(`No chunks found for ${name}`);
-
-  console.log(`Successfully fetched ${chunks.length} chunks for ${name}.`);
-  // Combine chunks
-  const totalLength = chunks.reduce((acc, c) => acc + c.byteLength, 0);
-  const result = new Uint8Array(totalLength);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(new Uint8Array(chunk), offset);
-    offset += chunk.byteLength;
-  }
-  
-  // Basic SQLite validation: first 16 bytes must start with "SQLite format 3"
-  const header = new TextDecoder().decode(result.slice(0, 15));
-  if (header !== "SQLite format 3") {
-    throw new Error(`Invalid SQLite header in combined chunks for ${name}`);
-  }
-
-  return result.buffer;
-}
 
 async function fetchAndCache(name) {
-  let buffer;
   try {
-    if (name === 'ytp.db') {
-      buffer = await fetchChunks(name);
-    } else {
-      const response = await fetch(name);
-      if (!response.ok) throw new Error(`Failed to fetch ${name}: ${response.status}`);
-      buffer = await response.arrayBuffer();
-    }
+    const response = await fetch(name);
+    if (!response.ok) throw new Error(`Failed to fetch ${name}: ${response.status}`);
+    const buffer = await response.arrayBuffer();
+
     
     // Validate before saving
     const header = new TextDecoder().decode(new Uint8Array(buffer).slice(0, 15));

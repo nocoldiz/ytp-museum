@@ -3,11 +3,11 @@ import json
 import sys
 import os
 
-YTP_DB = 'public/ytp.db'
-SOURCES_DB = 'public/sources.db'
-POOPERS_DB = 'public/ytpoopers.db'
-YTPMV_DB = 'public/ytpmv.db'
-COLLABS_DB = 'public/collabs.db'
+YTP_DB = 'public/db/ytp.db'
+SOURCES_DB = 'public/db/sources.db'
+POOPERS_DB = 'public/db/ytpoopers.db'
+YTPMV_DB = 'public/db/ytpmv.db'
+COLLABS_DB = 'public/db/collabs.db'
 
 def get_conn(db_type='ytp'):
     path = YTP_DB

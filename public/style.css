@@ -144,9 +144,13 @@
     display: none !important;
   }
 
+  .page:not(.is-loading) .page-loader {
+    display: none !important;
+  }
+
   /* ── APP ── */
   #app {
-    display: none;
+    display: block;
   }
 
   /* MASTHEAD & YOUTUBE LAYOUT */

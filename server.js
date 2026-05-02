@@ -267,6 +267,9 @@ function onRequest(req, res) {
 
   if (pathname.startsWith('/db/')) {
     filePath = path.join(DB_DIR, pathname.substring(4));
+    if (!fs.existsSync(filePath)) {
+      filePath = path.join(PUBLIC_DIR, 'db', pathname.substring(4));
+    }
   } else {
     filePath = path.join(PUBLIC_DIR, relPath);
   }

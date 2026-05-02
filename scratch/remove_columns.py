@@ -2,10 +2,10 @@ import sqlite3
 import os
 
 databases = [
-    'public/ytp.db',
-    'public/ytpmv.db',
-    'public/sources.db',
-    'public/collabs.db'
+    'public/db/ytp.db',
+    'public/db/ytpmv.db',
+    'public/db/sources.db',
+    'public/db/collabs.db'
 ]
 
 cols_to_remove = ['created_at', 'updated_at', 'is_source', 'status']

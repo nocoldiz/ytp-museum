@@ -26,4 +26,4 @@ def split_file(file_path, chunk_size_mb=50):
     print("Done.")
 
 if __name__ == "__main__":
-    split_file("public/ytp.db")
+    split_file("public/db/ytp.db")
