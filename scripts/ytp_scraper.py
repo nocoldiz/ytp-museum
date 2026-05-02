@@ -273,7 +273,7 @@ MEME_KEYWORDS_IT = [
     r'5\s+minuti\s+di\s+ritardo', r'Italian\s+Brainrot', r'Maranza', 
     r'Auto\s+Blu', r'James\s+Dogs', r'Kirchificazione', r'Gli\s+animali\s+Brainrot'
 ]
-MEME_KEYWORDS_INT = [
+MEME_KEYWORDS_EN = [
     r'Pingas', r'CD-i', r'Morshu', r'Mah\s+Boi', r'He[\s-]?Man', r'Sparta\s+Remix', 
     r'Scad', r'Stutter', r'Patrick', r'Jack\s+Black', r'Gourmet', r'The\s+king', 
     r'Weegee', r'Spadinner', r'Michael\s+Rosen', r'Viacom', r'Skooks', r'Flex\s+Tape', 
@@ -343,7 +343,7 @@ MEME_KEYWORDS_BR = [
 ]
 
 MEME_KEYWORDS_LIST = (
-    MEME_KEYWORDS_IT + MEME_KEYWORDS_INT + MEME_KEYWORDS_ES + 
+    MEME_KEYWORDS_IT + MEME_KEYWORDS_EN + MEME_KEYWORDS_ES + 
     MEME_KEYWORDS_FR + MEME_KEYWORDS_DE + MEME_KEYWORDS_RU + MEME_KEYWORDS_BR
 )
 
@@ -1902,7 +1902,7 @@ def do_keyword_search_scraping(index):
         meme_source = MEME_KEYWORDS_IT
         lang_label = "Italian"
     elif lang_choice == "2": 
-        meme_source = MEME_KEYWORDS_INT
+        meme_source = MEME_KEYWORDS_EN
         lang_label = "Global/English"
     elif lang_choice == "3": 
         meme_source = MEME_KEYWORDS_ES
@@ -2768,7 +2768,7 @@ def do_auto_languages(index):
     import re
     from collections import defaultdict
 
-    # ── Build channel_url → language lookup from ytpoopers.db matched against known channel lists ──
+    # ── Build channel_url → language lookup from ytpoopers.db ──
     def _normalize_url(url):
         """Normalize a channel URL for reliable matching."""
         url = url.strip().rstrip("/")
@@ -2779,29 +2779,21 @@ def do_auto_languages(index):
         return url.lower()
 
     channel_lang_map = {}  # normalized_url → language
-    lang_channel_lists = {
-        "it":  ITALIAN_CHANNELS,
-        "en":  ENGLISH_CHANNELS,
-        "es":  SPANISH_CHANNELS,
-        "de":   GERMAN_CHANNELS,
-        "fr":   FRENCH_CHANNELS,
-        "ru":  RUSSIAN_CHANNELS,
-    }
 
-    # Get channels from ytpoopers.db
+    # Get channels and languages from ytpoopers.db
     conn = index.get_conn('poopers')
     cursor = conn.cursor()
-    cursor.execute("SELECT channel_url FROM channels")
-    channels_in_db = [row[0] for row in cursor.fetchall()]
+    cursor.execute("SELECT channel_url, language FROM channels WHERE language IS NOT NULL")
+    lang_channel_lists = defaultdict(list)
+    for url, lang in cursor.fetchall():
+        lang_channel_lists[lang].append(url)
     conn.close()
 
-    # Map languages for channels in ytpoopers.db
-    for url in channels_in_db:
-        norm = _normalize_url(url)
-        for lang, ch_list in lang_channel_lists.items():
-            if any(_normalize_url(u) == norm for u in ch_list):
-                channel_lang_map[norm] = lang
-                break
+    # Build the map
+    for lang, urls in lang_channel_lists.items():
+        for url in urls:
+            norm = _normalize_url(url)
+            channel_lang_map[norm] = lang
 
     print(f"  Loaded {len(channel_lang_map)} unique channel URLs from ytpoopers.db across {len(lang_channel_lists)} languages.")
 
@@ -2819,6 +2811,9 @@ def do_auto_languages(index):
         "ru": [
             r'RYTP|РУТП'
         ],
+        "br": [
+            r'YTPBR|YTP\s+BR|YouTube\s+Poop(?:\s+BR)?'
+        ],
         "it": [
             r'YTP\s?ITA|YTM|YTG|YTK|YouTube\s+Poop(?:\s+ITA)?|Sentence\s+Mix|Ear\s?rape|G-Major|Reverse|Pitch\s+Shift|YTP\s+(?:Tennis|Soccer|Ping\s+pong|Round)'
         ]
@@ -2829,10 +2824,25 @@ def do_auto_languages(index):
         combined = '|'.join(p_list)
         compiled_patterns[lang] = re.compile(combined, re.IGNORECASE)
 
+    meme_keyword_groups = {
+        "it": MEME_KEYWORDS_IT,
+        "es": MEME_KEYWORDS_ES,
+        "fr": MEME_KEYWORDS_FR,
+        "de": MEME_KEYWORDS_DE,
+        "ru": MEME_KEYWORDS_RU,
+        "br": MEME_KEYWORDS_BR,
+    }
+    compiled_meme_patterns = {
+        lang: re.compile("|".join(patterns), re.IGNORECASE)
+        for lang, patterns in meme_keyword_groups.items()
+    }
+
     count = 0
     channel_match_count = 0
-    keyword_match_count = 0
-    tagged_counts = {lang: 0 for lang in lang_channel_lists}
+    regex_match_count = 0
+    meme_match_count = 0
+    langs = set(lang_channel_lists.keys()) | set(patterns.keys()) | set(meme_keyword_groups.keys())
+    tagged_counts = {lang: 0 for lang in langs}
     channels_by_lang = defaultdict(set)
 
     # Combine all video data from all databases
@@ -2860,10 +2870,18 @@ def do_auto_languages(index):
             for lang, regex in compiled_patterns.items():
                 if regex.search(full_text):
                     matched_lang = lang
-                    keyword_match_count += 1
+                    regex_match_count += 1
                     break
 
-        # ── Priority 2: match by channel in ytpoopers.db ──
+        # ── Priority 2: match by meme keywords in title/thread_titles ──
+        if not matched_lang and title:
+            for lang, regex in compiled_meme_patterns.items():
+                if regex.search(title):
+                    matched_lang = lang
+                    meme_match_count += 1
+                    break
+
+        # ── Priority 3: match by channel in ytpoopers.db ──
         if not matched_lang and channel_url:
             norm_url = _normalize_url(channel_url)
             matched_lang = channel_lang_map.get(norm_url)
@@ -2879,7 +2897,7 @@ def do_auto_languages(index):
                 channels_by_lang[matched_lang].add(channel_url)
 
     print(f"  Finished tagging. Total videos updated: {count}")
-    print(f"    (keyword matches: {keyword_match_count}, channel matches: {channel_match_count})")
+    print(f"    (regex matches: {regex_match_count}, meme keyword matches: {meme_match_count}, channel matches: {channel_match_count})")
     for lang, c in sorted(tagged_counts.items()):
         print(f"    - {lang}: {c}")
 
