@@ -40,9 +40,9 @@
               <option value="4-3">4:3</option>
               <option value="16-9">16:9</option>
             </select>
-            <span id="playback-source-container" style="display:none;">
-              <a href="#" id="playback-source-toggle" onclick="togglePlaybackMode(); return false;"
-                style="color: inherit; border: none; padding: 0; font-weight: bold;">YouTube Mode</a>
+            <span id="playback-source-container">
+              <a href="#" id="playback-source-toggle" onclick="openSourcesModal(); return false;"
+                style="color: inherit; border: none; padding: 0; font-weight: bold;">Sources</a>
               <span class="theme-sep">|</span>
             </span>
             <a href="#" class="btn-video-mode" onclick="toggleVideoMode(); return false;"
@@ -206,13 +206,13 @@
             <div id="homepage-featured-heading">
               <h2 class="yt-featured-title">Featured Videos</h2>
               <div class="yt-tab-bar">
-                <a href="#" class="yt-tab active" onclick="setFeaturedTab('ytp');return false;">YTP</a>
+                <a href="#" class="yt-tab active" onclick="setFeaturedTab('all');return false;">All</a>
+                <span class="yt-tab-sep">|</span>
+                <a href="#" class="yt-tab" onclick="setFeaturedTab('ytp');return false;">YTP</a>
                 <span class="yt-tab-sep">|</span>
                 <a href="#" class="yt-tab" onclick="setFeaturedTab('ytpmv');return false;">YTPMV</a>
                 <span class="yt-tab-sep">|</span>
                 <a href="#" class="yt-tab" onclick="setFeaturedTab('acid');return false;">Acid Poop</a>
-                <span class="yt-tab-sep">|</span>
-                <a href="#" class="yt-tab" onclick="setFeaturedTab('random');return false;">Random</a>
                 <span class="yt-tab-sep">|</span>
                 <a href="#" class="yt-tab" onclick="setFeaturedTab('subscribed');return false;">Subscribed</a>
                 <span class="yt-tab-sep">|</span>
@@ -229,8 +229,9 @@
 
         <div id="youtube-modern-layout">
           <div id="home-chips" class="home-chips-container">
-            <button class="chip active" onclick="setModernHomeTab('ytp', this)">YTP</button>
-            <button class="chip" onclick="setModernHomeTab('random', this)">Random</button>
+            <button class="chip active" onclick="setModernHomeTab('all', this)">All</button>
+            <button class="chip" onclick="setModernHomeTab('ytp', this)">YTP</button>
+
             <button class="chip" onclick="setModernHomeTab('subscribed', this)">Subscribed</button>
             <button class="chip" onclick="setModernHomeTab('views', this)">Most Viewed</button>
             <button class="chip" onclick="setModernHomeTab('discussed', this)">Most Discussed</button>
@@ -881,6 +882,41 @@
         </div>
         <button class="btn-modern" style="width:100%;" onclick="openCreatePlaylistModal()">+ Create New
           Playlist</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SOURCES MODAL -->
+  <div id="sources-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-content" style="width: 400px;">
+      <div class="modal-header">
+        <h3>Database Sources</h3>
+        <button onclick="closeSourcesModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin-bottom: 15px; font-size: 14px; color: var(--text-muted);">Enable or disable database sources to load in the archive.</p>
+        <div id="sources-list" style="display: flex; flex-direction: column; gap: 12px;">
+          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; font-weight: bold;">
+            <input type="checkbox" id="source-ytp" checked onchange="toggleSourceState('ytp')">
+            <span>YouTube Poops (ytp.db)</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; font-weight: bold;">
+            <input type="checkbox" id="source-ytpmv" checked onchange="toggleSourceState('ytpmv')">
+            <span>YTPMVs (ytpmv.db)</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; font-weight: bold;">
+            <input type="checkbox" id="source-collabs" checked onchange="toggleSourceState('collabs')">
+            <span>Collabs (collabs.db)</span>
+          </label>
+          <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; font-weight: bold;">
+            <input type="checkbox" id="source-other" checked onchange="toggleSourceState('other')">
+            <span>Other Videos (other.db)</span>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closeSourcesModal()">Cancel</button>
+        <button class="btn-submit" onclick="applySources()">Apply & Reload</button>
       </div>
     </div>
   </div>

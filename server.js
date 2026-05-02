@@ -267,8 +267,10 @@ function onRequest(req, res) {
 
   if (pathname.startsWith('/db/')) {
     filePath = path.join(DB_DIR, pathname.substring(4));
+    console.log("[DB Debug] Checking path 1: " + filePath + " (Exists: " + fs.existsSync(filePath) + ")");
     if (!fs.existsSync(filePath)) {
       filePath = path.join(PUBLIC_DIR, 'db', pathname.substring(4));
+      console.log("[DB Debug] Checking path 2: " + filePath + " (Exists: " + fs.existsSync(filePath) + ")");
     }
   } else {
     filePath = path.join(PUBLIC_DIR, relPath);

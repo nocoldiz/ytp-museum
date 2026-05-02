@@ -526,7 +526,7 @@ class VideoIndex:
         
         # Split DB Paths
         self.ytp_db_path = os.path.join(PROJECT_ROOT, "public", "ytp.db")
-        self.sources_db_path = os.path.join(PROJECT_ROOT, "public", "sources.db")
+        self.sources_db_path = os.path.join(PROJECT_ROOT, "public", "other.db")
         self.poopers_db_path = os.path.join(PROJECT_ROOT, "public", "ytpoopers.db")
         self.ytpmv_db_path = os.path.join(PROJECT_ROOT, "public", "ytpmv.db")
         self.collabs_db_path = os.path.join(PROJECT_ROOT, "public", "collabs.db")
@@ -582,7 +582,7 @@ class VideoIndex:
         except Exception as e:
             print(f"  [!] Error loading excluded_videos from SQL: {e}")
         
-        # 2. Load sources IDs from sources.db
+        # 2. Load sources IDs from other.db
         try:
             conn = self.get_conn('sources')
             cursor = conn.cursor()
@@ -890,7 +890,7 @@ class VideoIndex:
                     sid = get_or_create('sections', 'name', sec_name, section_cache)
                     if sid: cursor.execute("INSERT OR IGNORE INTO video_sections (video_id, section_id) VALUES (?, ?)", (vid_id, sid))
 
-            # 4. Source Pages (for sources.db)
+            # 4. Source Pages (for other.db)
             if db_type == 'sources':
                 for sp_path in info.get('source_pages', []):
                     if sp_path:
@@ -921,7 +921,7 @@ class VideoIndex:
         cursor.execute("CREATE TABLE IF NOT EXISTS video_tags (video_id TEXT, tag_id INTEGER, PRIMARY KEY (video_id, tag_id))")
         cursor.execute("CREATE TABLE IF NOT EXISTS sections (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE NOT NULL)")
         cursor.execute("CREATE TABLE IF NOT EXISTS video_sections (video_id TEXT, section_id INTEGER, PRIMARY KEY (video_id, section_id))")
-        # source_pages only needed for sources.db usually, but adding for completeness
+        # source_pages only needed for other.db usually, but adding for completeness
         cursor.execute("CREATE TABLE IF NOT EXISTS source_pages (id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT UNIQUE NOT NULL)")
         cursor.execute("CREATE TABLE IF NOT EXISTS video_sources (video_id TEXT, source_page_id INTEGER, PRIMARY KEY (video_id, source_page_id))")
     def is_indexed(self, video_id):
@@ -2465,7 +2465,7 @@ def sync_ytpoopers_index(index):
     conn_poopers = sqlite3.connect(index.poopers_db_path)
     cursor_poopers = conn_poopers.cursor()
     
-    # 1. Gather all channels from ytp.db and sources.db
+    # 1. Gather all channels from ytp.db and other.db
     all_channels = {} # url -> name
     
     def gather_from_db(db_type):

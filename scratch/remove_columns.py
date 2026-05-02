@@ -4,7 +4,7 @@ import os
 databases = [
     'public/db/ytp.db',
     'public/db/ytpmv.db',
-    'public/db/sources.db',
+    'public/db/other.db',
     'public/db/collabs.db'
 ]
 

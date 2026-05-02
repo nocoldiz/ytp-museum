@@ -4,7 +4,7 @@ import sys
 import os
 
 YTP_DB = 'public/db/ytp.db'
-SOURCES_DB = 'public/db/sources.db'
+SOURCES_DB = 'public/db/other.db'
 POOPERS_DB = 'public/db/ytpoopers.db'
 YTPMV_DB = 'public/db/ytpmv.db'
 COLLABS_DB = 'public/db/collabs.db'
@@ -106,7 +106,7 @@ def flag_as_source(video_ids):
         placeholders = ", ".join(["?"] * len(v_data))
         cursor_sources.execute(f"INSERT OR REPLACE INTO videos ({cols}) VALUES ({placeholders})", tuple(v_data.values()))
         
-        # Re-insert tags in sources.db
+        # Re-insert tags in other.db
         for tag_name in tags:
             cursor_sources.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag_name,))
             cursor_sources.execute("SELECT id FROM tags WHERE name = ?", (tag_name,))

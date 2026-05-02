@@ -18,7 +18,13 @@ let sourceChannels = new Set();
 let playbackMode = localStorage.getItem('ytp-playback-mode') || 'youtube';
 let renderedHomeVideoIds = new Set();
 let isFetchingMoreHome = false;
-let currentModernTab = 'ytp';
+let currentModernTab = 'all';
+let enabledSources = JSON.parse(localStorage.getItem('ytp-enabled-sources')) || {
+  ytp: true,
+  ytpmv: true,
+  collabs: true,
+  other: true
+};
 
 // DB Constants
 const dbName = 'YTPArchiveDB';
@@ -75,23 +81,23 @@ async function saveStoredDB(name, buffer) {
 
 
 async function fetchAndCache(name) {
+  const url = name.startsWith('db/') ? `/${name}` : `/db/${name}`;
   try {
-    const response = await fetch(name);
-    if (!response.ok) throw new Error(`Failed to fetch ${name}: ${response.status}`);
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.status}`);
     const buffer = await response.arrayBuffer();
-
     
     // Validate before saving
     const header = new TextDecoder().decode(new Uint8Array(buffer).slice(0, 15));
     if (header === "SQLite format 3") {
       await saveStoredDB(name, buffer);
-      console.log(`Successfully cached ${name}`);
+      console.log(`Successfully cached ${name} from ${url}`);
     } else {
-      console.error(`Fetched ${name} is not a valid SQLite database, skipping cache.`);
+      console.error(`Fetched ${url} is not a valid SQLite database (Header: "${header.substring(0, 20)}"), skipping cache.`);
     }
     return buffer;
   } catch (e) {
-    console.error(`Fetch/Cache failed for ${name}:`, e);
+    console.error(`Fetch/Cache failed for ${url}:`, e);
     throw e;
   }
 }
@@ -130,41 +136,82 @@ async function initSQLite() {
   const SQL = await initSqlJs(config);
 
   console.log("Loading databases...");
-  // Load YTP and Poopers first (crucial for home page)
-  const [db1, db3] = await Promise.all([
-    loadDB('ytp.db', SQL),
-    loadDB('ytpoopers.db', SQL)
-  ]);
+  
+  // Always load Poopers (channels) if possible
+  const poopersPromise = loadDB('ytpoopers.db', SQL);
+  
+  // Conditionally load YTP (main)
+  let ytpPromise = Promise.resolve(null);
+  if (enabledSources.ytp) {
+    ytpPromise = loadDB('ytp.db', SQL);
+  }
+
+  const [db1, db3] = await Promise.all([ytpPromise, poopersPromise]);
 
   dbYTP = db1;
   dbPoopers = db3;
   sqlDB = dbYTP;
 
-  // Lazy load extra databases in background
-  if (!dbSources) {
-    loadDB('sources.db', SQL).then(db => {
+  // Lazy load extra databases in background based on enabled state
+  if (enabledSources.other && !dbSources) {
+    loadDB('other.db', SQL).then(db => {
       dbSources = db;
-      console.log("Sources database loaded in background.");
+      console.log("Other database loaded in background.");
       const sources = queryDB("SELECT DISTINCT channel_name FROM videos", [], dbSources);
       sourceChannels = new Set(sources.map(s => s.channel_name));
       updateBadges();
     });
   }
-  if (!dbYTPMV) {
+  
+  if (enabledSources.ytpmv && !dbYTPMV) {
     loadDB('ytpmv.db', SQL).then(db => {
       dbYTPMV = db;
       console.log("YTPMV database loaded in background.");
     });
   }
-  if (!dbCollabs) {
+  
+  if (enabledSources.collabs && !dbCollabs) {
     loadDB('collabs.db', SQL).then(db => {
       dbCollabs = db;
       console.log("Collabs database loaded in background.");
     });
   }
 
-  console.log("Critical SQLite databases loaded successfully.");
+  console.log("SQLite initialization completed (respecting source filters).");
   return sqlDB;
+}
+
+function openSourcesModal() {
+  const modal = document.getElementById('sources-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  
+  // Sync checkboxes with state
+  const ids = ['ytp', 'ytpmv', 'collabs', 'other'];
+  ids.forEach(id => {
+    const cb = document.getElementById(`source-${id}`);
+    if (cb) cb.checked = enabledSources[id];
+  });
+}
+
+function closeSourcesModal() {
+  const modal = document.getElementById('sources-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function toggleSourceState(key) {
+  // State is handled in applySources
+}
+
+function applySources() {
+  const ids = ['ytp', 'ytpmv', 'collabs', 'other'];
+  ids.forEach(id => {
+    const cb = document.getElementById(`source-${id}`);
+    if (cb) enabledSources[id] = cb.checked;
+  });
+  
+  localStorage.setItem('ytp-enabled-sources', JSON.stringify(enabledSources));
+  location.reload();
 }
 
 function queryDB(sql, params = [], targetDB = null) {
@@ -296,13 +343,12 @@ async function autoLoad() {
         const helpBtn = document.getElementById('btn-help');
         if (importBtn) importBtn.style.display = 'inline-block';
         if (helpBtn) helpBtn.style.display = 'none';
-
-        const ps = document.getElementById('playback-source-container');
-        if (ps) ps.style.display = 'inline-block';
-        updatePlaybackToggleUI();
       }
     } catch (e) { }
   }
+
+  const ps = document.getElementById('playback-source-container');
+  if (ps) ps.style.display = 'inline-block';
 }
 
 // Start app
@@ -1705,48 +1751,20 @@ function getActiveVideos(forHome = false, limit = null) {
 }
 
 function renderHomePage() {
-  renderedHomeVideoIds.clear();
-  // Fetch a reasonable number of videos for home page
-  const ytData = getActiveVideos(true, 500);
-  const featuredContainer = document.getElementById('featured-videos');
-  const modernContainer = document.getElementById('modern-videos-grid');
-  const classicLayout = document.getElementById('youtube-classic-layout');
-  const modernLayout = document.getElementById('youtube-modern-layout');
   const isOld = document.body.classList.contains('theme-old');
+  const classicLayout = document.getElementById('youtube-old-layout');
+  const modernLayout = document.getElementById('youtube-modern-layout');
 
   if (classicLayout && modernLayout) {
-    if (isOld) {
-      classicLayout.style.display = 'block';
-      modernLayout.style.display = 'none';
-    } else {
-      classicLayout.style.display = 'none';
-      modernLayout.style.display = 'block';
-    }
+    classicLayout.style.display = isOld ? 'block' : 'none';
+    modernLayout.style.display = isOld ? 'none' : 'block';
   }
 
-  if (!featuredContainer) return;
-
-  const validVideos = ytData;
-  if (validVideos.length === 0) {
-    featuredContainer.innerHTML = '<div class="empty" style="padding:40px; text-align:center; color:var(--text-muted);">Nessun video trovato.</div>';
-    if (modernContainer) modernContainer.innerHTML = '<div class="empty" style="padding:40px; text-align:center; color:var(--text-muted);">Nessun video trovato.</div>';
-    return;
-  }
-
-  // Randomize featured videos
-  const shuffledFeatured = shuffleArray(validVideos);
-  const featuredVideos = shuffledFeatured.slice(0, 8);
-  featuredVideos.forEach(v => renderedHomeVideoIds.add(v.id));
-
-  // Popular videos (by views)
-  const sortedByViews = [...validVideos].sort((a, b) => (b.view_count || 0) - (a.view_count || 0));
-  const popularVideos = sortedByViews.filter(v => !renderedHomeVideoIds.has(v.id)).slice(0, 12);
-  popularVideos.forEach(v => renderedHomeVideoIds.add(v.id));
-
-  featuredContainer.innerHTML = featuredVideos.map(v => renderVideoItem(v, 'list')).join('');
-
-  if (modernContainer && !isOld) {
-    renderModernGrid();
+  if (isOld) {
+    setFeaturedTab('all');
+  } else {
+    const allChip = document.querySelector('#home-chips .chip[onclick*="all"]');
+    setModernHomeTab('all', allChip);
   }
 }
 
@@ -1771,17 +1789,17 @@ function renderModernGrid() {
   if (validVideos.length === 0) return;
 
   let videos;
-  if (currentModernTab === 'ytp') {
-    videos = shuffleArray(validVideos).slice(0, 24);
-  } else if (currentModernTab === 'random') {
+  if (currentModernTab === 'all') {
     const dbs = [dbYTP, dbSources, dbYTPMV, dbCollabs];
-    let allRand = [];
+    let allVids = [];
     for (const db of dbs) {
       if (!db) continue;
-      const res = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 10", [], db);
-      allRand.push(...res);
+      const res = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL) ORDER BY RANDOM() LIMIT 12", [globalMaxYear], db);
+      allVids.push(...res);
     }
-    videos = shuffleArray(allRand).slice(0, 24);
+    videos = shuffleArray(allVids).slice(0, 24);
+  } else if (currentModernTab === 'ytp') {
+    videos = shuffleArray(validVideos).slice(0, 24);
   } else if (currentModernTab === 'subscribed') {
     const subs = new Set(getSubscriptions());
     videos = shuffleArray(validVideos.filter(v => subs.has(v.channel_name))).slice(0, 24);
@@ -1851,21 +1869,21 @@ function setFeaturedTab(tab) {
   renderedHomeVideoIds.clear();
   const ytData = getActiveVideos(true);
   const validVideos = ytData;
-  const featuredContainer = document.getElementById('featured-videos');
-  if (!featuredContainer || validVideos.length === 0) return;
-
+  const featuredContainer = document.getElementById("featured-videos");
+  if (!featuredContainer) return;
+  if (tab !== "all" && validVideos.length === 0) return;
   let videos;
-  if (tab === 'ytp') {
-    videos = shuffleArray(validVideos).slice(0, 8);
-  } else if (tab === 'random') {
+  if (tab === 'all') {
     const dbs = [dbYTP, dbSources, dbYTPMV, dbCollabs];
-    let allRand = [];
+    let allVids = [];
     for (const db of dbs) {
       if (!db) continue;
-      const res = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 4", [], db);
-      allRand.push(...res);
+      const res = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL) ORDER BY RANDOM() LIMIT 8", [globalMaxYear], db);
+      allVids.push(...res);
     }
-    videos = shuffleArray(allRand).slice(0, 8);
+    videos = shuffleArray(allVids).slice(0, 8);
+  } else if (tab === 'ytp') {
+    videos = shuffleArray(validVideos).slice(0, 8);
   } else if (tab === 'views') {
     videos = [...validVideos].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 8);
   } else if (tab === 'discussed') {
