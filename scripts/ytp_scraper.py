@@ -411,10 +411,9 @@ def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, 
                         new_entries += 1
                         print(f"    [Found] Match: {v_title}", flush=True)
                         
-                        # Save every 10 new entries
-                        if new_entries % 10 == 0:
-                            index.save()
-                            print(f"    [LOG] Auto-saved index ({new_entries} new matches found so far)")
+                        # Auto-save every 200 and backup every 1000
+                        index.save(count=new_entries)
+                        print(f"    [LOG] Auto-saved index ({new_entries} new matches found so far)")
         except Exception as e:
             print(f"    [!] Error scraping {chan_url}: {e}")
         
@@ -509,13 +508,10 @@ def do_download_by_section(index, video_dir, yt_format, rate_limit):
             print(f"    [FAILED] Error downloading {v_id}", flush=True)
 
         download_count += 1
-        
-        # Save index every 10 entries
-        if download_count % 10 == 0:
-            index.save()
-            print(f"    [LOG] Auto-saved progress ({download_count}/{len(to_download)})", flush=True)
+        index.save(count=download_count)
+        print(f"    [LOG] Auto-saved progress ({download_count}/{len(to_download)})", flush=True)
 
-    index.save() # Final save
+    index.save(force=True) # Final save
     print(f"\n>>> Section '{selected_section}' batch complete.", flush=True)
 # ── Video Index ───────────────────────────────────────────────────────────────
 
@@ -530,6 +526,7 @@ class VideoIndex:
         self.poopers_db_path = os.path.join(PROJECT_ROOT, "public", "ytpoopers.db")
         self.ytpmv_db_path = os.path.join(PROJECT_ROOT, "public", "ytpmv.db")
         self.collabs_db_path = os.path.join(PROJECT_ROOT, "public", "collabs.db")
+        self.filepath = self.ytp_db_path
         
         self.data = {}
         self.sources_data = {}
@@ -550,15 +547,17 @@ class VideoIndex:
         self.load_excluded()
 
     def backup_databases(self):
-        print("\n  [Backup] Creating backups of SQLite databases...", flush=True)
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        print(f"\n  [Backup] Creating new backups ({timestamp})...", flush=True)
         paths = [
             self.ytp_db_path, self.sources_db_path, self.poopers_db_path,
             self.ytpmv_db_path, self.collabs_db_path
         ]
         for path in paths:
             if os.path.exists(path):
-                shutil.copy2(path, path + ".bak")
-                print(f"    - {os.path.basename(path)} -> .bak", flush=True)
+                bak_name = f"{path}.{timestamp}.bak"
+                shutil.copy2(path, bak_name)
+                print(f"    - {os.path.basename(path)} -> {os.path.basename(bak_name)}", flush=True)
 
     def get_conn(self, db_type='ytp'):
         path = self.ytp_db_path
@@ -816,7 +815,25 @@ class VideoIndex:
         else:
             print("\n  [Extract] No matching videos found.")
 
-    def save(self):
+    def save(self, force=False, count=None):
+        """
+        Saves the database. 
+        - If count is provided, saves every 200 and backups every 1000.
+        - If count is None, saves immediately (forced).
+        """
+        if count is None:
+            should_save = True
+            should_backup = False
+        else:
+            should_save = force or (count > 0 and count % 200 == 0)
+            should_backup = (count > 0 and count % 1000 == 0)
+
+        if should_backup:
+            self.backup_databases()
+
+        if not should_save:
+            return
+
         try:
             self._save_dict_to_sql(self.data, 'ytp')
             self._save_dict_to_sql(self.sources_data, 'sources')
@@ -979,15 +996,15 @@ class VideoIndex:
         # source_pages only needed for sources.db usually, but adding for completeness
         cursor.execute("CREATE TABLE IF NOT EXISTS source_pages (id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT UNIQUE NOT NULL)")
         cursor.execute("CREATE TABLE IF NOT EXISTS video_sources (video_id TEXT, source_page_id INTEGER, PRIMARY KEY (video_id, source_page_id))")
-    def is_indexed(self, video_id):
+    def is_indexed(self, video_id, skip_sources=False):
         """Checks if a video ID is already present in any database or the excluded list."""
         return (video_id in self.data or 
-                video_id in self.sources_data or 
+                (not skip_sources and video_id in self.sources_data) or 
                 video_id in self.ytpmv_data or 
                 video_id in self.collabs_data or 
                 video_id in self.actually_excluded_ids)
 
-    def add_video(self, video_id, section, source_page, thread_title=None, nickname=None, channel_url=None, target="video"):
+    def add_video(self, video_id, section, source_page, thread_title=None, nickname=None, channel_url=None, target="video", skip_sources=False):
         if video_id in self.actually_excluded_ids:
             # Skip only hard-blacklisted videos during scanning
             return
@@ -998,7 +1015,7 @@ class VideoIndex:
         if video_id in self.data: existing_store = "video"
         elif video_id in self.ytpmv_data: existing_store = "ytpmv"
         elif video_id in self.collabs_data: existing_store = "collabs"
-        elif video_id in self.sources_data: existing_store = "sources"
+        elif not skip_sources and video_id in self.sources_data: existing_store = "sources"
 
         if existing_store and existing_store != target:
             # Already exists in another database, skip
@@ -1484,11 +1501,10 @@ def do_update_index(index):
         elif meta:
             index.set_metadata(vid, **meta)
 
-        if i % 20 == 0:
-            index.save()
+        index.save(count=i)
 
     clear_line()
-    index.save()
+    index.save(force=True)
     sync_ytpoopers_index(index)
 
     st = index.stats()
@@ -1563,8 +1579,7 @@ def do_forum_scrape(index, site_dir):
                                     print(f"    [Found] {vid} -> sources_index", flush=True)
 
                 pages_scanned += 1
-                if pages_scanned % 50 == 0:
-                    index.save()
+                index.save(count=pages_scanned)
 
     index.save()
         
@@ -1639,8 +1654,7 @@ def do_download(index, video_dir, yt_format, rate_limit, retry_failed):
                 index.set_failed(vid)
                 print("  ✗ Failed")
                 err_count += 1
-
-            index.save()
+            index.save(count=i)
 
             if status == "ok":
                 time.sleep(1)
@@ -1656,7 +1670,7 @@ def do_download(index, video_dir, yt_format, rate_limit, retry_failed):
     print(f"  Index:       {os.path.abspath(index.filepath)}")
 
 
-def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping", quiet=False):
+def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping", quiet=False, ytp_only=False):
     """Scrape videos based on YouTube searches."""
     if not quiet:
         print(f"\n--- {title_header} ---")
@@ -1709,11 +1723,16 @@ def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping
                     
                     # 2. Keyword routing logic
                     target = get_target_index(title)
+                    
+                    # Combination discovery restriction: only YTP, YTPMV, or Collabs
+                    if ytp_only and target == "sources":
+                        target = "none"
+                        
                     if target == "none":
                         continue
                     
-                    # 1. Ignore if already in any index or excluded
-                    if index.is_indexed(vid):
+                    # 1. Ignore if already in any index or excluded (skip sources if ytp_only)
+                    if index.is_indexed(vid, skip_sources=ytp_only):
                         if not quiet: print(f"    [Match (Already Indexed)] {title} ({vid})")
                         continue
                     
@@ -1724,7 +1743,8 @@ def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping
                         source_page="YouTube Search", 
                         thread_title=f"Search: {search_query}",
                         channel_url=channel_url,
-                        target=target
+                        target=target,
+                        skip_sources=ytp_only
                     )
                     
                     # Set metadata if available
@@ -1755,8 +1775,7 @@ def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping
             if not quiet: print(f"    [!] Error during search: {e}")
             
         # Save after each search query
-        if total_new > 0:
-            index.save()
+            index.save(count=total_new)
             sync_ytpoopers_index(index)
 
     if total_new > 0:
@@ -1871,8 +1890,8 @@ def do_keyword_search_scraping(index):
             p_bar = bar(pct, 30)
             print(f"\r  {p_bar} {i}/{len(all_combinations)}: {query[:30]:<30}", end="", flush=True)
             
-            # Call search for single query in quiet mode
-            new_vids = do_scrape_search(index, keywords=[query], quiet=True)
+            # Call search for single query in quiet mode (YTP/YTPMV/Collabs only)
+            new_vids = do_scrape_search(index, keywords=[query], quiet=True, ytp_only=True)
             total_added += new_vids
             scraped_queries.add(query)
             

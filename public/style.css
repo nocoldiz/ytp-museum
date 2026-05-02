@@ -146,7 +146,7 @@
 
   /* ── APP ── */
   #app {
-    display: none;
+    display: block;
   }
 
   /* MASTHEAD & YOUTUBE LAYOUT */

@@ -361,12 +361,17 @@ async function autoLoad() {
 
 // Start app
 (async () => {
+  // Immediate UI shell initialization
+  initShell();
+  
   try {
-    await initIndexedDB(); // Renamed from initDB to avoid confusion with sqlDB
+    await initIndexedDB(); 
     console.log("IndexedDB initialized.");
   } catch (e) {
     console.error("IndexedDB initialization failed:", e);
   }
+  
+  // Data-dependent initialization
   await autoLoad();
 
   try {
@@ -390,11 +395,27 @@ function resetFilters() {
   if (langSel) langSel.value = 'any';
 }
 
-function initApp() {
-  resetFilters();
+function initShell() {
   syncSearchLayout();
 
-  document.getElementById('app').style.display = 'block';
+  const isOld = document.body.classList.contains('theme-old');
+  const ratio = localStorage.getItem(isOld ? 'aspectRatioOld' : 'aspectRatioModern') || (isOld ? '4-3' : '16-9');
+  setAspectRatio(ratio, false);
+
+  // Sync button labels
+  const themeBtn = document.getElementById('toggle-modern-old');
+  if (themeBtn) themeBtn.textContent = isOld ? 'Switch to Modern Mode' : 'Switch to Old Mode';
+
+  const darkBtn = document.getElementById('toggle-night-day');
+  const isLight = document.body.classList.contains('theme-light');
+  if (darkBtn) darkBtn.textContent = isLight ? 'Switch to Night Mode' : 'Switch to Day Mode';
+}
+
+function initApp() {
+  resetFilters();
+  
+  // Re-sync shell just in case
+  initShell();
 
   // Hide all loaders
   document.querySelectorAll('.page').forEach(el => el.classList.remove('is-loading'));
@@ -431,18 +452,6 @@ function initApp() {
   }
   if (appMode === 'videos') {
     renderHomePage();
-  }
-
-  // Restore theme and aspect ratio
-  const lastMode = localStorage.getItem('lastThemeMode') || 'old';
-  const isCurrentlyOld = document.body.classList.contains('theme-old');
-
-  if (lastMode === 'modern' && isCurrentlyOld) {
-    toggleThemeMode();
-  } else {
-    const isOld = document.body.classList.contains('theme-old');
-    const ratio = localStorage.getItem(isOld ? 'aspectRatioOld' : 'aspectRatioModern') || (isOld ? '4-3' : '16-9');
-    setAspectRatio(ratio, false);
   }
 
   handleRouting();
