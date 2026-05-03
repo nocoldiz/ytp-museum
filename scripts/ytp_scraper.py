@@ -202,7 +202,7 @@ YTP_KEYWORDS_LIST = [
 ]
 
 YTPMV_KEYWORDS_LIST = [
-    r'Otomad', r'MAD', r'YTPMV'
+    r'YTPMV'
 ]
 
 COLLABS_KEYWORDS_LIST = [
@@ -2017,27 +2017,12 @@ def do_keyword_search_scraping(index):
 
 
 def do_scrape_channels(index):
-    """Scans channels from ytpoopers.db and ytpoopers_index.json for new YTP videos matching keywords."""
+    """Scans channels from ytpoopers.db for new YTP videos matching keywords."""
     
-    poopers_path = os.path.join(index.docs_dir, "ytpoopers_index.json")
     channels_to_scrape = set(get_all_registered_channels(index))
     
-    if os.path.exists(poopers_path):
-        try:
-            with open(poopers_path, "r", encoding="utf-8") as f:
-                poopers_data = json.load(f)
-                channels_to_scrape.update(poopers_data.keys())
-        except Exception as e:
-            print(f"  [!] Error loading {poopers_path}: {e}")
-    
-    channels_to_scrape = sorted([url for url in channels_to_scrape if url])
-    
-    if not channels_to_scrape:
-        print("  No channels defined to scrape.")
-        return
-        
     total_channels = len(channels_to_scrape)
-    print(f"  Found {total_channels} channel(s) to scrape (ytpoopers.db + pooper registry).")
+    print(f"  Found {total_channels} channel(s) to scrape.")
     new_total = 0
     
     for i, ch_url in enumerate(channels_to_scrape, 1):
@@ -2931,34 +2916,21 @@ def do_scrape_thumbnails(index, docs_dir):
     import os
     import json
     
-    input_file = os.path.join(docs_dir, "ytpoopers_index.json")
     output_folder = os.path.join(docs_dir, "profile_thumbnails")
     
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
         print(f"  Created folder: {output_folder}/")
         
-    youtubers_data = {}
-    if os.path.exists(input_file):
-        try:
-            with open(input_file, "r", encoding="utf-8") as f:
-                youtubers_data = json.load(f)
-        except json.JSONDecodeError:
-            print(f"  [!] Error: The file '{input_file}' is not a valid JSON file.")
-            return
+    # Load channels from database
+    conn = index.get_conn('poopers')
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM channels")
+    youtubers_data = {row['channel_url']: dict(row) for row in cursor.fetchall()}
+    conn.close()
     
     changes_made = False
-
-    # 1. Sync channels from both indices
-    sync_ytpoopers_index(index)
-    
-    # Reload data for processing
-    if os.path.exists(input_file):
-        try:
-            with open(input_file, "r", encoding="utf-8") as f:
-                youtubers_data = json.load(f)
-        except Exception:
-            pass
 
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
@@ -3025,16 +2997,7 @@ def do_scrape_thumbnails(index, docs_dir):
         except Exception as e:
             print(f"   [!] Unexpected error processing {channel_name}: {e}")
 
-    if changes_made:
-        print(f"\n  Updating {input_file} with new thumbnail filenames...")
-        try:
-            with open(input_file, "w", encoding="utf-8") as f:
-                json.dump(youtubers_data, f, separators=(',', ':'), ensure_ascii=False)
-            print("   [+] JSON file updated successfully.")
-        except Exception as e:
-            print(f"   [!] Error saving back to '{input_file}': {e}")
-    else:
-        print("\n  No thumbnails were downloaded, so the JSON file was not modified.")
+    print("\n  Thumbnail scraping complete.")
 
 
 def do_auto_languages(index):
@@ -3670,7 +3633,7 @@ def main():
     p.add_argument("--scrape-comments", action="store_true",
                    help="Scrape comments for all indexed videos")
     p.add_argument("--scrape-profiles", action="store_true",
-                   help="Scrape channel profiles and save to docs/ytpoopers_index.json")
+                   help="Scrape channel profiles")
     p.add_argument("--download-italian", action="store_true",
                    help="Run option 4 with language 1 (Italian) and exit")
     p.add_argument("--forum-scrape",    action="store_true",
