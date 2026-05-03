@@ -2016,7 +2016,7 @@ def do_keyword_search_scraping(index):
     print(f"  Keyword Search Scraping Complete. Added {total_added} new videos.")
 
 
-def do_scrape_channels(index):
+def do_scrape_channels(index, ignore_sources=False):
     """Scans channels from ytpoopers.db for new YTP videos matching keywords."""
     
     channels_to_scrape = set(get_all_registered_channels(index))
@@ -2071,6 +2071,8 @@ def do_scrape_channels(index):
 
                         # If it matches and is not already in the index (and not excluded), log and add it
                         if target != "none" and vid and not index.is_indexed(vid):
+                            if ignore_sources and target == "source":
+                                continue
                             clear_line()
                             print(f"    [+] New {target} match found: {title} ({vid})")
                             index.add_video(vid, "Scraped Channel", videos_url, title, target=target)
