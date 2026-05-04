@@ -197,7 +197,7 @@ YTP_KEYWORDS_IT = [
     r'YTPITA', r'YTP\s?ITA', r'YTM', r'YTK', r'Youtube\s+poop\s+ITA', r'YouTube\s+Poop\s+ITA'
 ]
 YTP_KEYWORDS_ES = [
-    r'YTPH', r'YTPHSHORT', r'YTPES', r'YTP\s?ES', r'Pooppa[ñn]ol', r'YouTube\s+Poop\s+en\s+español'
+    r'YTPH', r'YTPHSHORT',r'Poop Hispano', r'YTPES', r'YTP\s?ES', r'Pooppa[ñn]ol', r'YouTube\s+Poop\s+en\s+español'
 ]
 YTP_KEYWORDS_FR = [
     r'YTPFR', r'YTP\s+FR', r'YouTube\s+Poop\s+FR'
@@ -215,7 +215,7 @@ YTP_KEYWORDS_EN = [
     r'YTP', r'YTPV', r'YouTube\s+Poop', r'You\s+tube\s+poop', r'YTPEN', r'YTP\s?EN'
 ]
 YTP_KEYWORDS_GENERIC = [
-    r'STP', r'Pytp', r'YTPMV', r'YTP\s+(?:Tennis|Soccer|Ping\s+pong)', r'YTP(?:Tennis|Soccer|Pingpong)',
+    r'STP', r'Pytp', r'YTPMV',r'Poop',r'Poops', r'YTP\s+(?:Tennis|Soccer|Ping\s+pong)', r'YTP(?:Tennis|Soccer|Pingpong)',
     r'YTP(?:PL|PT|RO|GR|NL|HU|JP)'
 ]
 
