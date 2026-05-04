@@ -420,6 +420,13 @@ COMMON_WORDS_IT_LIST = [
 ]
 COMMON_WORDS_IT = re.compile("|".join(COMMON_WORDS_IT_LIST), re.IGNORECASE)
 
+COMMON_WORDS_EN_LIST = [r'\b(?:the|and|to|of|a|in|is|it|you|that|he|was|for|on|are|with|as|his|they|be|at|one|have|this|from|or|had|by|not|word|but|what|some|we|can|out|other|were|all|there|when|up|use|your|how|said|an|each|she)\b']
+COMMON_WORDS_ES_LIST = [r'\b(?:el|la|de|que|y|a|en|un|una|es|por|con|para|se|no|su|al|lo|como|más|o|pero|sus|le|ha|me|si|sin|sobre|este|esta|todo|todos|toda|todas|hacer|decir|ir|ver|bueno|malo|ahora|aquí|allí)\b']
+COMMON_WORDS_FR_LIST = [r'\b(?:le|la|les|de|un|une|des|et|à|en|que|est|par|avec|pour|se|ne|pas|son|sa|ses|comme|plus|ou|mais|si|sur|ce|cette|tout|tous|toute|toutes|faire|dire|aller|voir|bon|mauvais|maintenant|ici|là)\b']
+COMMON_WORDS_DE_LIST = [r'\b(?:der|die|das|den|dem|des|und|in|zu|von|mit|ein|eine|einer|eines|ist|auf|für|dass|nicht|es|sie|wir|ihr|auch|als|wie|oder|aber|noch|doch|nur|ganz|schon|jetzt|hier|da)\b']
+COMMON_WORDS_RU_LIST = [r'\b(?:и|в|не|на|я|быть|он|с|что|а|по|это|она|этот|к|но|мы|они|у|ты|из|вы|за|от|который|мочь|человек|о|один|ещё|бы|такой|только|себя|своё)\b']
+COMMON_WORDS_BR_LIST = [r'\b(?:o|a|os|as|de|do|da|dos|das|e|que|é|um|uma|uns|umas|em|no|na|nos|nas|para|por|com|se|não|como|mais|ou|mas|seu|sua|seus|suas|este|esta|tudo|todos|toda|todas|fazer|dizer|ir|ver|bom|mau|agora|aqui|ali)\b']
+
 NON_YTP_KEYWORDS = re.compile(
     r'(?i)('
     # --- GAMING (SERIOUS/LONGFORM) ---
@@ -3052,19 +3059,27 @@ def do_auto_languages(index):
             r'Youtube poop ita|You tube poop ita|YTP ITA|Youtube merda|YTM|S\.Itario|Shitstorm pt\.'
         ],
         "es": [
-            r'YTPH|Pooppa[ñn]ol|YouTube\s+Poop(?:\s+en\s+español)?'
+            r'YTPH|Pooppa[ñn]ol|YouTube\s+Poop(?:\s+en\s+español)?',
+            *COMMON_WORDS_ES_LIST
         ],
         "fr": [
-            r'YTPFR|YTP\s+FR|YouTube\s+Poop(?:\s+FR)?'
+            r'YTPFR|YTP\s+FR|YouTube\s+Poop(?:\s+FR)?',
+            *COMMON_WORDS_FR_LIST
         ],
         "de": [
-            r'YouTube\s+Kacke|YouTube\s+Kaka'
+            r'YouTube\s+Kacke|YouTube\s+Kaka',
+            *COMMON_WORDS_DE_LIST
         ],
         "ru": [
-            r'RYTP|РУТП'
+            r'RYTP|РУТП',
+            *COMMON_WORDS_RU_LIST
         ],
         "br": [
-            r'YTPBR|YTP\s+BR|YouTube\s+Poop(?:\s+BR)?'
+            r'YTPBR|YTP\s+BR|YouTube\s+Poop(?:\s+BR)?',
+            *COMMON_WORDS_BR_LIST
+        ],
+        "en": [
+            *COMMON_WORDS_EN_LIST
         ]
     }
 
