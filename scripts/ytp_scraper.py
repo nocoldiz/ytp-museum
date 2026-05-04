@@ -55,9 +55,7 @@ CHANNELS_TO_PRESERVE = [
 ]
 
 # NocoldizTV: scrape everything except videos whose title matches these words
-NOCOLDIZ_BLACKLIST = re.compile(
-    r'(?i)(gameplay|hypernet|devlog|gioco|em\.Path|em\.Brace|Dwarf)'
-)
+
 
 
 def normalize_channel_url(url):
@@ -195,7 +193,7 @@ def update_channel_language(index, channel_url, language, channel_name=None):
 import re
 
 YTP_KEYWORDS_IT = [
-    r'YTPITA', r'YTP\s?ITA', r'YTM', r'YTK', r'Youtube\s+poop\s+ITA', r'YouTube\s+Poop\s+ITA'
+    r'YTPITA', r'YTP\s?ITA', r'YTM', r'YTK', r'Youtube\s+poop\s+ITA', r'YouTube\s+Poop\s+ITA',r'YouTube\s+Merda',r'You Tube\s+Merda'
 ]
 YTP_KEYWORDS_ES = [
     r'YTPH', r'YTPHSHORT',r'Poop Hispano', r'YTPES', r'YTP\s?ES', r'Pooppa[ñn]ol', r'YouTube\s+Poop\s+en\s+español'
@@ -223,7 +221,7 @@ YTP_KEYWORDS_GENERIC = [
 YTP_KEYWORDS_LIST = (
     YTP_KEYWORDS_IT + YTP_KEYWORDS_ES + YTP_KEYWORDS_FR + 
     YTP_KEYWORDS_DE + YTP_KEYWORDS_RU + YTP_KEYWORDS_BR + 
-    YTP_KEYWORDS_EN + YTP_KEYWORDS_GENERIC
+    YTP_KEYWORDS_EN
 )
 
 YTPMV_KEYWORDS_LIST = [
@@ -1025,8 +1023,9 @@ class VideoIndex:
             self.save()
 
     def resort_videos(self):
-        print("\n--- Sort Videos (YTP.db -> Specialized DBs) ---")
-        self._do_extract_ytpmv()
+        print("\n--- Sort Videos (YTP.db <-> Specialized DBs) ---")
+        self._do_reclaim_ytp()
+        #self._do_extract_ytpmv()
         self._do_extract_collabs()
         print("\n>>> Sorting complete.")
 
@@ -1103,6 +1102,58 @@ class VideoIndex:
             print(f"\n  [Extract] Moved {len(moved_ids)} videos to Collabs database.")
         else:
             print("\n  [Extract] No matching videos found.")
+
+    def _do_reclaim_ytp(self):
+        print(f"\n  [Reclaim] Checking specialized DBs for missed YTPs...")
+        # Check sources (other.db), ytpmv (ytpmv.db), and collabs (collabs.db)
+        databases = [
+            ('sources', self.sources_data),
+            ('ytpmv', self.ytpmv_data),
+            ('collabs', self.collabs_data)
+        ]
+        
+        total_reclaimed = 0
+        for db_name, data_store in databases:
+            moved_ids = []
+            to_keep = {}
+            for vid, info in list(data_store.items()):
+                title = info.get("title") or ""
+                desc = info.get("description") or ""
+                text = f"{title} {desc}"
+                
+                # Check if it matches YTP keywords
+                if YTP_KEYWORDS.search(text):
+                    self.data[vid] = info
+                    moved_ids.append(vid)
+                    print(f"    [Reclaim] {vid} -> ytp.db ({title[:50]})")
+                else:
+                    to_keep[vid] = info
+            
+            if moved_ids:
+                # Delete from specialized SQL DB
+                conn = self.get_conn(db_name)
+                cursor = conn.cursor()
+                for vid in moved_ids:
+                    cursor.execute("DELETE FROM videos WHERE id = ?", (vid,))
+                    cursor.execute("DELETE FROM video_tags WHERE video_id = ?", (vid,))
+                    cursor.execute("DELETE FROM video_sections WHERE video_id = ?", (vid,))
+                    if db_name == 'sources':
+                        cursor.execute("DELETE FROM video_sources WHERE video_id = ?", (vid,))
+                conn.commit()
+                conn.close()
+                
+                # Update local data store
+                if db_name == 'sources': self.sources_data = to_keep
+                elif db_name == 'ytpmv': self.ytpmv_data = to_keep
+                elif db_name == 'collabs': self.collabs_data = to_keep
+                
+                total_reclaimed += len(moved_ids)
+        
+        if total_reclaimed:
+            self.save()
+            print(f"\n  [Reclaim] Reclaimed {total_reclaimed} videos to main YTP database.")
+        else:
+            print("  [Reclaim] No videos found to reclaim.")
 
     def save(self):
         try:
@@ -2130,10 +2181,13 @@ def do_keyword_search_scraping(index):
     print(f"  Keyword Search Scraping Complete. Added {total_added} new videos.")
 
 
-def do_scrape_channels(index, ignore_sources=False):
-    """Scans channels from ytpoopers.db for new YTP videos matching keywords."""
+def do_scrape_channels(index, ignore_sources=False, custom_channels=None):
+    """Scans channels for new YTP videos matching keywords."""
     
-    channels_to_scrape = set(get_all_registered_channels(index))
+    if custom_channels:
+        channels_to_scrape = set(custom_channels)
+    else:
+        channels_to_scrape = set(get_all_registered_channels(index))
     
     total_channels = len(channels_to_scrape)
     print(f"  Found {total_channels} channel(s) to scrape.")
@@ -2173,19 +2227,22 @@ def do_scrape_channels(index, ignore_sources=False):
                         vid = d.get("id")
                         title = d.get("title", "")
                         
-                        # Match logic based on get_target_index or NOCOLDIZ_BLACKLIST
+                        # Match logic based on get_target_index
                         target = get_target_index(title)
                         
-                        if nocoldiz and target == "none":
+                        if target == "none":
                             # For nocoldiz, if it wasn't caught by YTP/Meme/Non-YTP keywords,
-                            # we still include it if it's not explicitly in the nocoldiz blacklist
-                            # and doesn't match the general non-YTP filter.
-                            if not NOCOLDIZ_BLACKLIST.search(title) and not NON_YTP_KEYWORDS.search(title):
+                            # we still include it if it doesn't match the general non-YTP filter.
+                            if nocoldiz and not NON_YTP_KEYWORDS.search(title):
                                 target = "video"
+                            elif custom_channels:
+                                # "channels in selected channels, should be preserved fully, 
+                                # put not matching videos in others.db"
+                                target = "sources"
 
                         # If it matches and is not already in the index (and not excluded), log and add it
                         if target != "none" and vid and not index.is_indexed(vid):
-                            if ignore_sources and target == "source":
+                            if ignore_sources and target == "sources" and not custom_channels:
                                 continue
                             clear_line()
                             print(f"    [+] New {target} match found: {title} ({vid})")
@@ -3840,7 +3897,7 @@ def main():
     print("       Download pending video files for both YTP and Sources.")
     print()
     print("  3  Scrape channels (Discover New)")
-    print("       Scan channels registered in the database for new content.")
+    print("       Scan registered or selected channels for new content.")
     print()
     print("  4  Language-Specific Download")
     print("       Batch download videos for a specific language (e.g. Italian).")
@@ -3926,7 +3983,22 @@ def main():
             do_download_risorse(index, args.video_dir, args.format, args.rate_limit, args.retry_failed)
         print()
     if choice == "3":
-        do_scrape_channels(index)
+        print("\nSelect Scraping Mode:")
+        print("1. All Registered Channels (Discover New)")
+        print("2. Selected Channels (from selected_channels.txt)")
+        scrape_sub = ask("Choice [1-2]: ", {"1", "2"})
+        
+        if scrape_sub == "1":
+            do_scrape_channels(index)
+        else:
+            sel_path = os.path.join(PROJECT_ROOT, "scripts", "db", "selected_channels.txt")
+            if not os.path.exists(sel_path):
+                print(f"  [!] File not found: {sel_path}")
+            else:
+                with open(sel_path, "r", encoding="utf-8") as f:
+                    selected = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+                print(f"  Loaded {len(selected)} channels from {os.path.basename(sel_path)}")
+                do_scrape_channels(index, custom_channels=selected)
         print()
     if choice == "4":
         print("\nSelect Language:")

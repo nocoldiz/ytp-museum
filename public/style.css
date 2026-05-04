@@ -2617,7 +2617,6 @@
     background: var(--surface);
   }
 
-  .tl-article h2:has(+ *) {}
 
   /* era colour coding by emoji prefix */
   .tl-article h2[data-era="0"] {
