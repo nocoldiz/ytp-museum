@@ -81,7 +81,7 @@ async function saveStoredDB(name, buffer) {
 
 
 async function fetchAndCache(name) {
-  const url = name.startsWith('db/') ? `/${name}` : `/db/${name}`;
+  const url = name.startsWith('db/') ? `/${name}` : (['profile_thumbnails', 'comments', 'playlists.json'].some(x => name.startsWith(x)) ? `/${name}` : `/db/${name}`);
   try {
     const response = await fetch(url);
     if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.status}`);
@@ -782,7 +782,9 @@ document.addEventListener('click', (e) => {
 function getChannelAvatar(channelName) {
   const p = pooperMap[channelName];
   if (p && p.thumbnail) {
-    return 'db/profile_thumbnails/' + p.thumbnail;
+    // If it already has the prefix, use it as is, otherwise add it.
+    // We moved them to public/profile_thumbnails/
+    return p.thumbnail.startsWith('profile_thumbnails/') ? p.thumbnail : 'profile_thumbnails/' + p.thumbnail;
   }
   return 'https://upload.wikimedia.org/wikipedia/commons/8/89/Portrait_Placeholder.png';
 }
@@ -1345,7 +1347,7 @@ async function loadComments(vidId) {
   container.innerHTML = '<p class="empty" style="padding:10px;">Loading comments...</p>';
 
   try {
-    const r = await fetch(`db/comments/${vidId}.json`);
+    const r = await fetch(`comments/${vidId}.json`);
     if (!r.ok) throw new Error("Not found");
     const comments = await r.json();
     if (!comments || comments.length === 0) {

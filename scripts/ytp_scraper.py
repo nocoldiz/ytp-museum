@@ -34,6 +34,7 @@ PROJECT_ROOT = SCRIPT_PATH.parent.parent if SCRIPT_PATH.parent.name == "scripts"
 DEFAULT_VIDEO_DIR = str(PROJECT_ROOT / "videos")
 DEFAULT_SITE_DIR = str(PROJECT_ROOT / "site_mirror")
 DEFAULT_DOCS_DIR = str(PROJECT_ROOT / "public" / "db")
+DEFAULT_PUBLIC_DIR = str(PROJECT_ROOT / "public")
 DEFAULT_SOURCES_DIR = str(PROJECT_ROOT / "sources")
 DEFAULT_FORMAT = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
 
@@ -3581,7 +3582,7 @@ def do_full_scrape_run_ignore_sources(index, args):
     create_progressive_backup(index, "step2_metadata_ignore_sources")
     
     print("\nStep 3: Scrape Channel Profiles and Thumbnails (Option 7)")
-    do_scrape_profiles(index, args.docs_dir)
+    do_scrape_profiles(index, args.public_dir)
     create_progressive_backup(index, "step3_thumbnails_ignore_sources")
     
     # Skip Step 4: Scrape Comments (sources only)
@@ -3758,6 +3759,7 @@ def main():
     p.add_argument("--site-dir",        default=DEFAULT_SITE_DIR)
     p.add_argument("--video-dir",       default=DEFAULT_VIDEO_DIR)
     p.add_argument("--docs-dir",        default=DEFAULT_DOCS_DIR)
+    p.add_argument("--public-dir",      default=DEFAULT_PUBLIC_DIR)
     p.add_argument("--format",          default=DEFAULT_FORMAT)
     p.add_argument("--rate-limit",      default=None)
     p.add_argument("--retry-failed",    action="store_true")
@@ -3804,9 +3806,9 @@ def main():
         if args.find_mirrors:
             do_find_mirrors(index)
         if args.scrape_comments:
-            do_scrape_comments(index, args.docs_dir)
+            do_scrape_comments(index, args.public_dir)
         if args.scrape_profiles:
-            do_scrape_profiles(index, args.docs_dir)
+            do_scrape_profiles(index, args.public_dir)
         if args.download_italian:
             selected_list = get_channels_by_language(index, "italian")
             do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, selected_list, "it", year_limit=args.year_limit, skip_scan=False)
@@ -3968,10 +3970,10 @@ def main():
         do_find_mirrors(index)
 
     if choice == "6":
-        do_scrape_comments(index, args.docs_dir)
+        do_scrape_comments(index, args.public_dir)
 
     if choice == "7":
-        do_scrape_profiles(index, args.docs_dir)
+        do_scrape_profiles(index, args.public_dir)
 
     if choice == "8":
         do_auto_languages(index)
