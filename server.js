@@ -78,14 +78,14 @@ function onRequest(req, res) {
     return;
   }
 
-  // ── API: Flag as Source ──────────────────────────────────────────────────
-  if (pathname === '/api/flag-source' && req.method === 'POST') {
+  // ── API: Move DB ─────────────────────────────────────────────────────────
+  if (pathname === '/api/move-db' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
       try {
-        const { videoIds } = JSON.parse(body);
-        const result = runDbCommand('flag-source', { videoIds });
+        const { videoIds, targetDb } = JSON.parse(body);
+        const result = runDbCommand('move-db', { videoIds, targetDb });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } catch (err) {
@@ -283,7 +283,7 @@ function onRequest(req, res) {
     // Cache headers for DB files and static assets
     let headers = {
       'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
-      'Cache-Control': 'public, max-age=3600', // 1 hour
+      'Cache-Control': ext === '.js' || ext === '.css' || ext === '.html' ? 'no-cache' : 'public, max-age=3600',
       'Accept-Ranges': 'bytes'
     };
 

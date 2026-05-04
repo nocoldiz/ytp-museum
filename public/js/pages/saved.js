@@ -4,16 +4,16 @@ function initIndexedDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(dbName, 2);
     request.onupgradeneeded = (e) => {
-      db = e.target.result;
-      if (!db.objectStoreNames.contains(storeName)) {
-        db.createObjectStore(storeName, { keyPath: 'id' });
+      window.idb = e.target.result;
+      if (!window.idb.objectStoreNames.contains(storeName)) {
+        window.idb.createObjectStore(storeName, { keyPath: 'id' });
       }
-      if (!db.objectStoreNames.contains(playlistStoreName)) {
-        db.createObjectStore(playlistStoreName, { keyPath: 'id' });
+      if (!window.idb.objectStoreNames.contains(playlistStoreName)) {
+        window.idb.createObjectStore(playlistStoreName, { keyPath: 'id' });
       }
     };
     request.onsuccess = (e) => {
-      db = e.target.result;
+      window.idb = e.target.result;
       updateSavedBadge();
       resolve();
     };
@@ -25,8 +25,8 @@ function initIndexedDB() {
 }
 
 function saveVideoToDB(video) {
-  if (!db) return;
-  const transaction = db.transaction([storeName], 'readwrite');
+  if (!window.idb) return;
+  const transaction = window.idb.transaction([storeName], 'readwrite');
   const store = transaction.objectStore(storeName);
   store.put(video);
   transaction.oncomplete = () => {
@@ -36,8 +36,8 @@ function saveVideoToDB(video) {
 }
 
 function removeVideoFromDB(id) {
-  if (!db) return;
-  const transaction = db.transaction([storeName], 'readwrite');
+  if (!window.idb) return;
+  const transaction = window.idb.transaction([storeName], 'readwrite');
   const store = transaction.objectStore(storeName);
   store.delete(id);
   transaction.oncomplete = () => {
@@ -51,8 +51,8 @@ function removeVideoFromDB(id) {
 
 function getSavedVideos() {
   return new Promise((resolve) => {
-    if (!db) return resolve([]);
-    const transaction = db.transaction([storeName], 'readonly');
+    if (!window.idb) return resolve([]);
+    const transaction = window.idb.transaction([storeName], 'readonly');
     const store = transaction.objectStore(storeName);
     const request = store.getAll();
     request.onsuccess = () => resolve(request.result);
@@ -62,8 +62,8 @@ function getSavedVideos() {
 
 function isVideoSaved(id) {
   return new Promise((resolve) => {
-    if (!db) return resolve(false);
-    const transaction = db.transaction([storeName], 'readonly');
+    if (!window.idb) return resolve(false);
+    const transaction = window.idb.transaction([storeName], 'readonly');
     const store = transaction.objectStore(storeName);
     const request = store.get(id);
     request.onsuccess = () => resolve(!!request.result);

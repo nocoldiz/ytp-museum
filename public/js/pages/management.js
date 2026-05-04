@@ -23,9 +23,12 @@ async function bulkAction(type) {
   if (type === 'ban') {
     if (!confirm(`Are you sure you want to BAN ${ids.length} videos?`)) return;
     endpoint = '/api/ban';
-  } else if (type === 'flag-source') {
-    if (!confirm(`Are you sure you want to FLAG AS SOURCE ${ids.length} videos?`)) return;
-    endpoint = '/api/flag-source';
+  } else if (type === 'move-db') {
+    const targetDb = document.getElementById('mgmt-move-select').value;
+    if (!targetDb) return alert("Please select a target database.");
+    if (!confirm(`Are you sure you want to move ${ids.length} videos to ${targetDb}.db?`)) return;
+    endpoint = '/api/move-db';
+    body.targetDb = targetDb;
   } else if (type === 'set-lang') {
     const lang = document.getElementById('mgmt-lang-select').value;
     if (!lang) return alert("Please select a language.");

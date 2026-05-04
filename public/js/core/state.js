@@ -20,7 +20,7 @@ window.enabledSources = JSON.parse(localStorage.getItem('ytp-enabled-sources')) 
   ytp: true,
   ytpmv: true,
   collabs: true,
-  other: false
+  other: true
 };
 window.playbackMode = localStorage.getItem('ytp-playback-mode') || 'youtube';
 window.sourceChannels = new Set();
@@ -28,6 +28,7 @@ window.sourceChannels = new Set();
 function getAppRoot() {
   return window.location.pathname.startsWith('/ytp-museum/') ? '/ytp-museum/' : '/';
 }
+window.getAppRoot = getAppRoot;
 
 // DB Constants
 window.dbName = 'YTPArchiveDB';

@@ -3810,7 +3810,7 @@ def main():
         if args.scrape_profiles:
             do_scrape_profiles(index, args.public_dir)
         if args.download_italian:
-            selected_list = get_channels_by_language(index, "italian")
+            selected_list = get_channels_by_language(index, "it")
             do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, selected_list, "it", year_limit=args.year_limit, skip_scan=False)
         if args.forum_scrape:
             do_forum_scrape(index, args.site_dir)

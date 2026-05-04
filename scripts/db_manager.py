@@ -58,69 +58,54 @@ def ban_videos(video_ids):
         
     return {"success": True, "results": {"deleted": deleted, "skipped": skipped}}
 
-def flag_as_source(video_ids):
+def move_db(video_ids, target_db):
     moved = []
     skipped = []
     
-    sources_dir = 'sources'
-    if not os.path.exists(sources_dir):
-        os.makedirs(sources_dir)
-        
     for vid_id in video_ids:
-        conn_ytp, db_type = find_video_db(vid_id)
-        if not conn_ytp or db_type == 'sources':
-            if conn_ytp: conn_ytp.close()
+        conn_old, db_old = find_video_db(vid_id)
+        # Handle 'other' mapping to 'sources' in backend context if needed, but the UI might send 'other'
+        t_db = target_db
+        if t_db == 'other': t_db = 'sources'
+        
+        if not conn_old or db_old == t_db:
+            if conn_old: conn_old.close()
             skipped.append(vid_id)
             continue
             
-        # 1. Get data from YTP DB
-        conn_ytp.row_factory = sqlite3.Row
-        cursor_ytp = conn_ytp.cursor()
-        cursor_ytp.execute("SELECT * FROM videos WHERE id = ?", (vid_id,))
-        v_data = dict(cursor_ytp.fetchone())
+        # 1. Get data from old DB
+        conn_old.row_factory = sqlite3.Row
+        cursor_old = conn_old.cursor()
+        cursor_old.execute("SELECT * FROM videos WHERE id = ?", (vid_id,))
+        v_data = dict(cursor_old.fetchone())
         
         # Get tags
-        cursor_ytp.execute("SELECT t.name FROM tags t JOIN video_tags vt ON t.id = vt.tag_id WHERE vt.video_id = ?", (vid_id,))
-        tags = [r[0] for r in cursor_ytp.fetchall()]
+        cursor_old.execute("SELECT t.name FROM tags t JOIN video_tags vt ON t.id = vt.tag_id WHERE vt.video_id = ?", (vid_id,))
+        tags = [r[0] for r in cursor_old.fetchall()]
         
-        # 2. Move local file if needed
-        local_file = v_data['local_file']
-        new_rel_path = local_file
-        if local_file and not local_file.startswith('sources/'):
-            old_path = os.path.join(os.getcwd(), local_file)
-            file_name = os.path.basename(local_file)
-            new_rel_path = f"sources/{file_name}"
-            new_path = os.path.join(os.getcwd(), new_rel_path)
-            if os.path.exists(old_path):
-                try:
-                    os.rename(old_path, new_path)
-                except Exception as e:
-                    print(f"Error moving {old_path}: {e}", file=sys.stderr)
-
-        # 3. Insert into Sources DB
-        conn_sources = get_conn('sources')
-        cursor_sources = conn_sources.cursor()
-        v_data['local_file'] = new_rel_path
+        # 2. Insert into new DB
+        conn_new = get_conn(t_db)
+        cursor_new = conn_new.cursor()
         
         cols = ", ".join(v_data.keys())
         placeholders = ", ".join(["?"] * len(v_data))
-        cursor_sources.execute(f"INSERT OR REPLACE INTO videos ({cols}) VALUES ({placeholders})", tuple(v_data.values()))
+        cursor_new.execute(f"INSERT OR REPLACE INTO videos ({cols}) VALUES ({placeholders})", tuple(v_data.values()))
         
-        # Re-insert tags in other.db
+        # Re-insert tags
         for tag_name in tags:
-            cursor_sources.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag_name,))
-            cursor_sources.execute("SELECT id FROM tags WHERE name = ?", (tag_name,))
-            tag_id = cursor_sources.fetchone()[0]
-            cursor_sources.execute("INSERT OR IGNORE INTO video_tags (video_id, tag_id) VALUES (?, ?)", (vid_id, tag_id))
+            cursor_new.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag_name,))
+            cursor_new.execute("SELECT id FROM tags WHERE name = ?", (tag_name,))
+            tag_id = cursor_new.fetchone()[0]
+            cursor_new.execute("INSERT OR IGNORE INTO video_tags (video_id, tag_id) VALUES (?, ?)", (vid_id, tag_id))
             
-        conn_sources.commit()
-        conn_sources.close()
+        conn_new.commit()
+        conn_new.close()
         
-        # 4. Remove from YTP DB
-        cursor_ytp.execute("DELETE FROM videos WHERE id = ?", (vid_id,))
-        cursor_ytp.execute("DELETE FROM video_tags WHERE video_id = ?", (vid_id,))
-        conn_ytp.commit()
-        conn_ytp.close()
+        # 3. Remove from old DB
+        cursor_old.execute("DELETE FROM videos WHERE id = ?", (vid_id,))
+        cursor_old.execute("DELETE FROM video_tags WHERE video_id = ?", (vid_id,))
+        conn_old.commit()
+        conn_old.close()
         
         moved.append(vid_id)
         
@@ -246,8 +231,8 @@ if __name__ == "__main__":
         
         if command == "ban":
             print(json.dumps(ban_videos(args['videoIds'])))
-        elif command == "flag-source":
-            print(json.dumps(flag_as_source(args['videoIds'])))
+        elif command == "move-db":
+            print(json.dumps(move_db(args['videoIds'], args['targetDb'])))
         elif command == "import":
             print(json.dumps(import_videos(args['urls'], args['target'])))
         elif command == "set-lang":

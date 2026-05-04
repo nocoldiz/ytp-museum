@@ -140,43 +140,43 @@ async function initSQLite() {
   
   // Conditionally load YTP (main)
   let ytpPromise = Promise.resolve(null);
-  if (enabledSources.ytp) {
+  if (window.enabledSources.ytp) {
     ytpPromise = loadDB('ytp.db', SQL);
   }
 
   const [db1, db3] = await Promise.all([ytpPromise, poopersPromise]);
 
-  dbYTP = db1;
-  dbPoopers = db3;
-  sqlDB = dbYTP;
+  window.dbYTP = db1;
+  window.dbPoopers = db3;
+  window.sqlDB = window.dbYTP;
 
   // Lazy load extra databases in background based on enabled state
-  if (enabledSources.other && !dbSources) {
+  if (window.enabledSources.other && !window.dbSources) {
     loadDB('other.db', SQL).then(db => {
-      dbSources = db;
+      window.dbSources = db;
       console.log("Other database loaded in background.");
-      const sources = queryDB("SELECT DISTINCT channel_name FROM videos", [], dbSources);
-      sourceChannels = new Set(sources.map(s => s.channel_name));
-      updateBadges();
+      const sources = queryDB("SELECT DISTINCT channel_name FROM videos", [], window.dbSources);
+      window.sourceChannels = new Set(sources.map(s => s.channel_name));
+      window.updateBadges();
     });
   }
   
-  if (enabledSources.ytpmv && !dbYTPMV) {
+  if (window.enabledSources.ytpmv && !window.dbYTPMV) {
     loadDB('ytpmv.db', SQL).then(db => {
-      dbYTPMV = db;
+      window.dbYTPMV = db;
       console.log("YTPMV database loaded in background.");
     });
   }
   
-  if (enabledSources.collabs && !dbCollabs) {
+  if (window.enabledSources.collabs && !window.dbCollabs) {
     loadDB('collabs.db', SQL).then(db => {
-      dbCollabs = db;
+      window.dbCollabs = db;
       console.log("Collabs database loaded in background.");
     });
   }
 
   console.log("SQLite initialization completed (respecting source filters).");
-  return sqlDB;
+  return window.sqlDB;
 }
 
 function openSourcesModal() {
@@ -188,7 +188,7 @@ function openSourcesModal() {
   const ids = ['ytp', 'ytpmv', 'collabs', 'other'];
   ids.forEach(id => {
     const cb = document.getElementById(`source-${id}`);
-    if (cb) cb.checked = enabledSources[id];
+    if (cb) cb.checked = window.enabledSources[id];
   });
 }
 
@@ -200,8 +200,8 @@ function closeSourcesModal() {
 function toggleSourceState(key) {
   const cb = document.getElementById(`source-${key}`);
   if (cb) {
-    enabledSources[key] = cb.checked;
-    localStorage.setItem('ytp-enabled-sources', JSON.stringify(enabledSources));
+    window.enabledSources[key] = cb.checked;
+    localStorage.setItem('ytp-enabled-sources', JSON.stringify(window.enabledSources));
   }
 }
 
@@ -209,10 +209,10 @@ function applySources() {
   const ids = ['ytp', 'ytpmv', 'collabs', 'other'];
   ids.forEach(id => {
     const cb = document.getElementById(`source-${id}`);
-    if (cb) enabledSources[id] = cb.checked;
+    if (cb) window.enabledSources[id] = cb.checked;
   });
   
-  localStorage.setItem('ytp-enabled-sources', JSON.stringify(enabledSources));
+  localStorage.setItem('ytp-enabled-sources', JSON.stringify(window.enabledSources));
   location.reload();
 }
 
@@ -223,17 +223,17 @@ function queryDB(sql, params = [], targetDB = null) {
     const lowerSql = sql.toLowerCase();
     // Intelligent Routing
     if (lowerSql.includes('from channels')) {
-      db = dbPoopers;
+      db = window.dbPoopers;
     } else if (lowerSql.includes('from source_pages') || lowerSql.includes('from video_sources')) {
-      db = dbSources;
-    } else if (appMode === 'sources' && (lowerSql.includes('from videos') || lowerSql.includes('from tags') || lowerSql.includes('from sections'))) {
-      db = dbSources;
-    } else if (appMode === 'ytpmv' && (lowerSql.includes('from videos') || lowerSql.includes('from tags') || lowerSql.includes('from sections'))) {
-      db = dbYTPMV;
-    } else if (appMode === 'collabs' && (lowerSql.includes('from videos') || lowerSql.includes('from tags') || lowerSql.includes('from sections'))) {
-      db = dbCollabs;
+      db = window.dbSources;
+    } else if (window.appMode === 'sources' && (lowerSql.includes('from videos') || lowerSql.includes('from tags') || lowerSql.includes('from sections'))) {
+      db = window.dbSources;
+    } else if (window.appMode === 'ytpmv' && (lowerSql.includes('from videos') || lowerSql.includes('from tags') || lowerSql.includes('from sections'))) {
+      db = window.dbYTPMV;
+    } else if (window.appMode === 'collabs' && (lowerSql.includes('from videos') || lowerSql.includes('from tags') || lowerSql.includes('from sections'))) {
+      db = window.dbCollabs;
     } else {
-      db = dbYTP;
+      db = window.dbYTP;
     }
   }
 
@@ -254,7 +254,7 @@ function queryDB(sql, params = [], targetDB = null) {
 }
 
 function findVideoAcrossDBs(vidId) {
-  const dbs = [dbYTP, dbSources, dbYTPMV, dbCollabs];
+  const dbs = [window.dbYTP, window.dbSources, window.dbYTPMV, window.dbCollabs];
   for (const db of dbs) {
     if (!db) continue;
     const res = queryDB("SELECT * FROM videos WHERE id = ?", [vidId], db);
