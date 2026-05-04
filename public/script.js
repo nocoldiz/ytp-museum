@@ -13,9 +13,6 @@ let selectedChannel = null;
 let selectedSection = null;
 let charts = {};
 let globalMaxYear = new Date().getFullYear();
-let currentVideoMode = "all";
-let sourceChannels = new Set();
-let playbackMode = localStorage.getItem('ytp-playback-mode') || 'youtube';
 let renderedHomeVideoIds = new Set();
 let isFetchingMoreHome = false;
 let currentModernTab = 'all';
@@ -23,8 +20,14 @@ let enabledSources = JSON.parse(localStorage.getItem('ytp-enabled-sources')) || 
   ytp: true,
   ytpmv: true,
   collabs: true,
-  other: true
+  other: false
 };
+let playbackMode = localStorage.getItem('ytp-playback-mode') || 'youtube';
+let sourceChannels = new Set();
+
+function getAppRoot() {
+  return window.location.pathname.startsWith('/ytp-museum/') ? '/ytp-museum/' : '/';
+}
 
 // DB Constants
 const dbName = 'YTPArchiveDB';
@@ -79,12 +82,38 @@ async function saveStoredDB(name, buffer) {
   store.put(buffer, name);
 }
 
+async function clearIndexedDBCache() {
+  try {
+    const db = await openIDB();
+    const transaction = db.transaction('databases', 'readwrite');
+    transaction.objectStore('databases').clear();
+    return new Promise((resolve) => {
+      transaction.oncomplete = () => {
+        console.log("IndexedDB cache cleared.");
+        resolve();
+      };
+      transaction.onerror = (e) => {
+        console.error("IndexedDB clear error:", e);
+        resolve();
+      };
+    });
+  } catch (e) {
+    console.error("Failed to open IDB for clearing:", e);
+  }
+}
 
 async function fetchAndCache(name) {
-  const url = name.startsWith('db/') ? `/${name}` : (['profile_thumbnails', 'comments', 'playlists.json'].some(x => name.startsWith(x)) ? `/${name}` : `/db/${name}`);
+  const root = getAppRoot();
+  const url = name.startsWith('db/') ? `${root}${name}` : (['profile_thumbnails', 'comments', 'playlists.json'].some(x => name.startsWith(x)) ? `${root}${name}` : `${root}db/${name}`);
   try {
     const response = await fetch(url);
-    if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.status}`);
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.warn(`Critical 404 error fetching ${url}. Clearing local cache...`);
+        await clearIndexedDBCache();
+      }
+      throw new Error(`Failed to fetch ${url}: ${response.status}`);
+    }
     const buffer = await response.arrayBuffer();
     
     // Validate before saving
@@ -127,6 +156,14 @@ async function loadDB(name, SQL) {
   console.log(`Fetching ${name} from network/chunks...`);
   const buffer = await fetchAndCache(name);
   return new SQL.Database(new Uint8Array(buffer));
+}
+
+async function forceRefreshDBs() {
+  if (!confirm("Are you sure? This will delete the cached databases and redownload them.")) return;
+  const db = await openIDB();
+  const transaction = db.transaction('databases', 'readwrite');
+  transaction.objectStore('databases').clear();
+  location.reload();
 }
 
 async function initSQLite() {
@@ -200,7 +237,11 @@ function closeSourcesModal() {
 }
 
 function toggleSourceState(key) {
-  // State is handled in applySources
+  const cb = document.getElementById(`source-${key}`);
+  if (cb) {
+    enabledSources[key] = cb.checked;
+    localStorage.setItem('ytp-enabled-sources', JSON.stringify(enabledSources));
+  }
 }
 
 function applySources() {
@@ -441,9 +482,6 @@ function initApp() {
 }
 
 // ─── ROUTING ──────────────────────────────────────────────────────────────
-function getAppRoot() {
-  return window.location.pathname.startsWith('/ytp-museum/') ? '/ytp-museum/' : '/';
-}
 
 function handleRouting() {
   const url = new URL(window.location);
@@ -1683,27 +1721,6 @@ function updateVideoLayoutForTheme() {
   }
 }
 
-function toggleVideoMode() {
-  if (currentVideoMode === "all") currentVideoMode = "ytp";
-  else if (currentVideoMode === "ytp") currentVideoMode = "sources";
-  else currentVideoMode = "all";
-
-  const txt = currentVideoMode === "all" ? "Show all videos" :
-    currentVideoMode === "ytp" ? "Show YTP videos" :
-      "Show other videos";
-
-  document.querySelectorAll('.btn-video-mode').forEach(btn => btn.textContent = txt);
-
-  if (document.getElementById('page-youtube').classList.contains('active')) {
-    renderHomePage();
-  }
-  const q = document.getElementById('global-search-input').value.trim();
-  if (q && document.getElementById('page-search').classList.contains('active')) {
-    performSearch(q);
-  }
-  clearQueryCache();
-}
-
 function setGlobalMaxYear(year) {
   globalMaxYear = parseInt(year);
 
@@ -1735,23 +1752,13 @@ function setGlobalMaxYear(year) {
 }
 
 function getActiveVideos(forHome = false, limit = null) {
-  const cacheKey = `activeVideos_${appMode}_${currentVideoMode}_${globalMaxYear}_${forHome}_${limit}`;
+  const cacheKey = `activeVideos_${appMode}_${globalMaxYear}_${forHome}_${limit}`;
   return getCachedQuery(cacheKey, () => {
     let whereClauses = [];
     let params = [];
 
-    if (currentVideoMode === "ytp") {
-      // already routed to dbYTP
-    } else if (currentVideoMode === "sources") {
-      // already routed to dbSources
-    } else {
-      if (forHome) {
-        // already routed to dbYTP
-      }
-    }
-
     if (forHome) {
-      // status filter removed
+      // already routed to dbYTP
     }
 
     whereClauses.push("(CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL)");
