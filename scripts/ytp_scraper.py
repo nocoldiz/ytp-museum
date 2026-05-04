@@ -405,6 +405,21 @@ RESTRICTED_ITALIAN_KEYWORDS = re.compile(
     r'(?i)(Youtube poop ita|You tube poop ita|YTP ITA|Youtube merda|YTM|S\.Itario|Shitstorm pt\.)'
 )
 
+COMMON_WORDS_IT_LIST = [
+    # ── Articles & Prepositions ──
+    r'\b(?:il|lo|la|i|gli|le|un|una|uno|un\'?)\b', 
+    r'\b(?:di|del|della|dei|delle|degli|da|dal|dalla|dai|dalle|dagli|in|nel|nella|nei|nelle|negli|su|sul|sulla|sui|sulle|sugli|con|col|colla|coi|colle|per|tra|fra)\b',
+    # ── Conjunctions & Relatives ──
+    r'\b(?:che|chi|cui|quale|quali|quanto|quanti|quanta|quante|e|ed|o|ma|se|anche|perché|poiché|affinché|benché|quando|come|dove|mentre|quindi|dunque|però|tuttavia|infatti|ovvero|ossia|cioè)\b',
+    # ── Pronouns & Adverbs ──
+    r'\b(?:io|tu|lui|lei|noi|voi|loro|mi|ti|lo|la|gli|le|ci|vi|li|le|ne|si|se|non|più|molto|poco|troppo|bene|male|ora|oggi|ieri|domani|qui|lì|là|già|ancora|forse|sempre|mai|magari|purtroppo|comunque|ovviamente|sicuramente|probabilmente|insomma|allora)\b',
+    # ── Common Verbs ──
+    r'\b(?:sono|sei|è|siamo|siete|hanno|ho|hai|ha|abbiamo|avete|era|erano|aveva|avevano|fatto|detto|andato|venite|fare|dire|vedere|visto|andare|venire|volere|potere|dovere|sapere|stare)\b',
+    # ── Common Phrases & Sequences ──
+    r'\b(?:c\'è|ce\s+n\'è|non\s+è|è\s+un|che\s+cosa|non\s+lo\s+so|non\s+importa|per\s+favore|grazie\s+mille|come\s+mai|che\s+succede|per\s+il|di\s+un|che\s+ha|e\s+poi|con\s+la|in\s+un|per\s+la|fratello|finito|le\s+idee|acqua|fantabosco|una\s+società|cazzo|altra\s+dimensione|sono\s+dei)\b'
+]
+COMMON_WORDS_IT = re.compile("|".join(COMMON_WORDS_IT_LIST), re.IGNORECASE)
+
 NON_YTP_KEYWORDS = re.compile(
     r'(?i)('
     # --- GAMING (SERIOUS/LONGFORM) ---
@@ -579,7 +594,7 @@ def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, 
                             target=target
                         )
                         # Tag with language immediately
-                        entry = index.data.get(v_id) or index.sources_data.get(v_id)
+                        entry = index.data.get(v_id) or index.ytpmv_data.get(v_id) or index.collabs_data.get(v_id) or index.sources_data.get(v_id)
                         if entry:
                             entry['language'] = language
                         new_entries += 1
@@ -599,7 +614,9 @@ def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, 
     print(f"\n>>> Scraping complete. {new_entries} total matches added.")
 
     # Restored automatic download:
-    do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, limit_channels=channels_list, language_filter=language)
+    # We pass limit_channels=None because we want to download ALL videos matching the language in the DB
+    # as requested: "Download by language should use the language column to determine which videos to download"
+    do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, limit_channels=None, language_filter=language)
 
 def is_disallowed_channel(channel_name):
     if not channel_name:
@@ -704,6 +721,7 @@ class VideoIndex:
         self.poopers_db_path = os.path.join(PROJECT_ROOT, "public", "db", "ytpoopers.db")
         self.ytpmv_db_path = os.path.join(PROJECT_ROOT, "public", "db", "ytpmv.db")
         self.collabs_db_path = os.path.join(PROJECT_ROOT, "public", "db", "collabs.db")
+        self.filepath = self.ytp_db_path # Backward compatibility for code expecting a single filepath
         
         self.data = {}
         self.sources_data = {}
@@ -2134,7 +2152,7 @@ def do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, l
     all_ytp = {**index.data, **index.ytpmv_data, **index.collabs_data}
     pending = [
         vid for vid, e in all_ytp.items()
-        if "Youtube" in e.get("sections", []) and e["status"] == "pending"
+        if e["status"] == "pending"
         and vid not in index.actually_excluded_ids
         and is_channel_allowed(e)
         and is_language_match(e)
@@ -2152,7 +2170,7 @@ def do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, l
 
     for i, vid in enumerate(pending, 1):
         try:
-            e = index.data[vid]
+            e = all_ytp[vid]
             
             if e.get("title") == "warnings.warn(":
                 meta = fetch_yt_metadata(vid)
@@ -2333,26 +2351,23 @@ def do_download_italian(index, video_dir, yt_format, rate_limit, retry_failed, y
 
 
 def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed):
-    src_path = os.path.join(index.docs_dir, "sources_index.json")
-    if not os.path.exists(src_path):
-        print(f"  [!] {src_path} not found.")
-        return
+    sources_data = index.sources_data
 
-    with open(src_path, encoding="utf-8") as f:
-        sources_data = json.load(f)
+    if not sources_data:
+        print("  Sources database is empty.")
+        return
 
     if retry_failed:
         for e in sources_data.values():
             if e.get("status") == "failed":
                 e["status"] = "pending"
-        with open(src_path, "w", encoding="utf-8") as f:
-            json.dump(sources_data, f, separators=(',', ':'), ensure_ascii=False)
-        print("  Cleared failed status in sources_index.json — will retry.\n")
+        index.save()
+        print("  Cleared failed status in sources database — will retry.\n")
 
     pending = [vid for vid, e in sources_data.items() if e.get("status") == "pending"]
 
     if not pending:
-        print("  Nothing to download in sources_index.json.")
+        print("  Nothing to download in sources database.")
         return
 
     total = len(pending)
@@ -2369,10 +2384,9 @@ def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed):
             # Target directory is ./sources/[channel_name]
             out_dir = os.path.join(DEFAULT_SOURCES_DIR, folder_name)
             os.makedirs(out_dir, exist_ok=True)
-            # -------------------------------------------------------
             
             if e.get("title") == "warnings.warn(":
-                meta = fetch_yt_metadata(vid)  # Ensure this is defined in your scope
+                meta = fetch_yt_metadata(vid)
                 if isinstance(meta, dict) and meta.get("title"):
                     e["title"] = meta["title"]
                     
@@ -2381,7 +2395,7 @@ def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed):
             print(f"  [{i}/{total}] {label[:60]}")
             if e.get("channel_name"):
                 print(f"  Channel: {e['channel_name']}  {e.get('channel_url', '')}")
-            print(f"  URL:     {canonical_yt_url(vid)}") # Ensure this is defined in your scope
+            print(f"  URL:     {canonical_yt_url(vid)}")
 
             status, local_file, dl_title = download_video(
                 vid, out_dir, yt_format, rate_limit, i, total,
@@ -2428,16 +2442,9 @@ def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed):
 def do_stats(index, output_path="stats.md"):
     from collections import defaultdict
 
-    src_path = os.path.join(index.docs_dir, "sources_index.json")
-    if not os.path.exists(src_path):
-        print(f"  [!] {src_path} not found.")
-        return
-
-    with open(src_path, encoding="utf-8") as f:
-        sources_data = json.load(f)
-
+    sources_data = index.sources_data
     if not sources_data:
-        print("  sources_index.json is empty.")
+        print("  Sources database is empty.")
         return
 
     filtered = sources_data
@@ -3038,6 +3045,12 @@ def do_auto_languages(index):
 
     # ── Keyword-based patterns ──
     patterns = {
+        "it": [
+            r'YTP\s?ITA|YTM|YTG|YTK|YouTube\s+Poop(?:\s+ITA)?|Sentence\s+Mix|Ear\s?rape|G-Major|Reverse|Pitch\s+Shift|YTP\s+(?:Tennis|Soccer|Ping\s+pong|Round)',
+            *COMMON_WORDS_IT_LIST,
+            *MEME_KEYWORDS_IT,
+            r'Youtube poop ita|You tube poop ita|YTP ITA|Youtube merda|YTM|S\.Itario|Shitstorm pt\.'
+        ],
         "es": [
             r'YTPH|Pooppa[ñn]ol|YouTube\s+Poop(?:\s+en\s+español)?'
         ],
@@ -3052,9 +3065,6 @@ def do_auto_languages(index):
         ],
         "br": [
             r'YTPBR|YTP\s+BR|YouTube\s+Poop(?:\s+BR)?'
-        ],
-        "it": [
-            r'YTP\s?ITA|YTM|YTG|YTK|YouTube\s+Poop(?:\s+ITA)?|Sentence\s+Mix|Ear\s?rape|G-Major|Reverse|Pitch\s+Shift|YTP\s+(?:Tennis|Soccer|Ping\s+pong|Round)'
         ]
     }
 
@@ -3088,8 +3098,6 @@ def do_auto_languages(index):
     all_ytp = {**index.data, **index.sources_data, **index.ytpmv_data, **index.collabs_data}
 
     for video_id, video in all_ytp.items():
-        if video.get('language'):
-            continue
         title = video.get('title')
         thread_titles = video.get('thread_titles', [])
         channel_url = video.get('channel_url')
@@ -3141,21 +3149,6 @@ def do_auto_languages(index):
         print(f"    - {lang}: {c}")
 
     index.save()
-
-    # Save sources_index.json if modified
-    src_path = os.path.join(index.docs_dir, "sources_index.json")
-    with open(src_path, "w", encoding="utf-8") as f:
-        json.dump(index.sources_data, f, separators=(',', ':'), ensure_ascii=False)
-
-    channels_file = os.path.join(index.docs_dir, 'channels_by_language.txt')
-    print(f"  Exporting channels to {channels_file}...")
-    with open(channels_file, 'w', encoding='utf-8') as f:
-        for lang, urls in sorted(channels_by_lang.items()):
-            var_name = f"{lang.upper()}_CHANNELS"
-            f.write(f"{var_name} = [\n")
-            for url in sorted(list(urls)):
-                f.write(f"    \"{url}\",\n")
-            f.write("]\n\n")
 
 
 def do_scrape_profiles(index, docs_dir):
@@ -3302,7 +3295,7 @@ def do_scrape_sources_metadata(index):
     ) and e.get("status") != "unavailable"]
 
     if not need_meta:
-        print("  All videos in sources_index.json already have metadata.")
+        print("  All videos in sources database already have metadata.")
         return
 
     total_meta = len(need_meta)
@@ -3351,7 +3344,7 @@ def do_scrape_sources_metadata(index):
     
     sync_ytpoopers_index(index)
 
-    print(f"  Done — sources_index.json metadata updated.")
+    print(f"  Done — sources database metadata updated.")
 
 def do_scrape_comments(index, video_dir):
     """Scrape comments for every non-unavailable video in sources."""
@@ -3421,7 +3414,8 @@ def create_progressive_backup(index, step_name):
     if os.path.exists(index.filepath):
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         safe_step = re.sub(r'[^a-z0-9]', '_', step_name.lower())
-        bak_name = f"video_index_{ts}_{safe_step}.json.bak"
+        ext = os.path.splitext(index.filepath)[1]
+        bak_name = f"{os.path.basename(index.filepath)}_{ts}_{safe_step}{ext}.bak"
         bak_path = os.path.join(os.path.dirname(index.filepath), bak_name)
         try:
             shutil.copyfile(index.filepath, bak_path)
@@ -3430,32 +3424,31 @@ def create_progressive_backup(index, step_name):
             print(f"  [!] Failed to create backup: {e}")
 
 
-def do_full_scrape_run(index, args):
-    print("\n>>> Starting Full Scrape Run...")
+def do_full_scrape_run_ignore_sources(index, args):
+    print("\n>>> Starting Full Scrape Run (Ignore Sources)...")
     
-    print("\nStep 1: Scrape Channels (Option 3)")
-    do_scrape_channels(index)
-    create_progressive_backup(index, "step1_channels")
+    print("\nStep 1: Scrape Channels (Option 3) - Ignoring Sources")
+    do_scrape_channels(index, ignore_sources=True)
+    create_progressive_backup(index, "step1_channels_ignore_sources")
     
-    print("\nStep 2: Fetch Missing Metadata (Option 1)")
+    print("\nStep 2: Fetch Missing Metadata (Option 1) - Only YTP")
     do_update_index(index)
-    do_scrape_sources_metadata(index)
-    create_progressive_backup(index, "step2_metadata")
+    # Skip do_scrape_sources_metadata
+    create_progressive_backup(index, "step2_metadata_ignore_sources")
     
     print("\nStep 3: Scrape Channel Profiles and Thumbnails (Option 7)")
     do_scrape_profiles(index, args.docs_dir)
-    create_progressive_backup(index, "step3_thumbnails")
+    create_progressive_backup(index, "step3_thumbnails_ignore_sources")
     
-    print("\nStep 4: Scrape Comments (Option 6)")
-    do_scrape_comments(index, args.docs_dir)
-    create_progressive_backup(index, "step4_comments")
+    # Skip Step 4: Scrape Comments (sources only)
     
-    print("\n>>> Full Scrape Run Complete.")
+    print("\n>>> Full Scrape Run (Ignore Sources) Complete.")
 
     # Create a progressive backup
     if os.path.exists(index.filepath):
         ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-        bak_name = f"video_index_{ts}.json.bak"
+        ext = os.path.splitext(index.filepath)[1]
+        bak_name = f"{os.path.basename(index.filepath)}_{ts}{ext}.bak"
         bak_path = os.path.join(os.path.dirname(index.filepath), bak_name)
         try:
             shutil.copyfile(index.filepath, bak_path)
@@ -3671,7 +3664,8 @@ def main():
         if args.scrape_profiles:
             do_scrape_profiles(index, args.docs_dir)
         if args.download_italian:
-            do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, ITALIAN_CHANNELS, "italian", year_limit=args.year_limit, skip_scan=False)
+            selected_list = get_channels_by_language(index, "italian")
+            do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, selected_list, "it", year_limit=args.year_limit, skip_scan=False)
         if args.forum_scrape:
             do_forum_scrape(index, args.site_dir)
         if args.resort:
@@ -3700,7 +3694,7 @@ def main():
     print("       Download pending video files for both YTP and Sources.")
     print()
     print("  3  Scrape channels (Discover New)")
-    print("       Scan channels in channels_by_language.md for new content.")
+    print("       Scan channels registered in the database for new content.")
     print()
     print("  4  Language-Specific Download")
     print("       Batch download videos for a specific language (e.g. Italian).")
@@ -3738,6 +3732,9 @@ def main():
     print("  s  Full Scrape Run (Standard Cycle)")
     print("       Discovery: Scrape channels -> Metadata -> Profiles -> Comments.")
     print()
+    print("  x  Full Scrape Run (Ignore Sources)")
+    print("       Discovery: Scrape channels (ignore sources) -> Metadata (YTP only) -> Profiles.")
+    print()
     print("  d  Full Download (Parallel Processing)")
     print("       Parallel: Italian YTPs, comments, and video compression.")
     print()
@@ -3749,8 +3746,8 @@ def main():
     print()
     print("  q  Quit")
     print()
-    choice = ask("  Choice [1-12/f/r/s/d/p/a/q]: ",
-                 {"1","2","3","4","5","6","7","8","9","10","11","12","f","r","s","d","p","a","q"})
+    choice = ask("  Choice [1-12/f/r/s/x/d/p/a/q]: ",
+                 {"1","2","3","4","5","6","7","8","9","10","11","12","f","r","s","x","d","p","a","q"})
 
     if choice == "q":
         sys.exit(0)
@@ -3762,9 +3759,9 @@ def main():
 
     if choice == "1":
         print("\nSelect what metadata to fetch:")
-        print("1. All (video_index.json & sources_index.json)")
-        print("2. Only YTP metadata (video_index.json)")
-        print("3. Only sources metadata (sources_index.json)")
+        print("1. All (YTP & Sources)")
+        print("2. Only YTP metadata")
+        print("3. Only sources metadata")
         sub = ask("Choice [1-3]: ", {"1", "2", "3"})
         if sub in ("1", "2"):
             do_update_index(index)
@@ -3773,9 +3770,9 @@ def main():
         print()
     if choice == "2":
         print("\nSelect what to download:")
-        print("1. All (video_index.json & sources_index.json)")
-        print("2. Only YTP videos (video_index.json)")
-        print("3. Only sources videos (sources_index.json)")
+        print("1. All (YTP & Sources)")
+        print("2. Only YTP videos")
+        print("3. Only sources videos")
         sub = ask("Choice [1-3]: ", {"1", "2", "3"})
         if sub in ("1", "2"):
             do_download(index, args.video_dir, args.format, args.rate_limit, args.retry_failed)
@@ -3802,29 +3799,23 @@ def main():
         lang_name = None
         restricted = False
         if lang_choice == "1": 
-            selected_list = ITALIAN_CHANNELS
             lang_name = "it"
         elif lang_choice == "2": 
-            selected_list = ENGLISH_CHANNELS
             lang_name = "en"
         elif lang_choice == "3": 
-            selected_list = SPANISH_CHANNELS
             lang_name = "es"
         elif lang_choice == "4": 
-            selected_list = GERMAN_CHANNELS
             lang_name = "de"
         elif lang_choice == "5": 
-            selected_list = FRENCH_CHANNELS
             lang_name = "fr"
         elif lang_choice == "6": 
-            selected_list = RUSSIAN_CHANNELS
             lang_name = "ru"
         elif lang_choice == "7":
-            selected_list = ITALIAN_CHANNELS
             lang_name = "it"
             restricted = True
         
         if lang_name:
+            selected_list = get_channels_by_language(index, lang_name)
             do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, selected_list, lang_name, year_limit=args.year_limit, skip_scan=should_skip, restricted_mode=restricted)
         else:
             print("Invalid language selection.")
@@ -3866,6 +3857,9 @@ def main():
 
     if choice == "d":
         do_full_download_parallel()
+
+    if choice == "x":
+        do_full_scrape_run_ignore_sources(index, args)
 
     if choice == "p":
         do_download_parallel_internal(index, args.video_dir, args.format, args.rate_limit, workers=args.workers, no_db_update=args.no_db_update)
