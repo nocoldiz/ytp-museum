@@ -114,8 +114,6 @@ async function autoLoad() {
     if (p.channel_name) window.pooperMap[p.channel_name] = p;
   });
 
-  const sources = queryDB("SELECT DISTINCT channel_name FROM videos", [], dbSources);
-  window.sourceChannels = new Set(sources.map(s => s.channel_name));
 
   initApp();
 

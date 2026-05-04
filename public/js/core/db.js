@@ -11,7 +11,9 @@ function clearQueryCache() {
 }
 
 // ─── SQLITE INITIALIZATION ────────────────────────────────────────────────
+let _idbCacheDb = null;
 async function openIDB() {
+  if (_idbCacheDb) return _idbCacheDb;
   return new Promise((resolve, reject) => {
     const request = indexedDB.open('YTPArchiveCache', 1);
     request.onupgradeneeded = (e) => {
@@ -20,8 +22,15 @@ async function openIDB() {
         db.createObjectStore('databases');
       }
     };
-    request.onsuccess = (e) => resolve(e.target.result);
+    request.onsuccess = (e) => {
+      _idbCacheDb = e.target.result;
+      resolve(_idbCacheDb);
+    };
     request.onerror = (e) => reject(e.target.error);
+    request.onblocked = (e) => {
+      console.warn("IndexedDB blocked! Please close other tabs.");
+      reject(new Error("IDB blocked"));
+    };
   });
 }
 
@@ -274,6 +283,7 @@ function queryDBRow(sql, params = [], targetDB = null) {
 
 
 // Expose functions to global scope
+window.queryCache = queryCache;
 window.getCachedQuery = getCachedQuery;
 window.clearQueryCache = clearQueryCache;
 window.openIDB = openIDB;

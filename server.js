@@ -295,7 +295,7 @@ function onRequest(req, res) {
     const acceptEncoding = req.headers['accept-encoding'] || '';
 
     // Compress text and DB files
-    const shouldCompress = ['.html', '.js', '.css', '.json', '.db'].includes(ext);
+    const shouldCompress = ['.html', '.js', '.css', '.json'].includes(ext);
 
     if (shouldCompress && acceptEncoding.includes('gzip')) {
       res.writeHead(200, { ...headers, 'Content-Encoding': 'gzip' });
