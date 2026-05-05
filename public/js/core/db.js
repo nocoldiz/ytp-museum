@@ -10,6 +10,11 @@ function clearQueryCache() {
   queryCache.clear();
 }
 
+function shouldCache() {
+  const host = window.location.hostname;
+  return host !== 'localhost' && host !== '127.0.0.1';
+}
+
 // ─── SQLITE INITIALIZATION ────────────────────────────────────────────────
 let _idbCacheDb = null;
 async function openIDB() {
@@ -89,8 +94,12 @@ async function fetchAndCache(name) {
     // Validate before saving
     const header = new TextDecoder().decode(new Uint8Array(buffer).slice(0, 15));
     if (header === "SQLite format 3") {
-      await saveStoredDB(name, buffer);
-      console.log(`Successfully cached ${name} from ${url}`);
+      if (shouldCache()) {
+        await saveStoredDB(name, buffer);
+        console.log(`Successfully cached ${name} from ${url}`);
+      } else {
+        console.log(`Bypassing cache for ${name} (Running locally)`);
+      }
     } else {
       console.error(`Fetched ${url} is not a valid SQLite database (Header: "${header.substring(0, 20)}"), skipping cache.`);
     }
@@ -103,8 +112,9 @@ async function fetchAndCache(name) {
 
 async function loadDB(name, SQL) {
   try {
-    const cached = await getStoredDB(name);
-    if (cached) {
+    if (shouldCache()) {
+      const cached = await getStoredDB(name);
+      if (cached) {
       // Validate cached header
       const header = new TextDecoder().decode(new Uint8Array(cached).slice(0, 15));
       if (header === "SQLite format 3") {
@@ -117,6 +127,7 @@ async function loadDB(name, SQL) {
         const db = await openIDB();
         const transaction = db.transaction('databases', 'readwrite');
         transaction.objectStore('databases').delete(name);
+      }
       }
     }
   } catch (e) {

@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import json
+import random
 import time
 import glob
 import shutil
@@ -216,7 +217,7 @@ YTP_KEYWORDS_EN = [
     r'YTP', r'YTPV', r'YouTube\s+Poop', r'You\s+tube\s+poop', r'YTPEN', r'YTP\s?EN'
 ]
 YTP_KEYWORDS_GENERIC = [
-    r'STP', r'Pytp', r'YTPMV',r'Poop',r'Poops', r'YTP\s+(?:Tennis|Soccer|Ping\s+pong)', r'YTP(?:Tennis|Soccer|Pingpong)',
+    r'STP', r'Pytp',r'You Tube Poop',r'Poop',r'Poops', r'YTP\s+(?:Tennis|Soccer|Ping\s+pong)', r'YTP(?:Tennis|Soccer|Pingpong)',
     r'YTP(?:PL|PT|RO|GR|NL|HU|JP)'
 ]
 
@@ -227,7 +228,7 @@ YTP_KEYWORDS_LIST = (
 )
 
 YTPMV_KEYWORDS_LIST = [
-    r'YTPMV'
+    r'YTPMV', r'Sparta Remix',r'音MAD'r'音MAD'
 ]
 
 COLLABS_KEYWORDS_LIST = [
@@ -1898,7 +1899,7 @@ def do_download(index, video_dir, yt_format, rate_limit, retry_failed):
     print(f"  Index:       {os.path.abspath(index.filepath)}")
 
 
-def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping", quiet=False):
+def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping", quiet=False, ignore_sources=False):
     """Scrape videos based on YouTube searches."""
     if not quiet:
         print(f"\n--- {title_header} ---")
@@ -1952,6 +1953,10 @@ def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping
                     # 2. Keyword routing logic
                     target = get_target_index(title)
                     if target == "none":
+                        continue
+                    
+                    # If ignore_sources is True, skip videos that are classified as sources (meme keywords)
+                    if ignore_sources and target == "sources":
                         continue
                     
                     # 1. Ignore if already in any index or excluded
@@ -2128,6 +2133,86 @@ def do_keyword_search_scraping(index):
     
     clear_line()
     print(f"  Keyword Search Scraping Complete. Added {total_added} new videos.")
+
+
+def do_random_video_scrape(index):
+    """
+    Selects random videos from ytp.db, ytpmv.db, and collabs.db,
+    and performs YouTube searches using their titles.
+    """
+    print("\n--- Random Video Search Scraping ---")
+    
+    # 1. Ask for number of videos
+    try:
+        count_str = input("  How many random videos to pick? [default 5]: ").strip()
+        num_videos = int(count_str) if count_str else 5
+    except ValueError:
+        print("  Invalid number. Using default 5.")
+        num_videos = 5
+
+    # 2. Ask for language
+    print("\n  Select Language Filter:")
+    print("  1. Italian (IT)")
+    print("  2. English (EN)")
+    print("  3. Spanish (ES)")
+    print("  4. German (DE)")
+    print("  5. French (FR)")
+    print("  6. Russian (RU)")
+    print("  7. Any (includes uncategorized)")
+    
+    lang_choice = ask("  Choice [1-7]: ", {"1","2","3","4","5","6","7"})
+    
+    lang_map = {
+        "1": "it",
+        "2": "en",
+        "3": "es",
+        "4": "de",
+        "5": "fr",
+        "6": "ru",
+    }
+    target_lang = lang_map.get(lang_choice) # None if "7"
+
+    # 3. Gather candidate videos
+    candidates = []
+    # Combine main YTP, YTPMV and Collabs
+    sources = [
+        ("YTP", index.data), 
+        ("YTPMV", index.ytpmv_data), 
+        ("Collabs", index.collabs_data)
+    ]
+    
+    for db_name, db in sources:
+        for vid, info in db.items():
+            if target_lang:
+                if info.get('language') == target_lang:
+                    candidates.append(info)
+            else:
+                candidates.append(info)
+                
+    if not candidates:
+        print(f"  [!] No videos found matching language filter: {target_lang or 'Any'}")
+        return
+
+    # 4. Pick random ones
+    actual_count = min(num_videos, len(candidates))
+    selected_videos = random.sample(candidates, actual_count)
+    
+    print(f"\n  Selected {actual_count} random videos to use as search queries.")
+    
+    total_added = 0
+    try:
+        for i, video in enumerate(selected_videos, 1):
+            title = video.get('title')
+            if not title: continue
+            
+            print(f"\n  [{i}/{actual_count}] Searching for: {title}")
+            new_vids = do_scrape_search(index, keywords=[title], quiet=True, ignore_sources=True)
+            total_added += new_vids
+            
+    except KeyboardInterrupt:
+        print("\n  Scraping interrupted.")
+
+    print(f"\n  Random Video Search Scraping Complete. Added {total_added} new videos.")
 
 
 def do_scrape_channels(index, ignore_sources=False):
@@ -3869,6 +3954,9 @@ def main():
     print("  12 Cleanup Orphaned Channels")
     print("       Remove channels from other.db and ytpoopers.db that have no videos in main databases.")
     print()
+    print("  13 Random Video Search")
+    print("       Pick random videos from the collection and search for similar content.")
+    print()
     print("  f  Forum Scrape (Site Mirror)")
     print("       Crawl archived forum folders to extract legacy YouTube links.")
     print()
@@ -3892,8 +3980,8 @@ def main():
     print()
     print("  q  Quit")
     print()
-    choice = ask("  Choice [1-12/f/r/s/x/d/p/a/q]: ",
-                 {"1","2","3","4","5","6","7","8","9","10","11","12","f","r","s","x","d","p","a","q"})
+    choice = ask("  Choice [1-13/f/r/s/x/d/p/a/q]: ",
+                 {"1","2","3","4","5","6","7","8","9","10","11","12","13","f","r","s","x","d","p","a","q"})
 
     if choice == "q":
         sys.exit(0)
@@ -3990,6 +4078,9 @@ def main():
 
     if choice == "12":
         do_cleanup_other_db(index)
+
+    if choice == "13":
+        do_random_video_scrape(index)
 
     if choice == "f":
         do_forum_scrape(index, args.site_dir)

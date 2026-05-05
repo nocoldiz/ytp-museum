@@ -34,17 +34,14 @@ function getLocalVideoPath(v) {
   return (path.startsWith('videos/') || path.startsWith('sources/')) ? '../' + path : path;
 }
 
-function escHtml(s) {
-  if (!s) return '';
-  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
+
 function linkify(text) {
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   return text.replace(urlRegex, function (url) {
     return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="color: var(--link-color); text-decoration: underline;">${url}</a>`;
   });
 }
-function escAttr(s) { return String(s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+
 function shuffleArray(array) {
   const newArr = [...array];
   for (let i = newArr.length - 1; i > 0; i--) {
@@ -225,6 +222,18 @@ function initTimeline() {
     }
 
     ts.initialized = true;
+    
+    // Event delegation for clicks on points
+    container.addEventListener('click', e => {
+      const point = e.target.closest('.tl-point');
+      if (point) {
+        const vidId = point.dataset.id;
+        if (vidId) {
+          hideTimelineTooltip();
+          openVideo(vidId);
+        }
+      }
+    });
   }
 
   // Populate channel datalist
@@ -447,10 +456,10 @@ function renderTimelineView() {
     point.setAttribute("r", radius);
     point.setAttribute("class", `tl-point ${isMilestone ? 'milestone' : ''}`);
     point.setAttribute("fill", isMilestone ? "gold" : "var(--accent)");
+    point.setAttribute("data-id", v.id);
 
     point.onmouseenter = (e) => showTimelineTooltip(v, e);
     point.onmouseleave = hideTimelineTooltip;
-    point.onclick = () => openVideo(v.id);
 
     svg.appendChild(point);
   });
@@ -535,9 +544,7 @@ function hideTimelineTooltip() {
 // Expose functions to global scope
 window.renderTimeline = renderTimeline;
 window.getLocalVideoPath = getLocalVideoPath;
-window.escHtml = escHtml;
 window.linkify = linkify;
-window.escAttr = escAttr;
 window.shuffleArray = shuffleArray;
 window.downloadFile = downloadFile;
 window.setTimelineVideoType = setTimelineVideoType;

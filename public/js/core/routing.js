@@ -108,29 +108,38 @@ function showPage(name, pushToHistory = true) {
   }
   let targetPage = name;
   if (name === 'years') targetPage = 'overview';
-  if (name === 'sources' || name === 'videos' || name === 'ytpmv' || name === 'collabs') {
+  if (name === 'sources' || name === 'videos' || name === 'ytpmv' || name === 'collabs' || name === 'poopers') {
     appMode = name;
-    targetPage = 'videos';
+    targetPage = name === 'poopers' ? 'poopers' : 'videos';
     
     let title = 'Video Search';
     if (appMode === 'sources') title = 'Source Search';
     else if (appMode === 'ytpmv') title = 'YTPMV Search';
     else if (appMode === 'collabs') title = 'Collabs Search';
+    else if (appMode === 'poopers') title = 'Poopers Management';
     
-    document.getElementById('page-videos').querySelector('h2').textContent = title;
+    if (targetPage === 'videos') {
+      document.getElementById('page-videos').querySelector('h2').textContent = title;
+    }
 
     const tabV = document.getElementById('manager-tab-videos');
     const tabS = document.getElementById('manager-tab-sources');
     const tabM = document.getElementById('manager-tab-ytpmv');
     const tabC = document.getElementById('manager-tab-collabs');
+    const tabP = document.getElementById('manager-tab-poopers');
     
     if (tabV) tabV.classList.toggle('active', name === 'videos');
     if (tabS) tabS.classList.toggle('active', name === 'sources');
     if (tabM) tabM.classList.toggle('active', name === 'ytpmv');
     if (tabC) tabC.classList.toggle('active', name === 'collabs');
+    if (tabP) tabP.classList.toggle('active', name === 'poopers');
 
-    buildFilterOptions();
-    applyFilters();
+    if (targetPage === 'videos') {
+      buildFilterOptions();
+      applyFilters();
+    } else if (targetPage === 'poopers') {
+      renderPoopersTable();
+    }
   }
 
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -153,8 +162,20 @@ function showPage(name, pushToHistory = true) {
 
   if (name === 'timeline' && typeof initTimeline === 'function') {
     if (allVideos.length === 0) {
-      allVideos = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '')", [], dbYTP);
-      allSources = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '')", [], dbSources);
+      const dbs = [
+        { db: window.dbYTP, name: 'YTP' },
+        { db: window.dbYTPMV, name: 'YTPMV' },
+        { db: window.dbCollabs, name: 'Collabs' }
+      ];
+      let merged = [];
+      for (const item of dbs) {
+        if (item.db) {
+          const res = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '')", [], item.db);
+          merged = merged.concat(res);
+        }
+      }
+      allVideos = merged;
+      allSources = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '')", [], window.dbSources);
     }
     initTimeline();
   }

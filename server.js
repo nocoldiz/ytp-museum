@@ -36,7 +36,7 @@ const DB_MANAGER = path.join(__dirname, 'scripts', 'db_manager.py');
 function runDbCommand(command, args) {
   try {
     const argsJson = JSON.stringify(args);
-    const output = execSync(`python "${DB_MANAGER}" "${command}" '${argsJson.replace(/'/g, "'\\''")}'`, { encoding: 'utf8' });
+    const output = execSync(`python3 "${DB_MANAGER}" "${command}" '${argsJson.replace(/'/g, "'\\''")}'`, { encoding: 'utf8' });
     return JSON.parse(output);
   } catch (err) {
     console.error(`DB Command Error (${command}):`, err);
@@ -229,6 +229,23 @@ function onRequest(req, res) {
       try {
         const { playlistId, videoIds } = JSON.parse(body);
         const result = runDbCommand('add-to-playlist', { playlistId, videoIds });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+  
+  if (pathname === '/api/remove-channel' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const { channelUrl } = JSON.parse(body);
+        const result = runDbCommand('remove-channel', { channelUrl });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } catch (err) {

@@ -147,6 +147,64 @@ def import_videos(urls, target):
     conn.close()
     return {"success": True, "results": {"added": added, "skipped": skipped}}
 
+def remove_channel(channel_url):
+    deleted_videos = []
+    
+    # 1. Find all videos for this channel across all DBs
+    for db_type in ['ytp', 'sources', 'ytpmv', 'collabs']:
+        conn = get_conn(db_type)
+        conn.row_factory = sqlite3.Row
+        cursor = conn.cursor()
+        
+        # In some DBs we might have channel_url, in others just channel_name.
+        # But ytpoopers.db uses channel_url as PK.
+        # Let's try to match by channel_url first, then by channel_name if we can get it from poopers.db
+        
+        cursor.execute("SELECT id, local_file FROM videos WHERE channel_url = ?", (channel_url,))
+        videos = cursor.fetchall()
+        
+        # If no hits by URL, try by name (get name from poopers.db)
+        if not videos:
+            p_conn = get_conn('poopers')
+            p_cursor = p_conn.cursor()
+            p_cursor.execute("SELECT channel_name FROM channels WHERE channel_url = ?", (channel_url,))
+            row = p_cursor.fetchone()
+            p_conn.close()
+            if row:
+                name = row[0]
+                cursor.execute("SELECT id, local_file FROM videos WHERE channel_name = ?", (name,))
+                videos = cursor.fetchall()
+        
+        for v in videos:
+            vid_id = v['id']
+            local_file = v['local_file']
+            
+            # Delete local file
+            if local_file:
+                abs_path = os.path.join(os.getcwd(), local_file)
+                if os.path.exists(abs_path):
+                    try: os.remove(abs_path)
+                    except: pass
+            
+            # Delete from DB
+            cursor.execute("DELETE FROM videos WHERE id = ?", (vid_id,))
+            cursor.execute("DELETE FROM video_tags WHERE video_id = ?", (vid_id,))
+            cursor.execute("DELETE FROM video_sections WHERE video_id = ?", (vid_id,))
+            cursor.execute("DELETE FROM playlist_videos WHERE video_id = ?", (vid_id,))
+            deleted_videos.append(vid_id)
+            
+        conn.commit()
+        conn.close()
+        
+    # 2. Remove channel from ytpoopers.db
+    p_conn = get_conn('poopers')
+    p_cursor = p_conn.cursor()
+    p_cursor.execute("DELETE FROM channels WHERE channel_url = ?", (channel_url,))
+    p_conn.commit()
+    p_conn.close()
+    
+    return {"success": True, "deletedVideosCount": len(deleted_videos)}
+
 def set_language(video_ids, language):
     updated = []
     skipped = []
@@ -249,6 +307,8 @@ if __name__ == "__main__":
             print(json.dumps(add_videos_to_playlist(args['playlistId'], args['videoIds'])))
         elif command == "get-playlists":
             print(json.dumps(get_playlists()))
+        elif command == "remove-channel":
+            print(json.dumps(remove_channel(args['channelUrl'])))
         else:
             print(json.dumps({"success": False, "error": f"Unknown command: {command}"}))
     except Exception as e:

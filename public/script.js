@@ -1,3 +1,4 @@
+import { initI18n } from './js/core/i18n.js';
 import './js/core/state.js';
 import './js/core/db.js';
 import './js/pages/profiles.js';
@@ -17,6 +18,7 @@ import './js/pages/timeline.js';
 import './js/pages/saved.js';
 import './js/pages/playlists.js';
 import './js/pages/management.js';
+import './js/pages/poopers.js';
 
 // ─── INIT ─────────────────────────────────────────────────────────────────
 const ALLOWED_SECTIONS = new Set(["YTP nostrane", "YTP fai da te", "YTPMV dimportazione", "YTP da internet", "Internet", "Youtube", "Scraped Channel"]);
@@ -35,6 +37,7 @@ function resetFilters() {
 function initApp() {
   resetFilters();
   syncSearchLayout();
+  initI18n();
 
   document.getElementById('app').style.display = 'block';
 

@@ -56,3 +56,12 @@ window.fmtBig = fmtBig;
 window.timeAgo = timeAgo;
 window.getStatusEmoji = getStatusEmoji;
 window.getLanguageFlag = getLanguageFlag;
+
+function escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function escAttr(s) { return String(s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
+
+window.escHtml = escHtml;
+window.escAttr = escAttr;
