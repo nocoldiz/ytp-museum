@@ -256,6 +256,50 @@ function onRequest(req, res) {
     return;
   }
 
+  // ── API: Scrape Single Channel ───────────────────────────────────────────
+  if (pathname === '/api/scrape-channel' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const { channelUrl } = JSON.parse(body);
+        if (!channelUrl) throw new Error("channelUrl is required");
+        
+        res.writeHead(200, {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Transfer-Encoding': 'chunked',
+          'Connection': 'keep-alive'
+        });
+        
+        const { spawn } = require('child_process');
+        const scraperPath = path.join(__dirname, 'scripts', 'ytp_scraper.py');
+        const scraper = spawn('python3', [
+          scraperPath,
+          '--scrape-single-channel', channelUrl
+        ]);
+        
+        scraper.stdout.on('data', data => {
+          res.write(data);
+        });
+        
+        scraper.stderr.on('data', data => {
+          res.write(data);
+        });
+        
+        scraper.on('close', code => {
+          res.write(`\n[SCRAPE_END] Process exited with code ${code}\n`);
+          res.end();
+        });
+      } catch (err) {
+        if (!res.headersSent) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      }
+    });
+    return;
+  }
+
   // ── Local video files ─────────────────────────────────────────────────────
   if (pathname.startsWith('/local/')) {
     const rel = pathname.slice('/local/'.length)

@@ -1,6 +1,6 @@
 // ─── CHANNELS ─────────────────────────────────────────────────────────────
 function buildChannelData() {
-  const cacheKey = `channelData_${globalMaxYear}`;
+  const cacheKey = `channelData_${window.globalMaxYear}`;
   return getCachedQuery(cacheKey, () => {
     const sql = `
       SELECT 
@@ -15,7 +15,7 @@ function buildChannelData() {
       GROUP BY channel_name 
       ORDER BY videoCount DESC
     `;
-    const res = queryDB(sql, [globalMaxYear]);
+    const res = window.queryDB(sql, [window.globalMaxYear]);
     return res.map(r => ({
       ...r,
       videos: { length: r.videoCount } // Mock for backward compatibility
@@ -27,15 +27,21 @@ function renderChannelCard(c, mode = 'grid') {
   const name = (typeof c === 'string' ? c : c.name) || 'Unknown Channel';
   const avatar = getChannelAvatar(name);
 
-  let videosCount, viewsCount, url;
+  let videosCount = 0, viewsCount = 0, url;
   if (typeof c === 'string') {
-    const ytData = [...allVideos, ...allSources];
-    const chVideos = ytData.filter(v => v.channel_name === name);
-    videosCount = chVideos.length;
-    viewsCount = chVideos.reduce((s, v) => s + (v.view_count || 0), 0);
-    url = (chVideos.length > 0 && chVideos[0].channel_url) ? chVideos[0].channel_url : `https://www.youtube.com/${name && name.startsWith('@') ? name : '@' + name}`;
+    const dbs = [window.dbYTP, window.dbSources, window.dbYTPMV, window.dbCollabs];
+    for (const db of dbs) {
+      if (db) {
+        const res = window.queryDB("SELECT COUNT(*) as count, SUM(view_count) as views FROM videos WHERE channel_name = ?", [name], db);
+        if (res && res[0]) {
+          videosCount += (res[0].count || 0);
+          viewsCount += (res[0].views || 0);
+        }
+      }
+    }
+    url = `https://www.youtube.com/${name && name.startsWith('@') ? name : '@' + name}`;
   } else {
-    videosCount = c.videos ? c.videos.length : 0;
+    videosCount = c.videoCount || (c.videos ? c.videos.length : 0);
     viewsCount = c.totalViews || 0;
     url = c.url || `https://www.youtube.com/${name && name.startsWith('@') ? name : '@' + name}`;
   }

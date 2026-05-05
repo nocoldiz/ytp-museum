@@ -450,59 +450,52 @@
           <div class="spinner"></div>Loading stats...
         </div>
         <div class="stats-grid" id="overview-stats"></div>
-        <div class="charts-row cols2">
+        <div class="charts-row">
           <div class="chart-card box">
             <div class="box-header">Videos by Year</div>
             <div class="box-content">
               <canvas id="chart-year"></canvas>
             </div>
           </div>
-          <div class="chart-card box">
-            <div class="box-header">Status Breakdown</div>
-            <div class="box-content">
-              <canvas id="chart-status"></canvas>
+        </div>
+        <div id="top-views-table-container" class="box" style="margin-top: 20px; display: none;">
+          <div class="box-header">Global Top Videos by Views</div>
+          <div class="box-content">
+            <div class="table-wrap">
+              <table id="top-views-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Title</th>
+                    <th>Channel</th>
+                    <th>Views</th>
+                    <th>Likes</th>
+                  </tr>
+                </thead>
+                <tbody id="top-views-tbody"></tbody>
+              </table>
             </div>
           </div>
         </div>
-        <div class="charts-row cols2">
-          <div class="chart-card box">
-            <div class="box-header">Top 15 Channels by Video Count</div>
-            <div class="box-content">
-              <canvas id="chart-top-channels"></canvas>
-            </div>
-          </div>
-          <div class="chart-card box">
-            <div class="box-header">Videos per Section</div>
-            <div class="box-content">
-              <canvas id="chart-sections"></canvas>
-            </div>
-          </div>
-        </div>
-        <div class="charts-row cols3">
+        <div class="charts-row cols1">
           <div class="chart-card box">
             <div class="box-header">View Count Distribution</div>
             <div class="box-content">
               <canvas id="chart-views-dist"></canvas>
             </div>
           </div>
-          <div class="chart-card box">
-            <div class="box-header">Top 10 by Views</div>
-            <div class="box-content">
-              <canvas id="chart-top-views"></canvas>
-            </div>
-          </div>
-          <div class="chart-card box">
-            <div class="box-header">Top 10 by Likes</div>
-            <div class="box-content">
-              <canvas id="chart-top-likes"></canvas>
-            </div>
-          </div>
         </div>
         <div class="box" style="margin-top: 20px;">
           <div class="box-header">Archive by Year <span class="count-badge" id="years-count-label"></span></div>
           <div class="box-content">
-            <div id="year-detail-panel" style="display:none"></div>
             <div class="year-grid" id="year-grid"></div>
+          </div>
+        </div>
+
+        <!-- Year Detail Modal -->
+        <div id="year-modal" class="modal-overlay" style="display:none;">
+          <div class="modal-content" style="width: 90%; max-width: 1000px; max-height: 90vh; overflow-y: auto;">
+            <div id="year-modal-body"></div>
           </div>
         </div>
       </div>
@@ -576,15 +569,15 @@
             <option value="de">🇩🇪 German</option>
           </select>
           <input type="text" id="filter-channel" list="channel-datalist" placeholder="All channels"
-            oninput="applyFilters()">
+            onkeypress="if(event.key==='Enter')applyFilters()">
           <datalist id="channel-datalist"></datalist>
         </div>
         <div class="search-bar">
           <label>Views ≥</label>
-          <div class="range-group"><input type="number" id="filter-views-min" placeholder="0" oninput="applyFilters()">
+          <div class="range-group"><input type="number" id="filter-views-min" placeholder="0" onchange="applyFilters()">
           </div>
           <label>Likes ≥</label>
-          <div class="range-group"><input type="number" id="filter-likes-min" placeholder="0" oninput="applyFilters()">
+          <div class="range-group"><input type="number" id="filter-likes-min" placeholder="0" onchange="applyFilters()">
           </div>
           <label>Years:</label>
           <div class="range-group">
@@ -647,13 +640,13 @@
           <span class="count-badge" id="channels-count-label"></span>
         </div>
         <div class="search-bar">
-          <input type="text" id="channel-search" placeholder="Search channels..." oninput="renderChannelGrid()">
+          <input type="text" id="channel-search" placeholder="Search channels..." onkeypress="if(event.key==='Enter')renderChannelGrid()">
           <label>First Video ≥</label>
           <div class="range-group"><input type="number" id="channel-year-min" placeholder="YYYY"
-              oninput="renderChannelGrid()"></div>
+              onchange="renderChannelGrid()"></div>
           <label>First Video ≤</label>
           <div class="range-group"><input type="number" id="channel-year-max" placeholder="YYYY"
-              oninput="renderChannelGrid()"></div>
+              onchange="renderChannelGrid()"></div>
         </div>
         <div id="channel-detail-panel" style="display:none"></div>
         <div class="channel-grid" id="channel-grid"></div>
@@ -727,12 +720,13 @@
           <h2>Poopers Management</h2>
           <span class="count-badge" id="poopers-count-label"></span>
           <div style="margin-left: auto; display: flex; gap: 8px;">
+            <button class="btn-mgmt" onclick="openScrapeModal()" id="btn-scrape-channel" style="background:var(--accent); color:white; border:none;">Add & Scrape Channel</button>
             <button class="btn-mgmt" onclick="filterOrphanPoopers()" id="btn-filter-orphans">Filter Sources Only</button>
             <button class="btn-mgmt" onclick="location.reload()" style="background:var(--surface); opacity:0.8;">Refresh</button>
           </div>
         </div>
         <div class="search-bar">
-          <input type="text" id="pooper-search-input" placeholder="Search pooper name or URL..." oninput="renderPoopersTable()">
+          <input type="text" id="pooper-search-input" placeholder="Search pooper name or URL..." onkeypress="if(event.key==='Enter')renderPoopersTable()">
         </div>
         <div class="table-wrap">
           <table id="poopers-table">
@@ -744,10 +738,10 @@
                 <th>Types</th>
                 <th>Actions</th>
               </tr>
-            </thead>
             <tbody id="poopers-tbody"></tbody>
           </table>
         </div>
+        <div id="poopers-scroll-sentinel" style="height: 10px;"></div>
       </div>
 
       <!-- SECTIONS REMOVED -->
@@ -979,6 +973,32 @@
         <button class="btn-cancel" style="margin-right: auto; background: var(--unavailable); color: white;" onclick="forceRefreshDBs()">Force Refresh DBs</button>
         <button class="btn-cancel" onclick="closeSourcesModal()">Cancel</button>
         <button class="btn-submit" onclick="applySources()">Apply & Reload</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCRAPE CHANNEL MODAL -->
+  <div id="scrape-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-content" style="width: 500px;">
+      <div class="modal-header">
+        <h3>Add & Scrape Channel</h3>
+        <button onclick="closeScrapeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label>YouTube Channel URL:</label>
+        <input type="text" id="scrape-channel-url" placeholder="https://youtube.com/@..." style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-bottom: 10px;">
+        
+        <div id="scrape-progress-container" style="display:none; margin-top: 15px;">
+          <div style="font-size: 13px; font-weight: bold; margin-bottom: 5px;" id="scrape-status-text">Starting scrape...</div>
+          <div style="width: 100%; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; margin-bottom: 10px;">
+            <div id="scrape-progress-bar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.2s;"></div>
+          </div>
+          <textarea id="scrape-log" readonly style="width: 100%; height: 150px; background: var(--background); border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); font-size: 11px; padding: 8px; font-family: monospace; resize: none;"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closeScrapeModal()">Cancel</button>
+        <button class="btn-submit" id="btn-start-scrape" onclick="startScrapeChannel()">Start Scraping</button>
       </div>
     </div>
   </div>

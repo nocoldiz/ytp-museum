@@ -20,7 +20,7 @@ function tokenize(str) {
   if (!str) return [];
   // Normalize: lowercase, remove accents (NFKD), remove non-alphanumeric
   const normalized = str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-  return normalized.replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(/\s+/).filter(token => token.length > 0);
+  return normalized.replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(token => token.length > 0);
 }
 
 function levenshtein(a, b) {
@@ -158,7 +158,7 @@ function buildSearchClause(query, useOr = true) {
   if (!query) return { clause: "1", params: [] };
   
   // Use raw tokens for SQL to avoid normalization mismatches (like è vs e)
-  const rawTokens = query.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim().split(/\s+/).filter(t => t.length > 0);
+  const rawTokens = query.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(/\s+/).filter(t => t.length > 0);
   if (rawTokens.length === 0) return { clause: "1", params: [] };
 
   let clauses = [];
@@ -205,7 +205,7 @@ function performSearch(query) {
 
   const searchPage = document.getElementById('page-search');
   if (searchPage && !searchPage.classList.contains('active')) {
-    showPage('search');
+    window.showPage('search');
   }
 
   document.getElementById('search-query-display').textContent = query;
@@ -220,18 +220,18 @@ function performSearch(query) {
   const queryTokens = tokenize(query);
 
   // ── Search Channels ──────────────────────────────────────────────────
-  const scoredChannels = queryDB("SELECT channel_name as name FROM channels WHERE channel_name LIKE ? LIMIT 5", [queryPattern]);
+  const scoredChannels = window.queryDB("SELECT channel_name as name FROM channels WHERE channel_name LIKE ? LIMIT 5", [queryPattern]);
   const channelsSection = document.getElementById('search-channels-section');
   const channelsContainer = document.getElementById('search-channels-results');
   if (scoredChannels.length === 0) {
     if (channelsSection) channelsSection.style.display = 'none';
   } else {
     if (channelsSection) channelsSection.style.display = 'block';
-    channelsContainer.innerHTML = scoredChannels.map(({ name: c }) => renderChannelCard(c, 'search')).join('');
+    channelsContainer.innerHTML = scoredChannels.map(({ name: c }) => window.renderChannelCard(c, 'search')).join('');
   }
 
   // ── Search Playlists ──────────────────────────────────────────────────
-  const playlists = [...allPlaylists.local, ...allPlaylists.server];
+  const playlists = window.allPlaylists ? [...window.allPlaylists.local, ...window.allPlaylists.server] : [];
   const scoredPlaylists = playlists
     .filter(p => p.name.toLowerCase().includes(query.toLowerCase()))
     .slice(0, 4);
@@ -245,8 +245,8 @@ function performSearch(query) {
   } else {
     if (playlistsSection) playlistsSection.style.display = 'block';
     playlistsContainer.innerHTML = scoredPlaylists.map(p => {
-      const type = allPlaylists.local.some(lp => lp.id === p.id) ? 'local' : 'server';
-      return renderPlaylistCard(p, type, isOld ? 'list' : 'grid');
+      const type = window.allPlaylists.local.some(lp => lp.id === p.id) ? 'local' : 'server';
+      return window.renderPlaylistCard(p, type, isOld ? 'list' : 'grid');
     }).join('');
   }
 
@@ -272,28 +272,39 @@ function performSearch(query) {
     if (fLang !== 'any') { whereClauses.push("language = ?"); params.push(fLang); }
 
     if (!document.body.classList.contains('video-mode-all')) {
+      const maxYear = parseInt(window.globalMaxYear) || new Date().getFullYear();
       whereClauses.push("(CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL)");
-      params.push(parseInt(globalMaxYear));
+      params.push(maxYear);
     }
 
     let sql = "SELECT * FROM videos WHERE " + whereClauses.join(" AND ");
     console.log(`[Global Search] DB Query:`, sql, "Params:", params);
-    return queryDB(sql, params, db);
+    return window.queryDB(sql, params, db);
   };
 
   const videoDBs = [
-    { db: dbYTP, name: 'YTP' },
-    { db: dbYTPMV, name: 'YTPMV' },
-    { db: dbCollabs, name: 'Collabs' },
-    { db: dbSources, name: 'Other' }
+    { db: window.dbYTP, name: 'YTP' },
+    { db: window.dbYTPMV, name: 'YTPMV' },
+    { db: window.dbCollabs, name: 'Collabs' },
+    { db: window.dbSources, name: 'Other' }
   ];
 
   let merged = [];
   for (const item of videoDBs) {
     if (item.db) {
-      const results = buildVideoQuery(item.db);
-      merged = merged.concat(results);
+      try {
+        const results = buildVideoQuery(item.db);
+        merged = merged.concat(results);
+      } catch (e) {
+        console.error(`[Search] Error querying ${item.name}:`, e);
+      }
     }
+  }
+
+  // If we are in search mode, populate allVideos/allSources for components that need them
+  if (merged.length > 0 && (!window.allVideos || window.allVideos.length === 0)) {
+    window.allVideos = merged.filter(v => !v.id.includes('source')); // Heuristic
+    window.allSources = merged.filter(v => v.id.includes('source'));
   }
 
   // ── High-Precision Ranking ──────────────────────────────────────────
@@ -316,10 +327,10 @@ function performSearch(query) {
     return (b.view_count || 0) - (a.view_count || 0);
   });
 
-  filteredVideos = merged;
-  currentPage = 1;
-  renderSearchVideos(false);
-  setupSearchScrollObserver();
+  window.filteredVideos = merged;
+  window.currentPage = 1;
+  window.renderSearchVideos(false);
+  window.setupSearchScrollObserver();
 }
 
 let searchScrollObserver = null;
@@ -330,9 +341,9 @@ function setupSearchScrollObserver() {
 
   searchScrollObserver = new IntersectionObserver((entries) => {
     if (entries[0].isIntersecting) {
-      if (currentPage * PAGE_SIZE < filteredVideos.length) {
-        currentPage++;
-        renderSearchVideos(true);
+      if (window.currentPage * window.PAGE_SIZE < window.filteredVideos.length) {
+        window.currentPage++;
+        window.renderSearchVideos(true);
       }
     }
   }, { rootMargin: '400px' });
@@ -341,7 +352,7 @@ function setupSearchScrollObserver() {
 
 function renderSearchVideos(append = false) {
   const container = document.getElementById('search-videos-results');
-  const total = filteredVideos.length;
+  const total = window.filteredVideos.length;
   const countLabel = document.getElementById('search-count-label');
   if (countLabel) countLabel.textContent = `${total} videos found`;
 
@@ -357,9 +368,9 @@ function renderSearchVideos(append = false) {
     return;
   }
 
-  const start = (currentPage - 1) * PAGE_SIZE;
-  const slice = filteredVideos.slice(start, start + PAGE_SIZE);
-  const html = slice.map(v => renderVideoItem(v, typeof searchViewMode !== 'undefined' ? searchViewMode : 'list')).join('');
+  const start = (window.currentPage - 1) * window.PAGE_SIZE;
+  const slice = window.filteredVideos.slice(start, start + window.PAGE_SIZE);
+  const html = slice.map(v => window.renderVideoItem(v, typeof window.searchViewMode !== 'undefined' ? window.searchViewMode : 'list')).join('');
 
   if (append) container.insertAdjacentHTML('beforeend', html);
   else container.innerHTML = html;

@@ -185,6 +185,7 @@ async function initSQLite() {
     loadDB('ytpmv.db', SQL).then(db => {
       window.dbYTPMV = db;
       console.log("YTPMV database loaded in background.");
+      if (window.updateBadges) window.updateBadges();
     });
   }
   
@@ -192,6 +193,7 @@ async function initSQLite() {
     loadDB('collabs.db', SQL).then(db => {
       window.dbCollabs = db;
       console.log("Collabs database loaded in background.");
+      if (window.updateBadges) window.updateBadges();
     });
   }
 

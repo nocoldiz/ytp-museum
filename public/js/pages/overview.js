@@ -2,124 +2,144 @@
 const PALETTE = ['#6c63ff', '#ff6584', '#43e97b', '#f7971e', '#38f9d7', '#fa709a', '#fee140', '#30cfd0', '#a18fff', '#ffecd2'];
 const STATUS_COLORS = { available: '#43e97b', unavailable: '#ff6584', pending: '#f7971e', unknown: '#888' };
 
+function getStatsDBs() {
+  return [window.dbYTP, window.dbYTPMV, window.dbSources].filter(db => db);
+}
+
 function updateBadges() {
-  const totalVideos = queryDBRow("SELECT COUNT(*) as c FROM videos", [], dbYTP).c || 0;
-  const totalSources = queryDBRow("SELECT COUNT(*) as c FROM videos", [], dbSources).c || 0;
-  const totalYTPMV = queryDBRow("SELECT COUNT(*) as c FROM videos", [], dbYTPMV).c || 0;
-  const totalCollabs = queryDBRow("SELECT COUNT(*) as c FROM videos", [], dbCollabs).c || 0;
-  const totalChannels = queryDBRow("SELECT COUNT(*) as c FROM channels", [], dbPoopers).c || 0;
-  const totalYears = queryDBRow("SELECT COUNT(DISTINCT substr(publish_date, 1, 4)) as c FROM videos WHERE publish_date IS NOT NULL").c || 0;
+  const dbs = getStatsDBs();
+  let totalVideos = 0;
+  let totalYears = new Set();
+
+  dbs.forEach(db => {
+    totalVideos += queryDBRow("SELECT COUNT(*) as c FROM videos", [], db).c || 0;
+    const years = queryDB("SELECT DISTINCT substr(publish_date, 1, 4) as y FROM videos WHERE publish_date IS NOT NULL", [], db);
+    years.forEach(r => totalYears.add(r.y));
+  });
+
+  const totalChannels = queryDBRow("SELECT COUNT(*) as c FROM channels", [], window.dbPoopers).c || 0;
 
   const bV = document.getElementById('badge-videos');
   if (bV) bV.textContent = totalVideos;
-  const bS = document.getElementById('badge-sources');
-  if (bS) bS.textContent = totalSources;
   const bC = document.getElementById('badge-channels');
   if (bC) bC.textContent = totalChannels;
   const bY = document.getElementById('badge-years');
-  if (bY) bY.textContent = totalYears;
+  if (bY) bY.textContent = totalYears.size;
 }
 
 function buildOverview() {
-  const stats = queryDBRow(`
-    SELECT 
-      COUNT(*) as total,
-      SUM(CASE WHEN title IS NOT NULL THEN 1 ELSE 0 END) as withTitle,
-      SUM(CASE WHEN view_count IS NOT NULL THEN 1 ELSE 0 END) as withViewsCount,
-      SUM(view_count) as totalViews,
-      SUM(like_count) as totalLikes,
-      SUM(CASE WHEN local_file IS NULL THEN 1 ELSE 0 END) as available
-    FROM videos
-  `);
+  const dbs = getStatsDBs();
+  
+  let combinedStats = {
+    total: 0,
+    withTitle: 0,
+    withViewsCount: 0,
+    totalViews: 0,
+    totalLikes: 0,
+    available: 0
+  };
 
-  const total = stats.total || 1;
-  const withTitle = stats.withTitle || 0;
-  const withViewsCount = stats.withViewsCount || 0;
-  const totalViews = stats.totalViews || 0;
-  const totalLikes = stats.totalLikes || 0;
-  const available = stats.available || 0;
+  const yearsMap = {};
+  const channelsMap = {};
+  const buckets = { '1-100': 0, '100-1K': 0, '1K-10K': 0, '10K-100K': 0, '100K-1M': 0, '1M+': 0 };
+  let allTopViews = [];
 
-  const channelsCount = queryDBRow("SELECT COUNT(DISTINCT channel_name) as c FROM videos").c || 0;
-  const sectionsCount = queryDBRow("SELECT COUNT(*) as c FROM sections").c || 0;
+  dbs.forEach(db => {
+    const s = queryDBRow(`
+      SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN title IS NOT NULL THEN 1 ELSE 0 END) as withTitle,
+        SUM(CASE WHEN view_count IS NOT NULL AND view_count > 0 THEN 1 ELSE 0 END) as withViewsCount,
+        SUM(view_count) as totalViews,
+        SUM(like_count) as totalLikes,
+        SUM(CASE WHEN local_file IS NULL THEN 1 ELSE 0 END) as available
+      FROM videos
+    `, [], db);
+
+    combinedStats.total += s.total || 0;
+    combinedStats.withTitle += s.withTitle || 0;
+    combinedStats.withViewsCount += s.withViewsCount || 0;
+    combinedStats.totalViews += s.totalViews || 0;
+    combinedStats.totalLikes += s.totalLikes || 0;
+    combinedStats.available += s.available || 0;
+
+    // Years
+    queryDB("SELECT substr(publish_date, 1, 4) as y, COUNT(*) as c FROM videos WHERE publish_date IS NOT NULL GROUP BY y", [], db)
+      .forEach(r => { yearsMap[r.y] = (yearsMap[r.y] || 0) + r.c; });
+
+    // Channels
+    queryDB("SELECT channel_name, COUNT(*) as c FROM videos GROUP BY channel_name", [], db)
+      .forEach(r => { channelsMap[r.channel_name] = (channelsMap[r.channel_name] || 0) + r.c; });
+
+    // Distribution (Skipping 0 and NULL)
+    const d = queryDBRow(`
+      SELECT 
+        SUM(CASE WHEN view_count > 0 AND view_count < 100 THEN 1 ELSE 0 END) as v100,
+        SUM(CASE WHEN view_count >= 100 AND view_count < 1000 THEN 1 ELSE 0 END) as v1k,
+        SUM(CASE WHEN view_count >= 1000 AND view_count < 10000 THEN 1 ELSE 0 END) as v10k,
+        SUM(CASE WHEN view_count >= 10000 AND view_count < 100000 THEN 1 ELSE 0 END) as v100k,
+        SUM(CASE WHEN view_count >= 100000 AND view_count < 1000000 THEN 1 ELSE 0 END) as v1m,
+        SUM(CASE WHEN view_count >= 1000000 THEN 1 ELSE 0 END) as v1mp
+      FROM videos
+    `, [], db);
+    buckets['1-100'] += d.v100 || 0;
+    buckets['100-1K'] += d.v1k || 0;
+    buckets['1K-10K'] += d.v10k || 0;
+    buckets['10K-100K'] += d.v100k || 0;
+    buckets['100K-1M'] += d.v1m || 0;
+    buckets['1M+'] += d.v1mp || 0;
+
+    // Top Lists (Combined)
+    allTopViews = allTopViews.concat(queryDB("SELECT * FROM videos WHERE view_count IS NOT NULL ORDER BY view_count DESC LIMIT 20", [], db));
+  });
+
+  const total = combinedStats.total || 1;
+  const withTitle = combinedStats.withTitle;
+  const withViewsCount = combinedStats.withViewsCount;
+  const totalViews = combinedStats.totalViews;
+  const totalLikes = combinedStats.totalLikes;
+  const available = combinedStats.available;
+
+  const channelsCount = Object.keys(channelsMap).length;
 
   document.getElementById('overview-stats').innerHTML = [
     { label: 'Total Videos', value: fmtNum(total), sub: `${withTitle} with metadata` },
-    { label: 'Unique Channels', value: fmtNum(channelsCount), sub: `across archive` },
+    { label: 'Unique Channels', value: fmtNum(channelsCount), sub: `across combined databases` },
     { label: 'Total Views', value: fmtBig(totalViews), sub: `${withViewsCount} videos with data` },
     { label: 'Total Likes', value: fmtBig(totalLikes), sub: '' },
     { label: 'Available', value: fmtNum(available), sub: `${Math.round(available / total * 100)}% of archive` },
     { label: 'Avg Views', value: withViewsCount ? fmtBig(Math.round(totalViews / withViewsCount)) : '-', sub: 'per video (w/ data)' },
   ].map(c => `<div class="stat-card"><div class="label">${c.label}</div><div class="value">${c.value}</div><div class="sub">${c.sub}</div></div>`).join('');
 
+  // Top Views Table
+  const topViewsMerged = allTopViews.sort((a, b) => b.view_count - a.view_count).slice(0, 15);
+  const tableContainer = document.getElementById('top-views-table-container');
+  if (topViewsMerged.length > 0 && tableContainer) {
+    tableContainer.style.display = 'block';
+    document.getElementById('top-views-tbody').innerHTML = topViewsMerged.map((v, i) => `
+      <tr>
+        <td style="color:var(--text-muted)">${i + 1}</td>
+        <td><a href="#" onclick="openVideo('${v.id}'); return false;" style="color:var(--text); font-weight: 500;">${escHtml(v.title || v.id)}</a></td>
+        <td><a href="#" onclick="showProfile('${escHtml(v.channel_name)}'); return false;" style="color:var(--accent); font-size: 13px;">${escHtml(v.channel_name)}</a></td>
+        <td class="num" style="font-weight: 600;">${fmtNum(v.view_count)}</td>
+        <td class="num" style="color:var(--text-muted);">${fmtNum(v.like_count)}</td>
+      </tr>`).join('');
+  }
+
   // Videos by year
-  const yearRes = queryDB("SELECT substr(publish_date, 1, 4) as y, COUNT(*) as c FROM videos WHERE publish_date IS NOT NULL GROUP BY y ORDER BY y ASC");
-  const years = yearRes.map(r => r.y);
-  makeChart('chart-year', 'bar', years, [{
-    label: 'Videos', data: yearRes.map(r => r.c),
-    backgroundColor: years.map((_, i) => PALETTE[i % PALETTE.length] + 'bb'),
+  const sortedYears = Object.keys(yearsMap).sort();
+  makeChart('chart-year', 'bar', sortedYears, [{
+    label: 'Videos', data: sortedYears.map(y => yearsMap[y]),
+    backgroundColor: sortedYears.map((_, i) => PALETTE[i % PALETTE.length] + 'bb'),
     borderRadius: 6
   }], chartOpts(''));
 
-  // Status doughnut
-  const statusRes = queryDB("SELECT (CASE WHEN local_file IS NOT NULL THEN 'downloaded' ELSE 'available' END) as status, COUNT(*) as c FROM videos GROUP BY status");
-  const statusLabels = statusRes.map(r => r.status || 'unknown');
-  makeChart('chart-status', 'doughnut',
-    statusLabels,
-    [{ data: statusRes.map(r => r.c), backgroundColor: statusLabels.map(s => STATUS_COLORS[s] || '#888'), borderWidth: 0 }],
-    pieOpts());
-
-  // Top channels
-  const topChRes = queryDB("SELECT channel_name, COUNT(*) as c FROM videos GROUP BY channel_name ORDER BY c DESC LIMIT 15");
-  makeChart('chart-top-channels', 'bar', topChRes.map(c => c.channel_name), [{
-    label: 'Videos', data: topChRes.map(c => c.c),
-    backgroundColor: PALETTE[0] + 'bb', borderRadius: 4
-  }], { ...chartOpts(''), indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: gridScales().x, y: { ...gridScales().y, ticks: { color: '#8892b0', font: { size: 10 } } } } });
-
-  // Sections bar
-  const topSecRes = queryDB("SELECT s.name, COUNT(*) as c FROM sections s JOIN video_sections vs ON s.id = vs.section_id JOIN videos v ON vs.video_id = v.id GROUP BY s.name ORDER BY c DESC");
-  makeChart('chart-sections', 'bar', topSecRes.map(s => s.name), [{
-    label: 'Videos', data: topSecRes.map(s => s.c),
-    backgroundColor: PALETTE[1] + 'bb', borderRadius: 4
-  }], { ...chartOpts(''), indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: gridScales().x, y: { ...gridScales().y, ticks: { color: '#8892b0', font: { size: 10 } } } } });
-
-  // Views distribution
-  const distRes = queryDBRow(`
-    SELECT 
-      SUM(CASE WHEN view_count IS NULL THEN 1 ELSE 0 END) as v0,
-      SUM(CASE WHEN view_count < 100 THEN 1 ELSE 0 END) as v100,
-      SUM(CASE WHEN view_count >= 100 AND view_count < 1000 THEN 1 ELSE 0 END) as v1k,
-      SUM(CASE WHEN view_count >= 1000 AND view_count < 10000 THEN 1 ELSE 0 END) as v10k,
-      SUM(CASE WHEN view_count >= 10000 AND view_count < 100000 THEN 1 ELSE 0 END) as v100k,
-      SUM(CASE WHEN view_count >= 100000 AND view_count < 1000000 THEN 1 ELSE 0 END) as v1m,
-      SUM(CASE WHEN view_count >= 1000000 THEN 1 ELSE 0 END) as v1mp
-    FROM videos
-  `);
-  const buckets = { '0': distRes.v0, '1-100': distRes.v100, '100-1K': distRes.v1k, '1K-10K': distRes.v10k, '10K-100K': distRes.v100k, '100K-1M': distRes.v1m, '1M+': distRes.v1mp };
-
+  // Views distribution (Combined & Filtered)
   makeChart('chart-views-dist', 'doughnut', Object.keys(buckets), [{
     data: Object.values(buckets),
     backgroundColor: PALETTE, borderWidth: 0
   }], pieOpts());
-
-  // Top by views
-  const topViews = queryDB("SELECT * FROM videos WHERE view_count IS NOT NULL ORDER BY view_count DESC LIMIT 10");
-  if (topViews.length > 0) {
-    makeChart('chart-top-views', 'bar',
-      topViews.map(v => (v.title || v.id).slice(0, 25) + '…'),
-      [{ label: 'Views', data: topViews.map(v => v.view_count), backgroundColor: PALETTE[2] + 'bb', borderRadius: 4 }],
-      { ...chartOpts(''), indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ...gridScales().x, ticks: { callback: v => fmtBig(v), color: '#8892b0' } }, y: { ...gridScales().y, ticks: { color: '#8892b0', font: { size: 9 } } } } });
-  }
-
-  // Top by likes
-  const topLikes = queryDB("SELECT * FROM videos WHERE like_count IS NOT NULL ORDER BY like_count DESC LIMIT 10");
-  if (topLikes.length > 0) {
-    makeChart('chart-top-likes', 'bar',
-      topLikes.map(v => (v.title || v.id).slice(0, 25) + '…'),
-      [{ label: 'Likes', data: topLikes.map(v => v.like_count), backgroundColor: PALETTE[3] + 'bb', borderRadius: 4 }],
-      { ...chartOpts(''), indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { ...gridScales().x, ticks: { callback: v => fmtBig(v), color: '#8892b0' } }, y: { ...gridScales().y, ticks: { color: '#8892b0', font: { size: 9 } } } } });
-  }
 }
-
 
 // Expose functions to global scope
 window.updateBadges = updateBadges;

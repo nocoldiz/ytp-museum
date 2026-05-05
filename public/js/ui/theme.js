@@ -58,17 +58,17 @@ function onGlobalSearchInput() {
     const channels = queryDB("SELECT channel_name as text FROM channels WHERE channel_name LIKE ? LIMIT 5", [qp]);
 
     // Search video titles across all active databases
-    const videoDBs = [dbYTP, dbSources, dbYTPMV, dbCollabs];
-    let allVideos = [];
+    const videoDBs = [window.dbYTP, window.dbSources, window.dbYTPMV, window.dbCollabs];
+    let allVideosList = [];
     for (const db of videoDBs) {
       if (db) {
-        const results = queryDB("SELECT title as text FROM videos WHERE title LIKE ? LIMIT 10", [qp], db);
-        allVideos = allVideos.concat(results);
+        const results = window.queryDB("SELECT title as text FROM videos WHERE title LIKE ? LIMIT 10", [qp], db);
+        allVideosList = allVideosList.concat(results);
       }
     }
     
     // Sort combined videos and limit to top 10
-    const videos = allVideos.slice(0, 10);
+    const videos = allVideosList.slice(0, 10);
 
     let results = [
       ...channels.map(c => ({ ...c, type: 'channel' })),

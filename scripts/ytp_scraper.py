@@ -2215,10 +2215,13 @@ def do_random_video_scrape(index):
     print(f"\n  Random Video Search Scraping Complete. Added {total_added} new videos.")
 
 
-def do_scrape_channels(index, ignore_sources=False):
+def do_scrape_channels(index, ignore_sources=False, specific_channels=None):
     """Scans channels from ytpoopers.db for new YTP videos matching keywords."""
     
-    channels_to_scrape = set(get_all_registered_channels(index))
+    if specific_channels:
+        channels_to_scrape = set(specific_channels)
+    else:
+        channels_to_scrape = set(get_all_registered_channels(index))
     
     total_channels = len(channels_to_scrape)
     print(f"  Found {total_channels} channel(s) to scrape.")
@@ -2300,6 +2303,41 @@ def do_scrape_channels(index, ignore_sources=False):
             print(f"    [!] Error scraping {ch_url}: {e}")
 
     print(f"\n  Finished scraping channels. Added {new_total} new videos to the index.")
+
+def do_scrape_single_channel(index, ch_url, docs_dir, video_dir):
+    print(f"\n--- Scraping Single Channel: {ch_url} ---")
+    
+    # Check ytpoopers.db
+    conn = index.get_conn('poopers')
+    c = conn.cursor()
+    c.execute("SELECT channel_url FROM channels WHERE channel_url = ?", (ch_url,))
+    row = c.fetchone()
+    if not row:
+        print(f"  Adding {ch_url} to ytpoopers.db...")
+        c.execute("INSERT INTO channels (channel_url) VALUES (?)", (ch_url,))
+        conn.commit()
+    conn.close()
+
+    # Need to reload channels cache in index if there is one
+    # Assuming get_all_registered_channels reads from db, it should be fine.
+
+    # 1. Scrape videos
+    print("\n  [1/3] Scraping Videos...")
+    do_scrape_channels(index, ignore_sources=False, specific_channels=[ch_url])
+
+    # 2. Scrape profile
+    print("\n  [2/3] Scraping Profile...")
+    # Add to channel_map if it's new
+    index.data['temp_vid_for_channel'] = {'channel_url': ch_url, 'channel_name': 'Unknown'}
+    do_scrape_profiles(index, docs_dir, specific_channels=[ch_url])
+    if 'temp_vid_for_channel' in index.data:
+        del index.data['temp_vid_for_channel']
+
+    print("\n  [3/3] Fetching latest metadata...")
+    print("  (Comments scraping omitted to save time; run global comment scrape if needed)")
+
+    print("\n--- Single Channel Scraping Complete ---")
+
 def do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, limit_channels=None, language_filter=None):
     if retry_failed:
         for e in index.data.values():
@@ -3381,9 +3419,9 @@ def do_auto_languages(index):
     index.save()
 
 
-def do_scrape_profiles(index, docs_dir):
+def do_scrape_profiles(index, docs_dir, specific_channels=None):
     """Scrape channel profiles (name, description, thumbnail, subscribers, date) for all unique channels."""
-    if not index.data:
+    if not index.data and not specific_channels:
         print("  Index is empty. Run 'Update index' first.")
         return
 
@@ -3418,6 +3456,14 @@ def do_scrape_profiles(index, docs_dir):
     print()
 
     scraped = skipped = failed = 0
+
+    if 'specific_channels' in locals() and specific_channels:
+        # Filter channel_map to only include specific_channels
+        channel_map = {k: v for k, v in channel_map.items() if k in specific_channels}
+        total = len(channel_map)
+        if total == 0:
+            print("  No matching specific channels found to scrape profile.")
+            return
 
     for i, (ch_url, ch_name) in enumerate(channel_map.items(), 1):
         pct = i / total * 100
@@ -3862,6 +3908,8 @@ def main():
                    help="Scrape channel profiles")
     p.add_argument("--download-italian", action="store_true",
                    help="Run option 4 with language 1 (Italian) and exit")
+    p.add_argument("--scrape-single-channel", metavar="URL",
+                   help="Scrape a specific channel URL and exit")
     p.add_argument("--forum-scrape",    action="store_true",
                    help="Analyze every folder in site_mirror and sort videos")
     p.add_argument("--year-limit",      type=int, default=2016,
@@ -3880,7 +3928,7 @@ def main():
         print(f"[!] site_dir not found: {args.site_dir}")
         sys.exit(1)
 
-    if args.stats or args.chronology or args.dump_poopers or args.find_mirrors or args.scrape_comments or args.scrape_profiles or args.download_italian or args.forum_scrape or args.resort or args.cleanup_other_db:
+    if args.stats or args.chronology or args.dump_poopers or args.find_mirrors or args.scrape_comments or args.scrape_profiles or args.download_italian or args.forum_scrape or args.resort or args.cleanup_other_db or args.scrape_single_channel:
         index = VideoIndex(args.video_dir, args.docs_dir)
         index.load()
         if args.stats:
@@ -3904,6 +3952,8 @@ def main():
             index.resort_videos()
         if args.cleanup_other_db:
             do_cleanup_other_db(index)
+        if args.scrape_single_channel:
+            do_scrape_single_channel(index, args.scrape_single_channel, args.public_dir, args.video_dir)
         
         # No migration needed for SQL version
         pass

@@ -1,7 +1,14 @@
 // ─── YEARS ────────────────────────────────────────────────────────────────
 let selectedYear = null;
 
+function getStatsDBs() {
+  return [window.dbYTP, window.dbYTPMV, window.dbSources].filter(db => db);
+}
+
 function buildYearData() {
+  const dbs = getStatsDBs();
+  const yearsMap = {};
+
   const sql = `
     SELECT 
       substr(publish_date, 1, 4) as year, 
@@ -11,12 +18,23 @@ function buildYearData() {
     FROM videos 
     WHERE publish_date IS NOT NULL AND CAST(substr(publish_date, 1, 4) AS INTEGER) <= ?
     GROUP BY year 
-    ORDER BY year ASC
   `;
-  const res = queryDB(sql, [globalMaxYear]);
-  return res.map(r => ({
-    ...r,
-    videos: { length: r.videoCount } // Mock for backward compatibility
+
+  dbs.forEach(db => {
+    const res = queryDB(sql, [globalMaxYear], db);
+    res.forEach(r => {
+      if (!yearsMap[r.year]) {
+        yearsMap[r.year] = { year: r.year, videoCount: 0, totalViews: 0, totalLikes: 0 };
+      }
+      yearsMap[r.year].videoCount += r.videoCount || 0;
+      yearsMap[r.year].totalViews += r.totalViews || 0;
+      yearsMap[r.year].totalLikes += r.totalLikes || 0;
+    });
+  });
+
+  return Object.keys(yearsMap).sort().map(y => ({
+    ...yearsMap[y],
+    videos: { length: yearsMap[y].videoCount }
   }));
 }
 
@@ -35,85 +53,88 @@ function renderYearGrid() {
 }
 
 function selectYear(year) {
-  selectedYear = selectedYear === year ? null : year;
-  renderYearGrid();
-  const panel = document.getElementById('year-detail-panel');
-  if (!selectedYear) { panel.style.display = 'none'; return; }
+  selectedYear = year;
+  const modal = document.getElementById('year-modal');
+  const modalBody = document.getElementById('year-modal-body');
+  if (!modal || !modalBody) return;
 
   const allYears = buildYearData();
   const yd = allYears.find(y => y.year === year);
   if (!yd) return;
 
-  const videosRes = queryDB("SELECT * FROM videos WHERE substr(publish_date, 1, 4) = ?", [year]);
-  const videos = videosRes;
-
-  // Most prolific creator
-  const topCreatorsRes = queryDB("SELECT channel_name, COUNT(*) as c FROM videos WHERE substr(publish_date, 1, 4) = ? GROUP BY channel_name ORDER BY c DESC LIMIT 10", [year]);
-  const topCreators = topCreatorsRes.map(r => [r.channel_name, r.c]);
-  const topCreator = topCreators[0];
-
-  // Tag frequency
-  const tagCountsRes = queryDB(`
-    SELECT t.name, COUNT(*) as c 
-    FROM tags t 
-    JOIN video_tags vt ON t.id = vt.tag_id 
-    JOIN videos v ON vt.video_id = v.id 
-    WHERE substr(v.publish_date, 1, 4) = ? 
-    GROUP BY t.name 
-    ORDER BY c DESC 
-    LIMIT 60
-  `, [year]);
-  const TAG_BLOCKLIST = new Set(["poop", "youtube", "ytp", "ita", "merda", "youtube merda", "ytp ita", "ytpmv", "youtube merda"]);
-  const topTags = tagCountsRes.filter(r => !TAG_BLOCKLIST.has(r.name.toLowerCase())).map(r => [r.name, r.c]);
-
-  // Status counts
-  const statusCountRes = queryDB("SELECT (CASE WHEN local_file IS NOT NULL THEN 'downloaded' ELSE 'available' END) as status, COUNT(*) as c FROM videos WHERE (CAST(substr(publish_date, 1, 4) AS INTEGER) = ?) GROUP BY status", [year]);
-  const statusCount = {};
-  statusCountRes.forEach(r => statusCount[r.status] = r.c);
-
-  // Monthly breakdown
-  const byMonthRes = queryDB("SELECT substr(publish_date, 6, 2) as m, COUNT(*) as c FROM videos WHERE substr(publish_date, 1, 4) = ? GROUP BY m", [year]);
+  const dbs = getStatsDBs();
+  const creatorsMap = {};
+  const tagsMap = {};
   const byMonth = Array(12).fill(0);
-  byMonthRes.forEach(r => {
-    const m = parseInt(r.m, 10);
-    if (m >= 1 && m <= 12) byMonth[m - 1] = r.c;
-  });
-  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  let allByViews = [];
+  let allByLikes = [];
 
-  // Top videos by views & likes
-  const allByViews = queryDB("SELECT * FROM videos WHERE substr(publish_date, 1, 4) = ? AND view_count IS NOT NULL ORDER BY view_count DESC", [year]);
-  const allByLikes = queryDB("SELECT * FROM videos WHERE substr(publish_date, 1, 4) = ? AND like_count IS NOT NULL ORDER BY like_count DESC", [year]);
+  dbs.forEach(db => {
+    // Creators
+    queryDB("SELECT channel_name, COUNT(*) as c FROM videos WHERE substr(publish_date, 1, 4) = ? GROUP BY channel_name", [year], db)
+      .forEach(r => { creatorsMap[r.channel_name] = (creatorsMap[r.channel_name] || 0) + r.c; });
+
+    // Tags
+    queryDB(`
+      SELECT t.name, COUNT(*) as c 
+      FROM tags t 
+      JOIN video_tags vt ON t.id = vt.tag_id 
+      JOIN videos v ON vt.video_id = v.id 
+      WHERE substr(v.publish_date, 1, 4) = ? 
+      GROUP BY t.name
+    `, [year], db).forEach(r => { tagsMap[r.name] = (tagsMap[r.name] || 0) + r.c; });
+
+    // Monthly
+    queryDB("SELECT substr(publish_date, 6, 2) as m, COUNT(*) as c FROM videos WHERE substr(publish_date, 1, 4) = ? GROUP BY m", [year], db)
+      .forEach(r => {
+        const m = parseInt(r.m, 10);
+        if (m >= 1 && m <= 12) byMonth[m - 1] += r.c;
+      });
+
+    // Top Lists
+    allByViews = allByViews.concat(queryDB("SELECT * FROM videos WHERE substr(publish_date, 1, 4) = ? AND view_count IS NOT NULL ORDER BY view_count DESC LIMIT 20", [year], db));
+    allByLikes = allByLikes.concat(queryDB("SELECT * FROM videos WHERE substr(publish_date, 1, 4) = ? AND like_count IS NOT NULL ORDER BY like_count DESC LIMIT 20", [year], db));
+  });
+
+  const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  
+  const TAG_BLOCKLIST = new Set(["poop", "youtube", "ytp", "ita", "merda", "youtube merda", "ytp ita", "ytpmv", "youtube merda"]);
+  const topTags = Object.entries(tagsMap)
+    .filter(([name]) => !TAG_BLOCKLIST.has(name.toLowerCase()))
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 60);
+
+  const topCreators = Object.entries(creatorsMap).sort((a, b) => b[1] - a[1]);
+
+  allByViews.sort((a, b) => b.view_count - a.view_count);
+  allByLikes.sort((a, b) => b.like_count - a.like_count);
+  
   window._yrViews = allByViews;
   window._yrLikes = allByLikes;
   const topByViews = allByViews.slice(0, 5);
-  const topByLikes = allByLikes.slice(0, 5);
+  const topByLikes = allByLikes.slice(0, 15);
 
-  // Unique channels
-  const uniqCh = queryDBRow("SELECT COUNT(DISTINCT channel_name) as c FROM videos WHERE substr(publish_date, 1, 4) = ?", [year]).c || 0;
+  const uniqCh = Object.keys(creatorsMap).length;
 
-  panel.style.display = 'block';
-  panel.innerHTML = `
+  modal.style.display = 'flex';
+  modalBody.innerHTML = `
   <div class="year-detail">
-    <div class="year-detail-header">
-      <h2>${year}</h2>
-      <div class="year-kpis">
-        <div class="year-kpi"><span class="kv">${yd.videos.length}</span><span class="kl">Videos</span></div>
-        <div class="year-kpi"><span class="kv">${fmtBig(yd.totalViews)}</span><span class="kl">Total Views</span></div>
-        <div class="year-kpi"><span class="kv">${fmtBig(yd.totalLikes)}</span><span class="kl">Total Likes</span></div>
-        <div class="year-kpi"><span class="kv">${uniqCh}</span><span class="kl">Channels</span></div>
-        ${topCreator ? `<div class="year-kpi"><span class="kv" style="font-size:1rem">${escHtml(topCreator[0])}</span><span class="kl">Top Creator (${topCreator[1]} videos)</span></div>` : ''}
-      </div>
-      <button class="close-btn" onclick="selectedYear=null;document.getElementById('year-detail-panel').style.display='none';renderYearGrid()">✕ Close</button>
+    <div class="year-detail-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 15px; margin-bottom: 20px;">
+      <h2 style="margin:0; font-size: 2rem; color: var(--accent);">${year} Archive</h2>
+      <button class="close-btn" onclick="document.getElementById('year-modal').style.display='none'" style="background: none; border: none; color: var(--text-muted); font-size: 24px; cursor: pointer;">✕</button>
+    </div>
+    
+    <div class="year-kpis" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-bottom: 30px;">
+      <div class="year-kpi"><span class="kv">${yd.videos.length}</span><span class="kl">Videos</span></div>
+      <div class="year-kpi"><span class="kv">${fmtBig(yd.totalViews)}</span><span class="kl">Total Views</span></div>
+      <div class="year-kpi"><span class="kv">${fmtBig(yd.totalLikes)}</span><span class="kl">Total Likes</span></div>
+      <div class="year-kpi"><span class="kv">${uniqCh}</span><span class="kl">Channels</span></div>
     </div>
 
-    <div class="year-charts-grid">
+    <div class="year-charts-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
       <div class="chart-card box">
         <div class="box-header">Videos per Month</div>
         <div class="box-content"><canvas id="yr-month-chart" style="max-height:200px"></canvas></div>
-      </div>
-      <div class="chart-card box">
-        <div class="box-header">Status Breakdown</div>
-        <div class="box-content"><canvas id="yr-status-chart" style="max-height:200px"></canvas></div>
       </div>
       <div class="chart-card box">
         <div class="box-header">Top Creators</div>
@@ -122,53 +143,64 @@ function selectYear(year) {
     </div>
 
     ${topTags.length ? `
-    <div class="chart-card" style="margin-bottom:18px">
-      <h3>Tag Cloud <span style="font-size:.75rem;color:var(--text-muted);text-transform:none;letter-spacing:0">(${topTags.length} unique tags)</span></h3>
-      <div class="tag-cloud-wrap" id="yr-tag-cloud"></div>
+    <div class="chart-card box" style="margin-bottom:30px">
+      <div class="box-header">Tag Cloud <span style="font-size:.75rem;color:var(--text-muted);text-transform:none;letter-spacing:0">(${topTags.length} unique tags)</span></div>
+      <div class="box-content">
+        <div class="tag-cloud-wrap" id="yr-tag-cloud"></div>
+      </div>
     </div>` : ''}
 
-    <div class="charts-row cols2" style="margin-bottom:0">
-      ${allByViews.length ? `
-      <div class="chart-card box top-videos-year">
-        <div class="box-header">Top by Views <span style="font-size:.75rem;color:var(--text-muted);text-transform:none;letter-spacing:0">(${allByViews.length} total)</span></div>
-        <div class="box-content">
-          <div class="table-wrap"><table>
-            <thead><tr><th>#</th><th>Title</th><th>Views</th></tr></thead>
-            <tbody id="yr-views-tbody">${yrTableRows(topByViews, 'view_count')}</tbody>
-          </table></div>
-          ${allByViews.length > 5 ? `<div style="text-align:center;margin-top:10px"><button class="src-expand-btn" id="yr-views-btn" onclick="expandYearTable('views')">Show all ${allByViews.length} ▼</button></div>` : ''}
+    <div class="box" style="margin-bottom:30px">
+      <div class="box-header">Top by Likes of ${year}</div>
+      <div class="box-content">
+        <div class="table-wrap">
+          <table style="width:100%">
+            <thead><tr><th>#</th><th>Title</th><th>Channel</th><th>Likes</th><th>Views</th></tr></thead>
+            <tbody id="yr-likes-tbody">
+              ${topByLikes.map((v, i) => `
+                <tr>
+                  <td style="color:var(--text-muted)">${i + 1}</td>
+                  <td><a href="#" onclick="openVideo('${v.id}'); return false;" style="color:var(--text); text-decoration:none; font-weight:500;">${escHtml(v.title || v.id)}</a></td>
+                  <td><a href="#" onclick="showProfile('${escHtml(v.channel_name)}'); return false;" style="color:var(--accent); font-size:0.9rem;">${escHtml(v.channel_name)}</a></td>
+                  <td class="num" style="font-weight:bold">${fmtNum(v.like_count)}</td>
+                  <td class="num" style="color:var(--text-muted)">${fmtNum(v.view_count)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
         </div>
-      </div>` : ''}
-      ${allByLikes.length ? `
-      <div class="chart-card box top-videos-year">
-        <div class="box-header">Top by Likes <span style="font-size:.75rem;color:var(--text-muted);text-transform:none;letter-spacing:0">(${allByLikes.length} total)</span></div>
-        <div class="box-content">
-          <div class="table-wrap"><table>
-            <thead><tr><th>#</th><th>Title</th><th>Likes</th></tr></thead>
-            <tbody id="yr-likes-tbody">${yrTableRows(topByLikes, 'like_count')}</tbody>
-          </table></div>
-          ${allByLikes.length > 5 ? `<div style="text-align:center;margin-top:10px"><button class="src-expand-btn" id="yr-likes-btn" onclick="expandYearTable('likes')">Show all ${allByLikes.length} ▼</button></div>` : ''}
+      </div>
+    </div>
+
+    <div class="box">
+      <div class="box-header">Top by Views of ${year}</div>
+      <div class="box-content">
+        <div class="table-wrap">
+          <table style="width:100%">
+            <thead><tr><th>#</th><th>Title</th><th>Channel</th><th>Views</th></tr></thead>
+            <tbody id="yr-views-tbody">
+              ${topByViews.map((v, i) => `
+                <tr>
+                  <td style="color:var(--text-muted)">${i + 1}</td>
+                  <td><a href="#" onclick="openVideo('${v.id}'); return false;" style="color:var(--text); text-decoration:none; font-weight:500;">${escHtml(v.title || v.id)}</a></td>
+                  <td><a href="#" onclick="showProfile('${escHtml(v.channel_name)}'); return false;" style="color:var(--accent); font-size:0.9rem;">${escHtml(v.channel_name)}</a></td>
+                  <td class="num" style="font-weight:bold">${fmtNum(v.view_count)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
         </div>
-      </div>` : ''}
+      </div>
     </div>
   </div>`;
 
   setTimeout(() => {
-    destroyChart('yr-month'); destroyChart('yr-status'); destroyChart('yr-creators');
+    destroyChart('yr-month'); destroyChart('yr-creators');
 
     charts['yr-month'] = new Chart(document.getElementById('yr-month-chart'), {
       type: 'bar',
       data: { labels: MONTHS, datasets: [{ label: 'Videos', data: byMonth, backgroundColor: PALETTE[2] + 'cc', borderRadius: 5 }] },
       options: chartOpts('')
-    });
-
-    charts['yr-status'] = new Chart(document.getElementById('yr-status-chart'), {
-      type: 'doughnut',
-      data: {
-        labels: Object.keys(statusCount),
-        datasets: [{ data: Object.values(statusCount), backgroundColor: Object.keys(statusCount).map(s => STATUS_COLORS[s] || '#888'), borderWidth: 0 }]
-      },
-      options: pieOpts()
     });
 
     const topCrSlice = topCreators.slice(0, 10);
@@ -197,6 +229,7 @@ function selectYear(year) {
     }
   }, 50);
 }
+
 
 
 function yrTableRows(videos, field) {
