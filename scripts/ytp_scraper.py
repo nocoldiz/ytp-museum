@@ -1736,6 +1736,81 @@ def fetch_yt_metadata(video_id):
     return None
 
 
+def fetch_yt_metadata_batch(video_ids):
+    """
+    Run yt-dlp --dump-json for multiple video IDs at once.
+    Returns dict mapping video_id -> metadata_dict | 'unavailable' | None
+    """
+    urls = [canonical_yt_url(vid) for vid in video_ids]
+    results = {}
+
+    try:
+        # Use --ignore-errors so one dead link doesn't stop the batch
+        # --retries 0 to fail fast on dead links
+        r = subprocess.run(
+            ["yt-dlp", "--dump-json", "--no-playlist", "--ignore-errors",
+             "--socket-timeout", "15", "--retries", "0", "--no-warnings"] + urls,
+            capture_output=True, text=True, timeout=240,
+        )
+        
+        # Parse stdout for successful JSON results
+        for line in r.stdout.splitlines():
+            line = line.strip()
+            if not line.startswith("{"):
+                continue
+            try:
+                d = json.loads(line)
+                vid = d.get("id")
+                if vid and vid in video_ids:
+                    raw_date = d.get("upload_date")
+                    publish_date = None
+                    if raw_date and len(raw_date) == 8:
+                        publish_date = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:]}"
+                    
+                    results[vid] = {
+                        "title":        d.get("title"),
+                        "description":  (d.get("description") or "")[:3000],
+                        "channel_name": d.get("uploader") or d.get("channel"),
+                        "channel_url":  d.get("uploader_url") or d.get("channel_url"),
+                        "publish_date": publish_date,
+                        "view_count":   d.get("view_count"),
+                        "like_count":   d.get("like_count"),
+                        "tags":         d.get("tags") or [],
+                    }
+            except Exception:
+                continue
+
+        # Parse stderr for unavailable videos
+        # yt-dlp error usually looks like: "ERROR: [youtube] {id}: {message}"
+        stderr_lower = r.stderr.lower()
+        for vid in video_ids:
+            if vid in results:
+                continue
+            
+            # Check if this ID appears in stderr with an unavailable message
+            # The format is often "ERROR: [youtube] {vid}: {message}"
+            if vid.lower() in stderr_lower:
+                # Find the line containing the video ID
+                for line in stderr_lower.splitlines():
+                    if vid.lower() in line:
+                        is_unavail = any(msg in line for msg in UNAVAIL_MSGS)
+                        if is_unavail:
+                            results[vid] = "unavailable"
+                            break
+                
+                if vid not in results:
+                    results[vid] = None
+            else:
+                results[vid] = None
+
+    except Exception:
+        # On fatal error, return what we have (might be empty)
+        pass
+
+    return results
+
+
+
 # ── Downloader ────────────────────────────────────────────────────────────────
 
 def download_video(video_id, output_dir, yt_format, rate_limit,
@@ -1897,33 +1972,52 @@ def do_update_index(index, language=None):
         print(f"  No videos {'in ' + language.upper() + ' ' if language else ''}already have metadata.")
         return
 
+    # Randomize processing order
+    random.shuffle(need_meta)
+
     total_meta = len(need_meta)
     print(f"  Fetching YouTube metadata for {total_meta} videos")
     print(f"  (title, description, channel link, tags)...")
     print()
 
     start_time = time.time()
-    for i, vid in enumerate(need_meta, 1):
+    batch_size = 20
+    
+    for i in range(0, total_meta, batch_size):
+        batch_ids = need_meta[i:i + batch_size]
+        
+        # ETA and Progress
+        processed_count = i
         elapsed = time.time() - start_time
-        avg_time = elapsed / i
-        eta_seconds = avg_time * (total_meta - i)
-        eta_str = format_eta(eta_seconds)
+        if processed_count > 0:
+            avg_time = elapsed / processed_count
+            eta_seconds = avg_time * (total_meta - processed_count)
+            eta_str = format_eta(eta_seconds)
+        else:
+            eta_str = "Calculating..."
 
-        overall_pct = i / total_meta * 100
+        overall_pct = processed_count / total_meta * 100
         ov_bar = bar(overall_pct, 30)
-        print(f"\r  {ov_bar}  {i}/{total_meta}  ETA: {eta_str}", end="", flush=True)
+        print(f"\r  {ov_bar}  {processed_count}/{total_meta}  ETA: {eta_str}", end="", flush=True)
 
-        meta = fetch_yt_metadata(vid)
-        if meta == "unavailable":
-            index.set_unavailable(vid)
-        elif meta:
-            index.set_metadata(vid, **meta)
-            # Detailed logging as requested
-            print(f"\n    [SCRAPE] {vid}: {meta.get('title')} | {meta.get('channel_name')} | {meta.get('view_count')} views")
+        # Batch fetch
+        batch_results = fetch_yt_metadata_batch(batch_ids)
+        
+        for vid in batch_ids:
+            meta = batch_results.get(vid)
+            if meta == "unavailable":
+                index.set_unavailable(vid)
+                print(f"\n    [SKIP] {vid}: Video unavailable", flush=True)
+            elif meta:
+                index.set_metadata(vid, **meta)
+                # Detailed logging
+                print(f"\n    [SCRAPE] {vid}: {meta.get('title')} | {meta.get('channel_name')} | {meta.get('view_count')} views", flush=True)
+            else:
+                print(f"\n    [ERROR] {vid}: Metadata fetch failed (likely private or blocked)", flush=True)
 
-        if i % 100 == 0:
+        if (i // batch_size + 1) % 5 == 0:
             index.save()
-            print(f"\n    [LOG] Auto-saved index ({i} videos processed so far)")
+            print(f"\n    [LOG] Auto-saved index ({min(i + batch_size, total_meta)} videos processed so far)")
 
     clear_line()
     index.save()
@@ -3792,56 +3886,75 @@ def do_scrape_sources_metadata(index, language=None):
         print(f"  No videos in sources database {'in ' + language.upper() + ' ' if language else ''}already have metadata.")
         return
 
+    # Randomize processing order
+    random.shuffle(need_meta)
+
     total_meta = len(need_meta)
     print(f"  Fetching YouTube metadata for {total_meta} sources videos")
     print(f"  (title, description, channel link, tags)...")
     print()
 
     start_time = time.time()
-    for i, vid in enumerate(need_meta, 1):
+    batch_size = 20
+    
+    for i in range(0, total_meta, batch_size):
+        batch_ids = need_meta[i:i + batch_size]
+        
+        # ETA and Progress
+        processed_count = i
         elapsed = time.time() - start_time
-        avg_time = elapsed / i
-        eta_seconds = avg_time * (total_meta - i)
-        eta_str = format_eta(eta_seconds)
+        if processed_count > 0:
+            avg_time = elapsed / processed_count
+            eta_seconds = avg_time * (total_meta - processed_count)
+            eta_str = format_eta(eta_seconds)
+        else:
+            eta_str = "Calculating..."
 
-        overall_pct = i / total_meta * 100
+        overall_pct = processed_count / total_meta * 100
         ov_bar = bar(overall_pct, 30)
-        print(f"\r  {ov_bar}  {i}/{total_meta}  ETA: {eta_str}", end="", flush=True)
+        print(f"\r  {ov_bar}  {processed_count}/{total_meta}  ETA: {eta_str}", end="", flush=True)
 
-        meta = fetch_yt_metadata(vid)
-        e = sources_data[vid]
-        if meta == "unavailable":
-            e["status"] = "unavailable"
-        elif meta:
-            if meta.get("title"): e["title"] = meta["title"]
-            if meta.get("description") is not None: e["description"] = meta["description"]
-            if meta.get("channel_name"): e["channel_name"] = meta["channel_name"]
-            if meta.get("channel_url"): e["channel_url"] = meta["channel_url"]
-            if meta.get("publish_date") is not None: e["publish_date"] = meta["publish_date"]
-            if meta.get("view_count") is not None: e["view_count"] = meta["view_count"]
-            if meta.get("like_count") is not None: e["like_count"] = meta["like_count"]
-            if meta.get("tags") is not None: e["tags"] = meta["tags"]
-            
-            # Detailed logging as requested
-            print(f"\n    [SCRAPE] {vid}: {meta.get('title')} | {meta.get('channel_name')} | {meta.get('view_count')} views")
-            
-            # Tag missing profile names from URL if null
-            if not e.get("channel_name") and e.get("channel_url"):
-                url = e["channel_url"]
-                url_clean = url.split("?")[0].rstrip("/")
-                extracted = None
-                if "/@" in url_clean:
-                    extracted = url_clean.split("/@")[-1]
-                elif "/user/" in url_clean:
-                    extracted = url_clean.split("/user/")[-1]
-                elif "/c/" in url_clean:
-                    extracted = url_clean.split("/c/")[-1]
-                if extracted:
-                    e["channel_name"] = extracted
+        # Batch fetch
+        batch_results = fetch_yt_metadata_batch(batch_ids)
+        
+        for vid in batch_ids:
+            meta = batch_results.get(vid)
+            e = sources_data[vid]
+            if meta == "unavailable":
+                e["status"] = "unavailable"
+                print(f"\n    [SKIP] {vid}: Video unavailable", flush=True)
+            elif meta:
+                if meta.get("title"): e["title"] = meta["title"]
+                if meta.get("description") is not None: e["description"] = meta["description"]
+                if meta.get("channel_name"): e["channel_name"] = meta["channel_name"]
+                if meta.get("channel_url"): e["channel_url"] = meta["channel_url"]
+                if meta.get("publish_date") is not None: e["publish_date"] = meta["publish_date"]
+                if meta.get("view_count") is not None: e["view_count"] = meta["view_count"]
+                if meta.get("like_count") is not None: e["like_count"] = meta["like_count"]
+                if meta.get("tags") is not None: e["tags"] = meta["tags"]
+                
+                # Detailed logging
+                print(f"\n    [SCRAPE] {vid}: {meta.get('title')} | {meta.get('channel_name')} | {meta.get('view_count')} views", flush=True)
+            else:
+                print(f"\n    [ERROR] {vid}: Metadata fetch failed (likely private or blocked)", flush=True)
+                
+                # Tag missing profile names from URL if null
+                if not e.get("channel_name") and e.get("channel_url"):
+                    url = e["channel_url"]
+                    url_clean = url.split("?")[0].rstrip("/")
+                    extracted = None
+                    if "/@" in url_clean:
+                        extracted = url_clean.split("/@")[-1]
+                    elif "/user/" in url_clean:
+                        extracted = url_clean.split("/user/")[-1]
+                    elif "/c/" in url_clean:
+                        extracted = url_clean.split("/c/")[-1]
+                    if extracted:
+                        e["channel_name"] = extracted
 
-        if i % 100 == 0:
+        if (i // batch_size + 1) % 5 == 0:
             index.save()
-            print(f"\n    [LOG] Auto-saved sources index ({i} videos processed so far)")
+            print(f"\n    [LOG] Auto-saved sources index ({min(i + batch_size, total_meta)} videos processed so far)")
 
     clear_line()
     index.save()
