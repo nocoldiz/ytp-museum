@@ -248,6 +248,21 @@ YTPMV_KEYWORDS_LIST = [
     r'YTPMV', r'Sparta Remix',r'音MAD', r'Veg Replace',r'We are number one'
 ]
 
+YTP_KEYWORDS_BY_LANG = {
+    "it": YTP_KEYWORDS_IT,
+    "es": YTP_KEYWORDS_ES,
+    "fr": YTP_KEYWORDS_FR,
+    "de": YTP_KEYWORDS_DE,
+    "ru": YTP_KEYWORDS_RU,
+    "br": YTP_KEYWORDS_BR,
+    "en": YTP_KEYWORDS_GENERIC
+}
+
+COMPILED_YTP_KEYWORDS = {
+    lang: re.compile("|".join(p_list), re.IGNORECASE)
+    for lang, p_list in YTP_KEYWORDS_BY_LANG.items() if p_list
+}
+
 COLLABS_KEYWORDS_LIST = [
     r'Tennis', r'Soccer', r'Collab', r'Pingpong', r'pinpg\s+pong', 
     r'san\'itario', r's\.itario', r's\.antonino', r'catena\s+di', r'Shitstorm\s+pt'
@@ -1827,7 +1842,7 @@ def download_video(video_id, output_dir, yt_format, rate_limit,
 
 # ── Interactive phases ────────────────────────────────────────────────────────
 
-def do_update_index(index):
+def do_update_index(index, language=None):
     # Skip scanning HTML pages as they are already scraped
     print("  Skipping HTML scan (all pages already scraped).")
 
@@ -1842,10 +1857,44 @@ def do_update_index(index):
 
     # Collect all videos that might need metadata
     all_vids = {**index.data, **index.sources_data, **index.ytpmv_data, **index.collabs_data}
-    need_meta = [vid for vid in all_vids if index.needs_metadata(vid) and vid not in index.actually_excluded_ids]
+    need_meta_ids = [vid for vid in all_vids if index.needs_metadata(vid) and vid not in index.actually_excluded_ids]
+
+    if language:
+        print(f"  Filtering for language: {language.upper()} (Strict Keywords)...")
+        channel_lang_map = get_channel_language_map(index)
+        lang_regex = COMPILED_YTP_KEYWORDS.get(language)
+        
+        filtered_ids = []
+        for vid in need_meta_ids:
+            e = all_vids.get(vid, {})
+            # Check for strict keyword match if title is available
+            title_text = []
+            if e.get("title"): title_text.append(e.get("title"))
+            if e.get("thread_titles"): title_text.extend(e.get("thread_titles"))
+            
+            if lang_regex and title_text:
+                full_text = " ".join(title_text)
+                if not lang_regex.search(full_text):
+                    # Title exists but doesn't match language keywords, ignore
+                    continue
+
+            # Check if video has the language already
+            if e.get("language") == language:
+                filtered_ids.append(vid)
+                continue
+            # Check if channel has the language
+            ch_url = e.get("channel_url")
+            if ch_url:
+                norm_ch = normalize_channel_url(ch_url)
+                if channel_lang_map.get(norm_ch) == language:
+                    filtered_ids.append(vid)
+                    continue
+        need_meta = filtered_ids
+    else:
+        need_meta = need_meta_ids
 
     if not need_meta:
-        print("  All videos already have metadata.")
+        print(f"  No videos {'in ' + language.upper() + ' ' if language else ''}already have metadata.")
         return
 
     total_meta = len(need_meta)
@@ -1869,6 +1918,8 @@ def do_update_index(index):
             index.set_unavailable(vid)
         elif meta:
             index.set_metadata(vid, **meta)
+            # Detailed logging as requested
+            print(f"\n    [SCRAPE] {vid}: {meta.get('title')} | {meta.get('channel_name')} | {meta.get('view_count')} views")
 
         if i % 100 == 0:
             index.save()
@@ -3462,15 +3513,7 @@ def do_auto_languages(index):
 
 
     # ── Pattern sets ──
-    ytp_keywords_patterns = {
-        "it": YTP_KEYWORDS_IT,
-        "es": YTP_KEYWORDS_ES,
-        "fr": YTP_KEYWORDS_FR,
-        "de": YTP_KEYWORDS_DE,
-        "ru": YTP_KEYWORDS_RU,
-        "br": YTP_KEYWORDS_BR,
-        "en": YTP_KEYWORDS_GENERIC
-    }
+    compiled_ytp_keywords_patterns = COMPILED_YTP_KEYWORDS
     common_word_patterns = {
         "it": COMMON_WORDS_IT_LIST,
         "es": COMMON_WORDS_ES_LIST,
@@ -3481,10 +3524,6 @@ def do_auto_languages(index):
         "en": COMMON_WORDS_EN_LIST
     }
 
-    compiled_ytp_keywords_patterns = {
-        lang: re.compile("|".join(p_list), re.IGNORECASE)
-        for lang, p_list in ytp_keywords_patterns.items() if p_list
-    }
     compiled_common_word_patterns = {
         lang: re.compile("|".join(p_list), re.IGNORECASE)
         for lang, p_list in common_word_patterns.items() if p_list
@@ -3493,7 +3532,7 @@ def do_auto_languages(index):
     count = 0
     tag_match_count = 0
     common_word_match_count = 0
-    langs = set(ytp_keywords_patterns.keys()) | set(common_word_patterns.keys())
+    langs = set(YTP_KEYWORDS_BY_LANG.keys()) | set(common_word_patterns.keys())
     tagged_counts = {lang: 0 for lang in langs}
 
     # Combine all video data from all databases
@@ -3701,10 +3740,10 @@ def do_scrape_profiles(index, docs_dir, specific_channels=None):
     print(f"  Thumbnails saved to: {os.path.abspath(thumb_dir)}")
 
 
-def do_scrape_sources_metadata(index):
+def do_scrape_sources_metadata(index, language=None):
     sources_data = index.sources_data
 
-    need_meta = [vid for vid, e in sources_data.items() if (
+    need_meta_ids = [vid for vid, e in sources_data.items() if (
         e.get("title") is None or
         e.get("description") is None or
         e.get("channel_name") is None or
@@ -3715,8 +3754,42 @@ def do_scrape_sources_metadata(index):
         e.get("title") == "warnings.warn("
     ) and e.get("status") != "unavailable"]
 
+    if language:
+        print(f"  Filtering for language: {language.upper()} (Strict Keywords)...")
+        channel_lang_map = get_channel_language_map(index)
+        lang_regex = COMPILED_YTP_KEYWORDS.get(language)
+
+        filtered_ids = []
+        for vid in need_meta_ids:
+            e = sources_data.get(vid, {})
+            # Check for strict keyword match if title is available
+            title_text = []
+            if e.get("title") and e.get("title") != "warnings.warn(": title_text.append(e.get("title"))
+            if e.get("thread_titles"): title_text.extend(e.get("thread_titles"))
+            
+            if lang_regex and title_text:
+                full_text = " ".join(title_text)
+                if not lang_regex.search(full_text):
+                    # Title exists but doesn't match language keywords, ignore
+                    continue
+
+            # Check if video has the language already
+            if e.get("language") == language:
+                filtered_ids.append(vid)
+                continue
+            # Check if channel has the language
+            ch_url = e.get("channel_url")
+            if ch_url:
+                norm_ch = normalize_channel_url(ch_url)
+                if channel_lang_map.get(norm_ch) == language:
+                    filtered_ids.append(vid)
+                    continue
+        need_meta = filtered_ids
+    else:
+        need_meta = need_meta_ids
+
     if not need_meta:
-        print("  All videos in sources database already have metadata.")
+        print(f"  No videos in sources database {'in ' + language.upper() + ' ' if language else ''}already have metadata.")
         return
 
     total_meta = len(need_meta)
@@ -3748,6 +3821,9 @@ def do_scrape_sources_metadata(index):
             if meta.get("view_count") is not None: e["view_count"] = meta["view_count"]
             if meta.get("like_count") is not None: e["like_count"] = meta["like_count"]
             if meta.get("tags") is not None: e["tags"] = meta["tags"]
+            
+            # Detailed logging as requested
+            print(f"\n    [SCRAPE] {vid}: {meta.get('title')} | {meta.get('channel_name')} | {meta.get('view_count')} views")
             
             # Tag missing profile names from URL if null
             if not e.get("channel_name") and e.get("channel_url"):
@@ -3850,6 +3926,29 @@ def create_progressive_backup(index, step_name):
             print(f"  [Backup] Created: {bak_name}")
         except Exception as e:
             print(f"  [!] Failed to create backup: {e}")
+
+
+def do_full_scrape_run(index, args):
+    print("\n>>> Starting Full Scrape Run...")
+    
+    print("\nStep 1: Scrape Channels (Option 3)")
+    do_scrape_channels(index, ignore_sources=False)
+    create_progressive_backup(index, "step1_channels")
+    
+    print("\nStep 2: Fetch Missing Metadata (Option 1)")
+    do_update_index(index)
+    do_scrape_sources_metadata(index)
+    create_progressive_backup(index, "step2_metadata")
+    
+    print("\nStep 3: Scrape Channel Profiles and Thumbnails (Option 7)")
+    do_scrape_profiles(index, args.public_dir)
+    create_progressive_backup(index, "step3_thumbnails")
+    
+    print("\nStep 4: Scrape Comments (Option 6)")
+    do_scrape_comments(index, args.public_dir)
+    create_progressive_backup(index, "step4_comments")
+    
+    print("\n>>> Full Scrape Run Complete.")
 
 
 def do_full_scrape_run_ignore_sources(index, args):
@@ -4202,10 +4301,28 @@ def main():
         print("2. Only YTP metadata")
         print("3. Only sources metadata")
         sub = ask("Choice [1-3]: ", {"1", "2", "3"})
+        
+        print("\nSelect Language Filter:")
+        print("0. All Languages")
+        print("1. Italian")
+        print("2. English")
+        print("3. Spanish")
+        print("4. German")
+        print("5. French")
+        print("6. Russian")
+        print("7. Portuguese (BR)")
+        lang_sub = ask("Language Choice [0-7]: ", {"0", "1", "2", "3", "4", "5", "6", "7"})
+        
+        lang_map = {
+            "1": "it", "2": "en", "3": "es", "4": "de", 
+            "5": "fr", "6": "ru", "7": "br"
+        }
+        target_lang = lang_map.get(lang_sub) # None if "0"
+        
         if sub in ("1", "2"):
-            do_update_index(index)
+            do_update_index(index, language=target_lang)
         if sub in ("1", "3"):
-            do_scrape_sources_metadata(index)
+            do_scrape_sources_metadata(index, language=target_lang)
         print()
     if choice == "2":
         print("\nSelect what to download:")
