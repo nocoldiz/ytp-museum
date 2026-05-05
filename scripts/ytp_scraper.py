@@ -196,35 +196,52 @@ def update_channel_language(index, channel_url, language, channel_name=None):
 import re
 
 YTP_KEYWORDS_IT = [
-    r'YTPITA', r'YTP\s?ITA', r'YTM', r'YTK', r'Youtube\s+poop\s+ITA', r'YouTube\s+Poop\s+ITA'
+    r'YTPITA', r'YTP-ITA', r'YTP\s?ITA', r'YTM', r'Youtube\s+poop\s+ITA', 
+    r'YouTube\s+Poop\s+ITA', r'[ITA]', r'YTG', r'YouTube\s+Poop(?:\s+ITA)?', 
+    r'Youtube poop ita', r'You tube poop ita', r'YTP ITA', r'Youtube merda', 
+    r'S\.Itario', r'Shitstorm pt\.'
 ]
+
 YTP_KEYWORDS_ES = [
-    r'YTPH', r'YTPHSHORT',r'Poop Hispano', r'YTPES', r'YTP\s?ES', r'Pooppa[ñn]ol', r'YouTube\s+Poop\s+en\s+español'
+    r'YTPH', r'YTPHSHORT', r'Poop Hispano', r'YTPES', r'YTP\s?ES', 
+    r'Pooppa[ñn]ol', r'YouTube\s+Poop\s+en\s+español', 
+    r'YouTube\s+Poop(?:\s+en\s+español)?', r'YouTube\s+Poop\s+Hispano', 
+    r'YTP\s?ESP', r'[ES]', r'YTP\s?Castellano', r'YTP\s?Latino', r'Poop\s?Hispano'
 ]
+
 YTP_KEYWORDS_FR = [
-    r'YTPFR', r'YTP\s+FR', r'YouTube\s+Poop\s+FR'
+    r'YTPFR', r'YTP\s+FR', r'YouTube\s+Poop\s+FR', 
+    r'YouTube\s+Poop(?:\s+FR)?', r'[FR]', r'YTP\s?France', r'YTP\s?Francais'
 ]
+
 YTP_KEYWORDS_DE = [
-    r'YouTube\s+Kacke', r'YouTube\s+Kaka', r'YTPDE', r'YTP\s?DE'
+    r'YouTube\s+Kacke', r'YouTube\s+Kaka', r'YTPDE', r'YTP\s?DE', 
+    r'[DE]', r'YTP\s?Deutsch', r'YTP\s?GER'
 ]
+
 YTP_KEYWORDS_RU = [
-    r'RYTP', r'РУТП', r'YTPRU', r'YTP\s?RU'
+    r'RYTP', r'РУТП', r'YTPRU', r'YTP\s?RU', r'РЮТП', 
+    r'Russian\s+YouTube\s+Poop', r'Русский\s+RYTP', r'RYTP\s?МЕМ', r'[RU]'
 ]
+
 YTP_KEYWORDS_BR = [
-    r'YTPBR', r'YTP\s+BR', r'YouTube\s+Poop\s+BR'
-]
-YTP_KEYWORDS_EN = [
-    r'YTP', r'YTPV', r'YouTube\s+Poop', r'You\s+tube\s+poop', r'YTPEN', r'YTP\s?EN'
+    r'YTPBR', r'YTP\s+BR', r'YouTube\s+Poop\s+BR', 
+    r'YouTube\s+Poop(?:\s+BR)?', r'YTP\s?PT-BR', r'YTP\s?Brasil', 
+    r'Poop\s?BR', r'[BR]'
 ]
 YTP_KEYWORDS_GENERIC = [
-    r'STP', r'Pytp',r'You Tube Poop',r'Poop',r'Poops', r'YTP\s+(?:Tennis|Soccer|Ping\s+pong)', r'YTP(?:Tennis|Soccer|Pingpong)',
-    r'YTP(?:PL|PT|RO|GR|NL|HU|JP)'
-]
+        r'YTPMV', r'Collab',
+        r'YTP:', r'YTP', r'Youtube poop:', r'YT Poop', r'YT Poop:',
+        r'Youtube poop', r'You tube poop',r'Sentence\s+Mix', r'Ear\s?rape',
+        r'G-Major', r'Reverse', r'Pitch\s+Shift',
+        r'YTP\s+(?:Tennis|Soccer|Ping\s+pong|Round)',
+    ]
+
 
 YTP_KEYWORDS_LIST = (
     YTP_KEYWORDS_IT + YTP_KEYWORDS_ES + YTP_KEYWORDS_FR + 
     YTP_KEYWORDS_DE + YTP_KEYWORDS_RU + YTP_KEYWORDS_BR + 
-    YTP_KEYWORDS_EN + YTP_KEYWORDS_GENERIC
+    YTP_KEYWORDS_GENERIC
 )
 
 YTPMV_KEYWORDS_LIST = [
@@ -328,7 +345,7 @@ MEME_KEYWORDS_IT = [
     r'Auto\s+Blu', r'James\s+Dogs', r'Kirchificazione', r'Gli\s+animali\s+Brainrot'
 ]
 MEME_KEYWORDS_EN = [
-    r'Pingas', r'CD-i', r'Morshu', r'Mah\s+Boi', r'He[\s-]?Man', r'Sparta\s+Remix', 
+    r'Pingas', r'CD-i', r'Morshu', r'Mah\s+Boi',
     r'Scad', r'Stutter', r'Patrick', r'Jack\s+Black', r'Gourmet', r'The\s+king', 
     r'Weegee', r'Spadinner', r'Michael\s+Rosen', r'Viacom', r'Skooks', r'Flex\s+Tape', 
     r'Phil\s+Swift', r'Slap\s+Chop', r'Hotel\s+Mario', r'Hank\s+Hill', r'King\s+Harkinian', 
@@ -432,98 +449,208 @@ RESTRICTED_ITALIAN_KEYWORDS = re.compile(
 )
 
 COMMON_WORDS_IT_LIST = [
-    # ── Articles, Prepositions & Articulated Prepositions (incl. elisions) ──
-    r'\b(?:il|lo|la|i|gli|le|un|una|uno|un\'?|l\'?)\b',
-    r'\b(?:di|del|dello|della|dei|degli|delle|d\'?)\b',
-    r'\b(?:a|al|allo|alla|ai|agli|alle|all\'?)\b',
-    r'\b(?:da|dal|dallo|dalla|dai|dagli|dalle|dall\'?)\b',
-    r'\b(?:in|nel|nello|nella|nei|negli|nelle|nell\'?)\b',
-    r'\b(?:su|sul|sullo|sulla|sui|sugli|sulle|sull\'?)\b',
-    r'\b(?:con|col|coi|collo|colla|colle|per|tra|fra)\b',
-
-    # ── Conjunctions & Relatives ──
-    r'\b(?:che|chi|cui|quale|quali|quanto|quanti|quanta|quante|e|ed|o|oppure|ma|se|anche|perché|poiché|affinché|benché|quando|come|dove|mentre|quindi|dunque|però|tuttavia|infatti|ovvero|ossia|cioè|sebbene|finché|siccome|eppure|perciò|nonché|né)\b',
-
-    # ── Pronouns (Personal, Possessive, Demonstrative, Indefinite) ──
-    r'\b(?:io|tu|lui|lei|noi|voi|loro|esso|essa|essi|esse|me|te|sé)\b',
-    r'\b(?:mi|ti|lo|la|gli|le|ci|vi|li|ne|si|se|ce|ve|m\'?|t\'?|s\'?|v\'?|c\'?|n\'?)\b',
-    r'\b(?:mio|mia|miei|mie|tuo|tua|tuoi|tue|suo|sua|suoi|sue|nostro|nostra|nostri|nostre|vostro|vostra|vostri|vostre)\b',
+    r'\b(?:gli|uno|un\'?|l\'?)\b',
+    r'\b(?:di|dello|della|degli|delle|d\'?)\b',
+    r'\b(?:allo|alla|agli|all\'?)\b',
+    r'\b(?:dal|dallo|dalla|dai|dagli|dalle|dall\'?)\b',
+    r'\b(?:nel|nello|nella|nei|negli|nelle|nell\'?)\b',
+    r'\b(?:sul|sullo|sulla|sui|sugli|sulle|sull\'?)\b',
+    r'\b(?:col|coi|collo|colla|colle|per|tra|fra)\b',
+    r'\b(?:che|chi|cui|quale|quali|quanto|quanti|quanta|quante|ed|oppure|anche|perché|poiché|affinché|benché|dove|mentre|quindi|dunque|però|tuttavia|infatti|ovvero|ossia|cioè|sebbene|finché|siccome|eppure|perciò|nonché)\b',
+    r'\b(?:io|lei|noi|voi|loro|esso|essi)\b',
+    r'\b(?:gli|ci|li|m\'?|t\'?|s\'?|v\'?|c\'?|n\'?)\b',
+    r'\b(?:mio|mia|miei|mie|tuo|tuoi|tue|suo|suoi|sue|nostro|nostra|nostri|nostre|vostro|vostra|vostri|vostre)\b',
     r'\b(?:questo|questa|questi|queste|quello|quella|quelli|quelle|quel|quei|quegli|cio|ciò|colui|colei|coloro)\b',
     r'\b(?:niente|nulla|qualcosa|qualcuno|nessuno|ognuno|chiunque|tutto|tutta|tutti|tutte|alcuni|alcune|ogni|qualche)\b',
-
-    # ── Adverbs & Quantifiers ──
-    r'\b(?:non|più|molto|poco|troppo|bene|male|ora|oggi|ieri|domani|qui|lì|là|qua|già|ancora|forse|sempre|mai|magari|purtroppo|comunque|ovviamente|sicuramente|probabilmente|insomma|allora|così|davvero|quasi|meno|piuttosto|pure|neanche|nemmeno|mica|appena|infine|invece|spesso|subito|soltanto|solo|tanto|almeno|davanti|dietro|sopra|sotto|dentro|fuori)\b',
-
-    # ── Verbs: Essere & Avere (Comprehensive conjugations) ──
-    r'\b(?:sono|sei|è|siamo|siete|hanno|ho|hai|ha|abbiamo|avete|era|eri|eravamo|eravate|erano|aveva|avevo|avevi|avevamo|avevate|avevano|fui|fosti|fu|fummo|foste|furono|ebbi|avesti|ebbe|avemmo|aveste|ebbero|sarò|sarai|sarà|saremo|sarete|saranno|avrò|avrai|avrà|avremo|avrete|avranno|sarei|saresti|sarebbe|saremmo|sareste|sarebbero|avrei|avresti|avrebbe|avremmo|avreste|avrebbero|sia|siate|siano|abbia|abbiate|abbiano|stato|stata|stati|state|avuto|avuta|avuti|avute)\b',
-
-    # ── Common Verbs (Infinitives & Participles) ──
-    r'\b(?:fare|dire|vedere|andare|venire|volere|potere|dovere|sapere|stare|dare|prendere|mettere|trovare|parlare|pensare|credere|sembrare|lasciare|guardare|capire|chiamare|cercare|entrare|uscire|portare|sentire|scrivere|leggere|vivere|mangiare|bere|dormire|lavorare|fatto|detto|andato|andata|andati|andate|visto|vista|visti|viste|preso|messo|scritto|letto|capito|sentito)\b',
-
-    # ── Common Verbs (Key Conjugations for Irregular/Modal Verbs) ──
+    r'\b(?:più|molto|troppo|bene|male|ora|oggi|ieri|domani|lì|qua|già|ancora|forse|mai|magari|purtroppo|comunque|ovviamente|sicuramente|probabilmente|insomma|allora|così|davvero|quasi|meno|piuttosto|pure|neanche|nemmeno|mica|appena|infine|invece|spesso|subito|soltanto|tanto|almeno|davanti|dietro|sopra|sotto|fuori)\b',
+    r'\b(?:sono|è|siamo|siete|hanno|ho|hai|abbiamo|avete|eri|eravamo|eravate|erano|aveva|avevo|avevi|avevamo|avevate|avevano|fosti|fu|fummo|foste|furono|ebbi|avesti|ebbe|avemmo|aveste|ebbero|sarò|sarai|sarà|saremo|sarete|saranno|avrò|avrai|avrà|avremo|avrete|avranno|sarei|saresti|sarebbe|saremmo|sareste|sarebbero|avrei|avresti|avrebbe|avremmo|avreste|avrebbero|sia|siate|siano|abbia|abbiate|abbiano|stato|stata|stati|state|avuto|avuta|avuti|avute)\b',
+    r'\b(?:fare|vedere|andare|venire|volere|potere|dovere|sapere|stare|dare|prendere|mettere|trovare|parlare|pensare|credere|sembrare|lasciare|guardare|capire|chiamare|cercare|entrare|uscire|portare|sentire|scrivere|leggere|vivere|mangiare|bere|dormire|lavorare|fatto|detto|andato|andata|andati|andate|vista|visti|viste|preso|messo|scritto|letto|capito|sentito)\b',
     r'\b(?:faccio|fai|fa|facciamo|fate|fanno|facevo|faceva|feci|farò|farà|farei|farebbe)\b',
-    r'\b(?:dico|dici|dice|diciamo|dite|dicono|diceva|dissi|disse|dirò|dirà)\b',
+    r'\b(?:dico|dici|diciamo|dite|dicono|diceva|dissi|dirò|dirà)\b',
     r'\b(?:vedo|vedi|vede|vediamo|vedete|vedono|vedevo|vedeva|vidi|vide|vedrò|vedrà)\b',
-    r'\b(?:vado|vai|va|andiamo|andate|vanno|andavo|andava|andai|andrò|andrà)\b',
-    r'\b(?:vengo|vieni|viene|veniamo|venite|vengono|venivo|veniva|venni|verrò|verrà)\b',
+    r'\b(?:vado|andiamo|andate|vanno|andavo|andava|andai|andrò|andrà)\b',
+    r'\b(?:vieni|veniamo|venite|vengono|venivo|veniva|venni|verrò|verrà)\b',
     r'\b(?:voglio|vuoi|vuole|vogliamo|volete|vogliono|volevo|voleva|vorrò|vorrà|vorrei|vorrebbe|voluto)\b',
-    r'\b(?:posso|puoi|può|possiamo|potete|possono|potevo|poteva|potrò|potrà|potrei|potrebbe|potuto)\b',
+    r'\b(?:puoi|può|possiamo|potete|possono|potevo|poteva|potrò|potrà|potrei|potrebbe|potuto)\b',
     r'\b(?:devo|devi|deve|dobbiamo|dovete|devono|dovevo|doveva|dovrò|dovrà|dovrei|dovrebbe|dovuto)\b',
-    r'\b(?:so|sai|sa|sappiamo|sapete|sanno|sapevo|sapeva|seppi|saprò|saprà|saprei|saprebbe|saputo)\b',
+    r'\b(?:sai|sappiamo|sapete|sanno|sapevo|sapeva|seppi|saprò|saprà|saprei|saprebbe|saputo)\b',
     r'\b(?:sto|stai|sta|stiamo|state|stanno|stavo|stava|stetti|starò|starà|starei|starebbe)\b',
-    r'\b(?:do|dai|dà|diamo|date|danno|davo|dava|diedi|darò|darà)\b',
-
-    # ── Common Adjectives & Everyday Nouns ──
-    r'\b(?:grande|piccolo|buono|cattivo|bello|brutto|nuovo|vecchio|vero|falso|primo|ultimo|stesso|diverso|giusto|sbagliato|uomo|donna|cosa|anno|giorno|volta|tempo|vita|parte|mondo|paese|casa|lavoro|caso|ragazzo|ragazza|amico|amica|problema|nome|madre|padre|famiglia|storia|modo|numero|signore|signora|gente|via|parola)\b',
-
-    # ── Common Phrases & Sequences ──
+    r'\b(?:dai|dà|diamo|date|danno|davo|dava|diedi|darò|darà)\b',
+    r'\b(?:piccolo|buono|de luca|sheids|cattivo|bello|ITA|[ITA]|brutto|nuovo|vecchio|vero|primo|ultimo|stesso|diverso|giusto|sbagliato|uomo|donna|anno|giorno|volta|vita|mondo|paese|lavoro|ragazzo|ragazza|amico|amica|famiglia|storia|modo|numero|signore|signora|via|parola|città|amore|notte|ora|occhio|voce|acqua|sole|mare|strada|scuola|musica|gioco|fine|inizio|anima|cuore|spirito|luce|ombra|sogno|realtà|verità|bugia|paura|gioia|rabbia|dolore|felicità|tristezza|speranza|fortuna|successo|fallimento|vittoria|sconfitta|sfida|avventura|viaggio|vacanza)\b',
     r'\b(?:c\'è|ce\s+n\'è|non\s+è|è\s+un|che\s+cosa|non\s+lo\s+so|non\s+importa|per\s+favore|grazie\s+mille|come\s+mai|che\s+succede|per\s+il|di\s+un|che\s+ha|e\s+poi|con\s+la|in\s+un|per\s+la|fratello|finito|le\s+idee|acqua|fantabosco|una\s+società|cazzo|altra\s+dimensione|sono\s+dei|d\'accordo|a\s+proposito|in\s+fondo|di\s+nuovo|per\s+forza|più\s+o\s+meno|a\s+presto|a\s+dopo|buongiorno|buonasera|ciao|arrivederci|mi\s+dispiace|ti\s+prego|ci\s+vediamo)\b'
 ]
 COMMON_WORDS_IT = re.compile("|".join(COMMON_WORDS_IT_LIST), re.IGNORECASE)
 
 COMMON_WORDS_EN_LIST = [
-    r'\b(?:the|a|an|of|to|in|for|with|on|at|by|from|up|about|into|over|after)\b',
-    r'\b(?:and|but|or|so|because|if|when|while|that|which|who|whom|whose)\b',
-    r'\b(?:i|you|he|she|it|we|they|me|him|her|us|them|my|your|his|her|its|our|their|not|very|too|here|there|now|then|always|never)\b',
-    r'\b(?:is|am|are|was|were|be|been|being|have|has|had|do|does|did|can|could|will|would|shall|should|may|might|must)\b'
+    r'\b(?:the|of|to|for|with|at|by|from|up|about|into|over|after|under|between|through|during|before|without|within|along|across|behind|beyond|except|until)\b',
+    r'\b(?:and|but|because|if|when|while|that|which|who|whom|whose|although|though|even|unless|since|where|wherever|whether|neither|nor|yet)\b',
+    r'\b(?:you|she|it|we|they|him|her|us|them|myself|yourself|himself|herself|itself|ourselves|themselves)\b',
+    r'\b(?:my|mine|your|yours|his|hers|its|our|ours|their|theirs)\b',
+    r'\b(?:this|that|these|those|someone|anyone|nothing|anything|everything|everyone|somebody|nobody|none|some|any|each|every|both|few|many|much|several|all|another|other)\b',
+    r'\b(?:not|very|too|here|there|now|then|always|never|often|sometimes|usually|rarely|almost|already|just|only|quite|really|well|yes|maybe|perhaps|probably|certainly|suddenly|actually|anyway|finally|rather|simply|somewhat|somehow|instead|indeed)\b',
+    r'\b(?:is|are|were|be|been|being|have|had|having|does|did|done|doing|can|could|would|shall|should|may|might|must)\b',
+    r'\b(?:say|said|go|went|gone|going|get|got|gotten|getting|make|made|making|know|knew|known|knowing|think|thought|thinking|take|took|taken|taking|see|saw|seen|seeing|came|coming|want|wanted|wanting|look|looked|looking|use|used|using|find|found|finding|give|gave|given|giving|tell|told|telling|work|worked|working|call|called|calling|try|tried|trying|ask|asked|asking|need|needed|needing|feel|felt|feeling|become|became|becoming|leave|left|leaving|put|putting|mean|meant|meaning|keep|kept|keeping|let|letting|begin|began|begun|beginning|seem|seemed|seeming|help|helped|helping|talk|talked|talking|turn|turned|turning|start|started|starting|show|showed|shown|showing|hear|heard|hearing|play|played|playing|run|ran|running|move|moved|moving|like|liked|liking|live|lived|living|believe|believed|believing|hold|held|holding|bring|brought|bringing|happen|happened|happening|write|wrote|written|writing|provide|provided|providing|sit|sat|sitting|stood|standing|lose|lost|losing|pay|paid|paying|meet|met|meeting|include|included|including|continue|continued|continuing|set|setting|learn|learned|learnt|learning|change|changed|changing|lead|led|leading|understand|understood|understanding|watch|watched|watching|follow|followed|following|stop|stopped|stopping|create|created|creating|speak|spoke|spoken|speaking|read|reading|allow|allowed|allowing|add|added|adding|spend|spent|spending|grow|grew|grown|growing|open|opened|opening|walk|walked|walking|win|won|winning|offer|offered|offering|remember|remembered|remembering|love|loved|loving|consider|considered|considering|appear|appeared|appearing|buy|bought|buying|wait|waited|waiting|serve|served|serving|died|dying|send|sent|sending|expect|expected|expecting|build|built|building|stay|stayed|staying|fell|falling|cut|cutting|reach|reached|reaching|kill|killed|killing|remain|remained|remaining)\b',
+    r'\b(?:good|new|first|last|great|little|own|old|right|big|high|different|small|large|next|early|young|few|public|bad|same|able|time|person|year|way|day|thing|world|life|part|child|eye|woman|work|week|case|government|company|number|group|fact|city|love|night|hour|voice|earth|water|sun|sky|road|school|book|music|game|movie|end|start|soul|heart|body|mind|spirit|light|shadow|dream|reality|truth|lie|fear|joy|anger|pain|happiness|sadness|hope|destiny|luck|success|failure|victory|defeat|challenge|adventure|travel|holiday)\b',
+    r"\b(?:i'm|you're|he's|she's|it's|we're|they're|i've|you've|we've|they've|i'd|you'd|he'd|she'd|we'd|they'd|i'll|you'll|he'll|she'll|we'll|they'll|isn't|aren't|wasn't|weren't|haven't|hasn't|hadn't|won't|wouldn't|don't|doesn't|didn't|can't|couldn't|shouldn't|mightn't|mustn't)\b",
+    r'\b(?:of\s+course|thank\s+you|thanks|please|excuse\s+me|sorry|hello|goodbye|good\s+morning|good\s+night|see\s+you|how\s+are\s+you|what\s+is|what\'s|there\s+is|there\s+are|there\'s|going\s+to|want\s+to|got\s+to|have\s+to|used\s+to|supposed\s+to|out\s+of|kind\s+of|sort\s+of|a\s+lot|as\s+well|at\s+all|in\s+order\s+to|as\s+soon\s+as)\b'
 ]
+COMMON_WORDS_EN = re.compile("|".join(COMMON_WORDS_EN_LIST), re.IGNORECASE)
+
 COMMON_WORDS_ES_LIST = [
-    r'\b(?:el|la|los|las|un|una|unos|unas|de|a|en|por|con|para|al|del|sobre|sin|entre)\b',
-    r'\b(?:que|y|e|o|u|pero|si|porque|cuando|como|donde|mientras|aunque)\b',
-    r'\b(?:yo|tú|él|ella|nosotros|ustedes|ellos|me|te|le|lo|la|nos|se|mi|tu|su|no|más|muy|aquí|ahora)\b',
-    r'\b(?:es|son|soy|eres|somos|está|están|estoy|he|has|ha|hemos|han|hacer|decir|ir|ver)\b'
+    r'\b(?:el|los|las|unos|unas|ante|bajo|cabe|durante|hacia|hasta|mediante|según|sin|tras)\b',
+    r'\b(?:u|pero|sino|aunque|pues|cuando|donde|mientras|quien|quienes|cual|cuales|cuanto|cuanta|cuantos|cuantas)\b',
+    r'\b(?:yo|tú|él|ella|ello|nosotros|nosotras|vosotros|vosotras|ellos|ellas|usted|ustedes|los|las|mí|sí|conmigo)\b',
+    r'\b(?:mío|mía|míos|mías|tus|tuyo|tuya|tuyos|tuyas|sus|suyo|suya|suyos|suyas|nuestro|nuestra|nuestros|nuestras|vuestro|vuestra|vuestros|vuestras)\b',
+    r'\b(?:esto|estos|ese|esa|eso|esos|esas|aquel|aquella|aquello|aquellos|aquellas)\b',
+    r'\b(?:alguien|nadie|alguno|algún|alguna|algunos|algunas|ninguno|ningún|ninguna|otro|otra|otros|otras|mucho|mucha|muchos|muchas|poca|pocos|pocas|varios|varias|mismo|misma|mismos|mismas|ambos|ambas)\b',
+    r'\b(?:sí|muy|aquí|allí|allá|ahí|acá|ahora|hoy|mañana|ayer|entonces|luego|después|pronto|siempre|jamás|ya|aún|todavía|casi|también|tampoco|además|así|demasiado|igual|quizás|quizá|acaso|sólo|solamente|incluso|hasta|enseguida|arriba|abajo|cerca|lejos|fuera)\b',
+    r'\b(?:soy|eres|fuiste|fue|fuimos|fuisteis|fueron|erais|eran|seré|serán|sería|sean|siendo)\b',
+    r'\b(?:estoy|estáis|están|estuve|estuvo|estuvimos|estuvieron|estaba|estabas|estábamos|estaban|estaré|estarán|estaría|esté|estén|estando)\b',
+    r'\b(?:hay|hemos|habéis|han|hube|hubo|hubimos|hubieron|había|habías|habíamos|habían|habré|habrá|habremos|habrán|habría|haya|hayan|habiendo|habido)\b',
+    r'\b(?:tengo|tienes|tiene|tenemos|tenéis|tienen|tuve|tuvo|tuvimos|tuvieron|tenía|tenías|teníamos|tenían|tendré|tendrá|tendremos|tendrán|tendría|tenga|tengan|teniendo|tenido)\b',
+    r'\b(?:hacer|decir|ir|llegar|pasar|deber|poner|parecer|quedar|creer|hablar|llevar|dejar|seguir|llamar|salir|volver|conocer|vivir|tratar|mirar|empezar|esperar|buscar|entrar|trabajar|escribir|recibir|recordar|terminar|leer|caer|cambiar)\b',
+    r'\b(?:hago|haces|hace|hacemos|hacen|dices|decimos|dicen|puedo|puedes|puede|pueden|voy|van|veo|ves|ven|doy|dan|sabes|saben|quiero|quieres|quiere|quieren|vienes|venimos|vienen|pongo|pones|pone|ponemos|ponen)\b',
+    r'\b(?:hecho|dicho|puesto|sabido|querido|llegado|pasado|debido|creído|hablado|llevado|dejado|vuelto|escrito|abierto|muerto|roto)\b',
+    r'\b(?:gran|pequeño|bueno|buen|malo|nuevo|viejo|alto|bajo|largo|corto|primero|primer|diferente|mejor|peor|mayor|cierto|verdad|verdadero|posible|imposible|feliz|triste|único)\b',
+    r'\b(?:hombre|mujer|persona|niño|niña|año|día|tiempo|veces|hecho|trabajo|agua|familia|señor|señora|manera|tipo|historia|hijo|hija|noche|nombre|ciudad|calle|palabra|ojo|tierra|camino|escuela|juego|película|inicio|corazón|cuerpo|espíritu|sueño|realidad|miedo|alegría|rabia|dolor|felicidad|esperanza|suerte|éxito|fracaso|victoria|derrota|desafío|aventura|viaje|vacaciones)\b',
+    r'\b(?:por\s+qué|para\s+qué|a\s+ver|por\s+favor|muchas\s+gracias|de\s+nada|buenos\s+días|buenas\s+tardes|buenas\s+noches|hola|adiós|hasta\s+luego|hasta\s+pronto|claro\s+que\s+sí|sin\s+embargo|por\s+supuesto|por\s+lo\s+tanto|es\s+decir|o\s+sea|tal\s+vez|a\s+lo\s+mejor|de\s+repente|en\s+fin|darse\s+cuenta|tener\s+que|hay\s+que|a\s+pesar\s+de|al\s+menos)\b'
 ]
+COMMON_WORDS_ES = re.compile("|".join(COMMON_WORDS_ES_LIST), re.IGNORECASE)
+
 COMMON_WORDS_FR_LIST = [
-    r'\b(?:le|la|les|l\'|un|une|des|du|de|au|aux|à|en|dans|pour|avec|par|sur|sous)\b',
-    r'\b(?:et|ou|mais|que|qui|dont|où|si|car|donc|parce\s+que|quand|comme)\b',
-    r'\b(?:je|tu|il|elle|on|nous|vous|ils|elles|me|te|se|nous|vous|lui|leur|y|en|ne|pas|plus|très|ici|là)\b',
-    r'\b(?:est|sont|suis|es|sommes|êtes|ai|as|a|avons|avez|ont|faire|dire|aller|voir)\b'
+    # ── Articles & Prepositions (incl. elisions) ──
+    r'\b(?:le|la|les|l\'|un|une|des|du|de|d\'|au|aux|à|en|dans|pour|avec|par|sur|sous|vers|chez|sans|avant|après|pendant|depuis|entre|contre|jusque|jusqu\'|outre)\b',
+
+    # ── Conjunctions & Relatives ──
+    r'\b(?:et|ou|mais|que|qu\'|qui|quoi|dont|où|si|s\'|car|donc|ni|or|parce|quand|comme|puisque|quoique|lorsque|cependant|pourtant|ainsi|néanmoins)\b',
+
+    # ── Pronouns (Personal, Possessive, Demonstrative, Indefinite, Reflexive) ──
+    r'\b(?:je|j\'|tu|il|elle|on|nous|vous|ils|elles|me|m\'|te|t\'|se|s\'|lui|leur|eux|moi|toi|y|en)\b',
+    r'\b(?:mon|ma|mes|ton|ta|tes|son|sa|ses|notre|nos|votre|vos|leurs)\b',
+    r'\b(?:ce|cet|cette|ces|c\'|ça|cela|ceci|celui|celle|ceux|celles)\b',
+    r'\b(?:tout|tous|toute|toutes|autre|autres|quelque|quelques|rien|personne|aucun|aucune|chacun|chacune|plusieurs|quelqu\'un|même|mêmes)\b',
+
+    # ── Adverbs & Quantifiers ──
+    r'\b(?:ne|n\'|pas|plus|très|bien|mal|beaucoup|peu|trop|assez|toujours|jamais|souvent|parfois|quelquefois|encore|déjà|maintenant|aujourd\'hui|hier|demain|ici|là|aussi|alors|ensuite|puis|enfin|presque|seulement|vraiment|surtout|vite|tard|tôt|moins|oui|non|peut-être|ailleurs|bientôt|soudain)\b',
+
+    # ── Core Auxiliary Verbs (Être & Avoir) ──
+    r'\b(?:suis|es|est|sommes|êtes|sont|étais|était|étions|étiez|étaient|fus|fut|fûmes|serai|sera|serons|seront|serais|serait|sois|soit|soyons|soyez|soient|été)\b',
+    r'\b(?:ai|as|a|avons|avez|ont|avais|avait|avions|aviez|avaient|eus|eut|aurai|aura|aurons|auront|aurais|aurait|aie|ait|ayons|ayez|aient|eu)\b',
+
+    # ── Common Verbs (Infinitives & Key Conjugations/Participles) ──
+    r'\b(?:faire|dire|aller|voir|savoir|pouvoir|vouloir|devoir|venir|prendre|croire|mettre|passer|trouver|donner|comprendre|parler|aimer|penser|laisser|arriver|regarder|partir|demander|rester|répondre|entendre|sortir|attendre|connaître|vivre|sentir|tenir|appeler|tomber|montrer)\b',
+    r'\b(?:fais|fait|faisons|faites|font|dis|dit|disons|dites|disent|vais|vas|va|allons|allez|vont|vois|voit|voyons|voyez|voient|sais|sait|savons|savez|savent|peux|peut|pouvons|pouvez|peuvent|veux|veut|voulons|voulez|veulent|dois|doit|devons|devez|doivent|viens|vient|venons|venez|viennent|prends|prend|prenons|prenez|prennent)\b',
+    r'\b(?:fait|dit|allé|vu|su|pu|voulu|dû|venu|pris|cru|mis|compris|connu|vécu|mort|né)\b',
+
+    # ── Common Adjectives & Everyday Nouns ──
+    r'\b(?:grand|grande|grands|grandes|petit|petite|petits|petites|bon|bonne|bons|bonnes|mauvais|mauvaise|beau|belle|nouveau|nouvelle|vieux|vieille|premier|première|dernier|dernière|jeune|vrai|faux|seul|seule|important|long|longue|fort|forte|plein|pleine)\b',
+    r'\b(?:homme|femme|enfant|jour|année|temps|fois|chose|monde|vie|partie|gens|père|mère|ami|amie|maison|pays|fille|garçon|mot|nom|problème|travail|heure|idée|nuit|ville|histoire|famille|main|place|état|cas|groupe|amour|oeil|voix|terre|eau|soleil|ciel|mer|route|école|livre|musique|jeu|film|vidéo|photo|point|fin|début|âme|cœur|corps|esprit|lumière|ombre|rêve|réalité|vérité|mensonge|peur|joie|colère|douleur|bonheur|tristesse|espoir|destin|chance|succès|échec|victoire|défaite|défi|aventure|voyage|vacances)\b',
+
+    # ── Common Phrases & Sequences ──
+    r'\b(?:c\'est|qu\'est-ce|parce\s+que|bien\s+sûr|s\'il\s+vous\s+plaît|s\'il\s+te\s+plaît|merci\s+beaucoup|de\s+rien|bonjour|au\s+revoir|à\s+bientôt|d\'accord|tout\s+à\s+fait|en\s+fait|n\'est-ce\s+pas|il\s+y\s+a|comment\s+ça\s+va|à\s+propos|par\s+contre|en\s+tout\s+cas|c\'est-à-dire)\b'
 ]
 COMMON_WORDS_DE_LIST = [
-    r'\b(?:der|die|das|den|dem|des|ein|eine|einer|eines|in|zu|von|mit|auf|für|an|aus|bei|nach)\b',
-    r'\b(?:und|oder|aber|denn|dass|ob|weil|wenn|wie|wo|als)\b',
-    r'\b(?:ich|du|er|sie|es|wir|ihr|sie|mich|dich|sich|uns|euch|mein|dein|sein|nicht|sehr|hier|da|jetzt)\b',
-    r'\b(?:ist|sind|bin|bist|seid|war|waren|haben|hat|hatte|hatten|machen|sagen|gehen|sehen)\b'
+    # ── Articles & Prepositions (incl. contractions) ──
+    r'\b(?:der|die|das|den|dem|des|ein|eine|einer|eines|einem|einen|in|zu|von|mit|auf|für|an|aus|bei|nach|über|unter|vor|hinter|neben|zwischen|durch|gegen|ohne|um|bis|seit|am|im|zum|zur|vom|beim|ins|ans|ums)\b',
+
+    # ── Conjunctions & Relatives ──
+    r'\b(?:und|oder|aber|denn|dass|daß|ob|weil|wenn|wie|wo|als|sondern|da|damit|obwohl|während|bevor|nachdem|wer|was|welcher|welche|welches|welchen|welchem|wieso|weshalb|warum)\b',
+
+    # ── Pronouns (Personal, Possessive, Demonstrative, Indefinite, Reflexive) ──
+    r'\b(?:ich|du|er|sie|es|wir|ihr|mich|dich|sich|ihn|uns|euch|ihnen|mir|dir|ihm|mein|meine|meinen|meinem|meines|dein|deine|deinen|sein|seine|seinen|unser|unsere|euer|eure|ihr|ihre|ihren)\b',
+    r'\b(?:dieser|diese|dieses|diesen|diesem|jener|jene|jenes|man|jemand|niemand|etwas|nichts|alles|alle|jeder|jede|jedes|jeden|jedem|mancher|einige|viele|wenige|beide|anderer|andere|anderes)\b',
+
+    # ── Adverbs & Quantifiers ──
+    r'\b(?:nicht|sehr|hier|da|dort|jetzt|heute|morgen|gestern|immer|nie|oft|manchmal|schon|noch|auch|nur|ganz|gar|wieder|dann|so|also|doch|ja|nein|vielleicht|wahrscheinlich|natürlich|bald|fast|besonders|endlich|genau|leider|lieber|plötzlich|ziemlich|sogar|sonst|überall|zusammen|gerade|bereits|etwa|zwar|trotzdem)\b',
+
+    # ── Core Auxiliary & Modal Verbs ──
+    r'\b(?:ist|sind|bin|bist|seid|war|warst|waren|wart|gewesen|habe|hast|hat|haben|habt|hatte|hattest|hatten|hattet|gehabt|werde|wirst|wird|werden|werdet|wurde|wurden|worden)\b',
+    r'\b(?:kann|kannst|können|könnt|konnte|konnten|muss|muß|musst|müssen|müsst|musste|mussten|will|willst|wollen|wollt|wollte|wollten|soll|sollst|sollen|sollt|sollte|sollten|darf|darfst|dürfen|dürft|durfte|durften|mag|magst|mögen|mögt|mochte|mochten|möchte|möchtest|möchten)\b',
+
+    # ── Common Verbs (Infinitives & Key Conjugations/Participles) ──
+    r'\b(?:machen|sagen|gehen|sehen|kommen|wissen|geben|finden|bleiben|lassen|stehen|nehmen|glauben|halten|nennen|zeigen|führen|sprechen|bringen|leben|fahren|meinen|fragen|kennen|gelten|stellen|spielen|arbeiten|brauchen|folgen|lernen|verstehen|setzen|bekommen|beginnen|erzählen|versuchen|schreiben|laufen|erklären|sitzen|ziehen|scheinen|fallen|gehören|entstehen|erhalten|treffen|suchen|legen|lesen)\b',
+    r'\b(?:mache|machst|macht|machte|gemacht|sage|sagst|sagt|sagte|gesagt|gehe|gehst|geht|ging|gegangen|sehe|siehst|sieht|sah|gesehen|komme|kommst|kommt|kam|gekommen|weiß|weißt|wusste|gewusst|gebe|gibst|gibt|gab|gegeben|finde|findest|findet|fand|gefunden|bleibe|bleibst|bleibt|blieb|geblieben|lasse|lässt|läßt|lässt|ließ|gelassen|stehe|stehst|steht|stand|gestanden|nehme|nimmst|nimmt|nahm|genommen)\b',
+
+    # ── Common Adjectives & Everyday Nouns ──
+    r'\b(?:gut|gute|guter|guten|groß|große|großer|großen|klein|kleine|kleiner|kleinen|neu|neue|neuer|neuen|alt|alte|alter|alten|lang|lange|kurz|kurze|schön|schöne|schlecht|schlechte|spät|späte|früh|frühe|wichtig|wichtige|richtig|richtige|falsch|falsche|einfach|einfache|schwer|schwere|möglich|mögliche|schnell|schnelle|wahr|wahre|weit|weite|nah|nahe|hoch|hohe|weiter|weitere)\b',
+    r'\b(?:Jahr|Jahre|Jahren|Tag|Tage|Tagen|Zeit|Mann|Männer|Frau|Frauen|Kind|Kinder|Kindern|Mensch|Menschen|Welt|Leben|Hand|Hände|Fall|Fälle|Haus|Hause|Häuser|Land|Länder|Stadt|Städte|Weg|Wege|Ende|Wort|Worte|Wörter|Beispiel|Frage|Fragen|Seite|Seiten|Grund|Gründe|Herr|Herrn|Problem|Probleme|Recht|Arbeit|Sache|Sachen|Ort|Teil|Prozent|Familie|Bild|Bilder|Buch|Bücher|Auge|Augen|Woche|Wochen|Liebe|Nacht|Stunde|Stimme|Erde|Wasser|Sonne|Himmel|Meer|Straße|Schule|Spiel|Film|Video|Foto|Idee|Punkt|Anfang|Seele|Herz|Körper|Geist|Licht|Schatten|Traum|Realität|Wahrheit|Lüge|Angst|Freude|Wut|Schmerz|Glück|Trauer|Hoffnung|Schicksal|Erfolg|Sieg|Niederlage|Abenteuer|Reise|Urlaub)\b',
+
+    # ── Common Phrases & Sequences ──
+    r'\b(?:zum\s+Beispiel|das\s+heißt|auf\s+jeden\s+Fall|bitte|danke|vielen\s+Dank|guten\s+Morgen|guten\s+Tag|guten\s+Abend|auf\s+Wiedersehen|tschüss|hallo|wie\s+geht\'s|es\s+gibt|tut\s+mir\s+leid|gar\s+nicht|überhaupt\s+nicht|in\s+Ordnung|von\s+mir\s+aus|bis\s+später|bis\s+bald|mach\'s\s+gut)\b'
 ]
 COMMON_WORDS_RU_LIST = [
-    r'\b(?:в|на|с|у|к|из|за|от|по|о|для|через)\b',
-    r'\b(?:и|а|но|что|как|если|или|потому\s+что|который|где|когда)\b',
-    r'\b(?:я|ты|он|она|оно|мы|вы|они|меня|тебя|его|ее|нас|вас|их|не|нет|уже|еще|бы|вот|здесь|там)\b',
-    r'\b(?:быть|есть|был|была|были|мочь|сказать|говорить|знать|делать)\b'
+    # ── Prepositions & Particles ──
+    r'\b(?:в|на|с|у|к|из|за|от|по|о|об|обо|для|через|до|при|над|под|без|перед|между|про|ради|со|ко|вне|вместо|около|возле|вокруг|кроме|сквозь)\b',
+    r'\b(?:же|ли|ль|ведь|даже|только|лишь|просто|пусть|пускай|разве|неужели|вот|вон|именно|почти)\b',
+
+    # ── Conjunctions & Relatives ──
+    r'\b(?:и|а|но|да|что|как|если|или|либо|зато|тоже|также|чтобы|чтоб|хотя|потому|так|чем|словно|будто|точно|пока|когда|где|куда|откуда|почему|зачем|поскольку|ибо)\b',
+
+    # ── Pronouns (Personal, Possessive, Demonstrative, Indefinite, Reflexive) ──
+    r'\b(?:я|ты|он|она|оно|мы|вы|они|меня|тебя|его|ее|её|нас|вас|их|мне|тебе|ему|ей|нам|вам|им|мной|мною|тобой|тобою|им|ею|нами|вами|ими)\b',
+    r'\b(?:мой|моя|мое|моё|мои|твой|твоя|твое|твоё|твои|наш|наша|наше|наши|ваш|ваша|ваше|ваши|свой|своя|свое|своё|свои)\b',
+    r'\b(?:этот|эта|это|эти|этого|этой|этих|этом|этому|тот|та|то|те|того|той|тех|том|тому|такой|такая|такое|такие)\b',
+    r'\b(?:себя|себе|собой|собою|весь|вся|все|всё|всего|всей|всех|всем|всеми|каждый|каждая|каждое|каждые|всякий|любой|иной|другой|кто|что|какой|чей|сколько|кто-то|что-то|кто-нибудь|что-нибудь|никто|ничто|никого|ничего|никому|ничему|никакой)\b',
+
+    # ── Adverbs & Quantifiers ──
+    r'\b(?:не|нет|ни|уже|еще|ещё|бы|б|здесь|там|тут|туда|сюда|тогда|сейчас|теперь|сегодня|завтра|вчера|очень|много|мало|более|менее|можно|надо|нужно|нельзя|хорошо|плохо|совсем|вдруг|часто|редко|всегда|никогда|конечно|наверное|наверно|возможно|действительно|опять|снова|потом|затем|поэтому|сразу|вообще|абсолютно|постоянно|вместе|назад|вперед|вниз|вверх)\b',
+
+    # ── Core Auxiliary Verbs (Быть, Мочь, Хотеть) ──
+    r'\b(?:быть|есть|был|была|было|были|буду|будешь|будет|будем|будете|будут|будь|будьте|мочь|могу|можешь|может|можем|можете|могут|мог|могла|могло|могли|хотеть|хочу|хочешь|хочет|хотим|хотите|хотят|хотел|хотела|хотело|хотели)\b',
+
+    # ── Common Verbs (Infinitives & Key Conjugations/Participles) ──
+    r'\b(?:сказать|говорить|знать|делать|думать|видеть|смотреть|идти|ходить|дать|давать|взять|брать|понять|понимать|жить|работать|писать|читать|стоять|сидеть|лежать|спросить|отвечать|начать|начинать|ждать|казаться|остаться|оставаться|получить|получать|любить|верить|найти|сделать)\b',
+    r'\b(?:сказал|сказала|сказали|говорит|говорят|знаю|знает|знают|делает|делают|думаю|думает|думают|вижу|видит|видят|идет|идёт|идут|шел|шла|шли|дал|дала|дали|взял|понял|живет|живёт|живут|стал|стала|стали|стоит|сидит|спросил|ответил|начал|ждал|кажется|казалось|сделал)\b',
+
+    # ── Common Adjectives & Everyday Nouns ──
+    r'\b(?:большой|большая|большое|большие|маленький|хороший|плохой|новый|старый|первый|последний|главный|нужный|важный|русский|белый|черный|чёрный|разный|полный|целый|настоящий|молодой|сильный|долгий)\b',
+    r'\b(?:человек|люди|людей|год|года|году|лет|время|времени|дело|дела|день|дня|дни|дней|жизнь|жизни|рука|руки|раз|раза|работа|работы|слово|слова|место|места|лицо|лица|друг|друга|друзья|глаз|глаза|вопрос|вопросы|дом|дома|сторона|стороны|страна|страны|мир|мира|случай|случая|голова|головы|ребенок|ребёнок|дети|сила|силы|конец|конца|вид|вида|система|системы|часть|части|город|города|женщина|женщины|деньги|денег|земля|земли|машина|машины|вода|воды|отец|отца|проблема|проблемы|час|часа|право|права|нога|ноги|решение|решения|любовь|ночь|голос|солнце|небо|море|дорога|школа|книга|музыка|игра|фильм|видео|фото|идея|душа|сердце|тело|ум|свет|тень|сон|реальность|истина|ложь|страх|радость|гнев|боль|счастье|грусть|надежда|судьба|удача|успех|победа|поражение|вызов|приключение|путешествие|отпуск)\b',
+
+    # ── Common Phrases & Sequences ──
+    r'\b(?:потому\s+что|так\s+как|то\s+есть|как\s+будто|может\s+быть|должно\s+быть|спасибо|пожалуйста|здравствуйте|до\s+свидания|добрый\s+день|доброе\s+утро|добрый\s+вечер|извините|простите|ничего\s+страшного|слава\s+богу|самом\s+деле|не\s+смотря\s+на|в\s+конце\s+концов)\b'
 ]
 COMMON_WORDS_BR_LIST = [
-    r'\b(?:o|a|os|as|um|uma|uns|umas|de|do|da|dos|das|a|ao|à|em|no|na|nos|nas|para|por|com|se|não|como|mais|ou|mas|seu|sua|seus|suas|este|esta|tudo|todos|toda|todas|fazer|dizer|ir|ver|bom|mau|agora|aqui|ali)\b',
-    r'\b(?:eu|tu|ele|ela|nós|vós|eles|elas|você|me|te|se|nos|lhe|o|a|não|mais|muito|aqui|agora)\b',
-    r'\b(?:é|são|sou|és|somos|está|estão|estou|tenho|tem|temos|fazer|dizer|ir|ver)\b'
+    # ── Articles & Prepositions (incl. contractions) ──
+    r'\b(?:o|a|os|as|um|uma|uns|umas|de|do|da|dos|das|em|no|na|nos|nas|por|pelo|pela|pelos|pelas|para|pra|pro|pras|pros|com|ao|aos|à|às|sobre|sob|entre|até|desde|sem|contra|perante|trás|num|numa|nuns|numas|dum|duma|duns|dumas)\b',
+
+    # ── Conjunctions & Relatives ──
+    r'\b(?:e|ou|mas|porém|todavia|contudo|entretanto|porque|pois|se|como|quando|onde|que|qual|quais|quem|cujo|cuja|embora|enquanto|logo|portanto|nem|senão|conforme|segundo)\b',
+
+    # ── Pronouns (Personal, Possessive, Demonstrative, Indefinite, Reflexive) ──
+    r'\b(?:eu|tu|ele|ela|nós|vós|eles|elas|você|vocês|me|te|se|nos|vos|lhe|lhes|mim|ti|comigo|contigo|consigo|conosco|convosco)\b',
+    r'\b(?:meu|minha|meus|minhas|teu|tua|teus|tuas|seu|sua|seus|suas|nosso|nossa|nossos|nossas|vosso|vossa|vossos|vossas)\b',
+    r'\b(?:este|esta|isto|estes|estas|esse|essa|isso|esses|essas|aquele|aquela|aquilo|aqueles|aquelas)\b',
+    r'\b(?:tudo|nada|algo|alguém|ninguém|qualquer|cada|outro|outra|outros|outras|muito|muita|muitos|muitas|pouco|pouca|poucos|poucas|todo|toda|todos|todas|mesmo|mesma|mesmos|mesmas|algum|alguma|alguns|algumas|nenhum|nenhuma)\b',
+
+    # ── Adverbs & Quantifiers ──
+    r'\b(?:não|sim|já|mais|menos|bem|mal|também|tampouco|ainda|só|somente|apenas|quase|talvez|nunca|jamais|sempre|agora|hoje|amanhã|ontem|cedo|tarde|antes|depois|aqui|ali|aí|lá|cá|perto|longe|dentro|fora|atrás|além|assim|debaixo|acima|então|bastante|demais|aliás|decerto)\b',
+
+    # ── Core Auxiliary Verbs (Ser, Estar, Ter, Haver, Ir) ──
+    r'\b(?:sou|és|é|somos|sois|são|fui|foi|fomos|foram|era|eras|éramos|eram|serei|será|seremos|serão|seria|seja|sejam|sido)\b',
+    r'\b(?:estou|estás|está|estamos|estais|estão|estive|esteve|estivemos|estiveram|estava|estavas|estávamos|estavam|estarei|estará|estaremos|estarão|estaria|esteja|estejam|estado)\b',
+    r'\b(?:tenho|tens|tem|temos|tendes|têm|tive|teve|tivemos|tiveram|tinha|tinhas|tínhamos|tinham|terei|terá|teremos|terão|teria|tenha|tenham|tido)\b',
+    r'\b(?:hei|hás|há|havemos|heis|hão|houve|houvéramos|haverá|haja|havido)\b',
+    r'\b(?:vou|vais|vai|vamos|ides|vão|irei|irá|iremos|irão|iria|vá|indo|ido)\b',
+
+    # ── Common Verbs (Infinitives & Key Conjugations/Participles) ──
+    r'\b(?:fazer|dizer|ver|poder|saber|querer|achar|deixar|passar|ficar|chegar|falar|levar|tomar|começar|olhar|dar|vir|sair|chamar|virar|viver|ouvir|pensar|perder|sentir|pedir|encontrar|trabalhar|lembrar|entender|ler|escrever)\b',
+    r'\b(?:faço|faz|fazemos|fazem|fiz|fez|fizemos|fizeram|feito|digo|diz|dizemos|dizem|disse|disseram|dito|vejo|vê|vemos|veem|vi|viu|vimos|viram|visto|posso|pode|podemos|podem|pude|pôde|sei|sabe|sabemos|sabem|soube|quero|quer|queremos|querem|quis|dou|dá|damos|dão|dei|deu|deram|dado|acho|acha|achamos|acham|achei|achou)\b',
+
+    # ── Common Adjectives & Everyday Nouns ──
+    r'\b(?:bom|boa|bons|boas|mau|má|maus|más|ruim|grande|pequeno|novo|velho|primeiro|último|melhor|pior|maior|menor|certo|claro|verdade|verdadeiro|falso|difícil|fácil|possível|importante|lindo|bonito|forte|fraco)\b',
+    r'\b(?:ano|dia|vez|vezes|tempo|coisa|parte|vida|pessoa|homem|mulher|casa|trabalho|caso|lugar|grupo|problema|lado|mundo|país|amigo|amiga|família|história|cidade|nome|água|noite|mãe|pai|filho|filha|hora|gente|forma|rua|palavra|amor|olho|voz|terra|sol|céu|mar|caminho|escola|livre|música|jogo|filme|vídeo|foto|ideia|ponto|fim|início|alma|coração|corpo|mente|espírito|luz|sombra|sonho|realidade|verdade|mentira|medo|alegria|raiva|dor|felicidade|tristeza|esperança|destino|sorte|sucesso|fracasso|vitória|derrota|desafio|aventura|viagem|férias)\b',
+
+    # ── Common Phrases & Sequences (BR Specific) ──
+    r'\b(?:por\s+favor|muito\s+obrigado|obrigada|de\s+nada|bom\s+dia|boa\s+tarde|boa\s+noite|tudo\s+bem|tchau|até\s+logo|com\s+certeza|é\s+claro|a\s+gente|pra\s+caramba|legal|por\s+causa\s+de|em\s+vez\s+de|a\s+partir\s+de|além\s+disso|ou\s+seja|tipo\s+assim|de\s+repente)\b'
 ]
 
 NON_YTP_KEYWORDS = re.compile(
     r'(?i)('
     # --- GAMING (SERIOUS/LONGFORM) ---
-    r'Walkthrough|Playthrough|Let\'s\s+Play|Gameplay|Longplay|No\s+Commentary|Speedrun|'
+    r'Walkthrough|Playthrough|Let\'s\s+Play|Gameplay|OST|Longplay|No\s+Commentary|Speedrun|'
     r'Boss\s+Fight|Achievement\s+Guide|Trophy\s+Guide|100%\s+Completion|Quest\s+Line|'
-    r'Partita|Giocata|Commento|Reazione|Reaction\s+ita|Dal\s+vivo|Streaming\s+ora|'
-    r'Migliori\s+momenti|Highlights\s+live|Torneo|Guida\s+completa|'
+    r'Partita|Giocata|Commento|Reaction|Reazione|Reaction\s+ita|Dal\s+vivo|Streaming\s+ora|'
+    r'Migliori\s+momenti|Highlights\s+live|Guida\s+completa|'
     
     # --- TECH, REVIEWS & SHOPPING ---
     r'Unboxing|Review|Hands-on|Benchmark|Comparison|Specs|Tech\s+News|Setup|'
@@ -621,6 +748,16 @@ def thread_title_from_filename(fname):
 def bar(pct, width=28):
     filled = int(width * pct / 100)
     return "[" + "=" * filled + " " * (width - filled) + f"] {pct:5.1f}%"
+
+
+def format_eta(seconds):
+    if seconds < 0:
+        return "--:--:--"
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    if h > 0:
+        return f"{h}h {m}m {s}s"
+    return f"{m}m {s}s"
 
 
 def clear_line():
@@ -1716,10 +1853,16 @@ def do_update_index(index):
     print(f"  (title, description, channel link, tags)...")
     print()
 
+    start_time = time.time()
     for i, vid in enumerate(need_meta, 1):
+        elapsed = time.time() - start_time
+        avg_time = elapsed / i
+        eta_seconds = avg_time * (total_meta - i)
+        eta_str = format_eta(eta_seconds)
+
         overall_pct = i / total_meta * 100
         ov_bar = bar(overall_pct, 30)
-        print(f"\r  {ov_bar}  {i}/{total_meta}", end="", flush=True)
+        print(f"\r  {ov_bar}  {i}/{total_meta}  ETA: {eta_str}", end="", flush=True)
 
         meta = fetch_yt_metadata(vid)
         if meta == "unavailable":
@@ -1727,8 +1870,9 @@ def do_update_index(index):
         elif meta:
             index.set_metadata(vid, **meta)
 
-        if i % 20 == 0:
+        if i % 100 == 0:
             index.save()
+            print(f"\n    [LOG] Auto-saved index ({i} videos processed so far)")
 
     clear_line()
     index.save()
@@ -1918,10 +2062,17 @@ def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping
         search_list = keywords
         
     total_new = 0
-    
-    for search_query in search_list:
+    start_time = time.time()
+    total_queries = len(search_list)
+
+    for i, search_query in enumerate(search_list, 1):
+        elapsed = time.time() - start_time
+        avg_time = elapsed / i if i > 1 else 0
+        eta_seconds = avg_time * (total_queries - i)
+        eta_str = format_eta(eta_seconds)
+
         if not quiet:
-            print(f"\n  Searching for: {search_query}")
+            print(f"\n  [{i}/{total_queries}] Searching for: {search_query}  ETA: {eta_str}")
         
         try:
             # ytsearch50 gets top 50 results
@@ -2113,10 +2264,16 @@ def do_keyword_search_scraping(index):
     total_added = 0
     
     try:
+        start_time = time.time()
         for i, query in enumerate(all_combinations, 1):
+            elapsed = time.time() - start_time
+            avg_time = elapsed / i
+            eta_seconds = avg_time * (len(all_combinations) - i)
+            eta_str = format_eta(eta_seconds)
+
             pct = i / len(all_combinations) * 100
             p_bar = bar(pct, 30)
-            print(f"\r  {p_bar} {i}/{len(all_combinations)}: {query[:30]:<30}", end="", flush=True)
+            print(f"\r  {p_bar} {i}/{len(all_combinations)}  ETA: {eta_str}  : {query[:30]:<30}", end="", flush=True)
             
             # Call search for single query in quiet mode
             new_vids = do_scrape_search(index, keywords=[query], quiet=True)
@@ -2200,12 +2357,18 @@ def do_random_video_scrape(index):
     print(f"\n  Selected {actual_count} random videos to use as search queries.")
     
     total_added = 0
+    start_time = time.time()
     try:
         for i, video in enumerate(selected_videos, 1):
+            elapsed = time.time() - start_time
+            avg_time = elapsed / i if i > 1 else 0
+            eta_seconds = avg_time * (actual_count - i)
+            eta_str = format_eta(eta_seconds)
+
             title = video.get('title')
             if not title: continue
             
-            print(f"\n  [{i}/{actual_count}] Searching for: {title}")
+            print(f"\n  [{i}/{actual_count}] Searching for: {title}  ETA: {eta_str}")
             new_vids = do_scrape_search(index, keywords=[title], quiet=True, ignore_sources=True)
             total_added += new_vids
             
@@ -2226,15 +2389,21 @@ def do_scrape_channels(index, ignore_sources=False, specific_channels=None):
     total_channels = len(channels_to_scrape)
     print(f"  Found {total_channels} channel(s) to scrape.")
     new_total = 0
+    start_time = time.time()
     
     for i, ch_url in enumerate(channels_to_scrape, 1):
+        elapsed = time.time() - start_time
+        avg_time = elapsed / i if i > 1 else 0
+        eta_seconds = avg_time * (total_channels - i)
+        eta_str = format_eta(eta_seconds)
+
         # Skip excluded channels
         norm_ch_url = normalize_channel_url(ch_url)
         if norm_ch_url in index.excluded_channels:
-            print(f"\n  [{i}/{total_channels}] Skipping excluded channel: {ch_url}")
+            print(f"\n  [{i}/{total_channels}] Skipping excluded channel: {ch_url}  ETA: {eta_str}")
             continue
         
-        print(f"\n  Scraping Channel [{i}/{total_channels}]: {ch_url}")
+        print(f"\n  Scraping Channel [{i}/{total_channels}]: {ch_url}  ETA: {eta_str}")
         videos_url = channel_videos_url(ch_url)
         nocoldiz = is_nocoldiz_channel(ch_url)
         
@@ -2280,6 +2449,11 @@ def do_scrape_channels(index, ignore_sources=False, specific_channels=None):
                             index.add_video(vid, "Scraped Channel", videos_url, title, target=target)
                             index.set_metadata(vid, title=title, channel_url=ch_url)
                             new_total += 1
+                            
+                            # Save every 100 new videos
+                            if new_total % 100 == 0:
+                                index.save()
+                                print(f"    [LOG] Auto-saved index ({new_total} new videos found so far)")
                             
                     except json.JSONDecodeError:
                         continue
@@ -3286,125 +3460,53 @@ def do_auto_languages(index):
     import re
     from collections import defaultdict
 
-    # ── Build channel_url → language lookup from ytpoopers.db ──
-    def _normalize_url(url):
-        """Normalize a channel URL for reliable matching."""
-        url = url.strip().rstrip("/")
-        url = url.split("/featured")[0]
-        url = url.replace("http://", "https://")
-        if url.startswith("https://youtube.com"):
-            url = url.replace("https://youtube.com", "https://www.youtube.com", 1)
-        return url.lower()
 
-    channel_lang_map = {}  # normalized_url → language
-
-    # Get channels and languages from ytpoopers.db
-    conn = index.get_conn('poopers')
-    cursor = conn.cursor()
-    cursor.execute("SELECT channel_url, language FROM channels WHERE language IS NOT NULL")
-    lang_channel_lists = defaultdict(list)
-    for url, lang in cursor.fetchall():
-        lang_channel_lists[lang].append(url)
-    conn.close()
-
-    # Build the map
-    for lang, urls in lang_channel_lists.items():
-        for url in urls:
-            norm = _normalize_url(url)
-            channel_lang_map[norm] = lang
-
-    print(f"  Loaded {len(channel_lang_map)} unique channel URLs from ytpoopers.db across {len(lang_channel_lists)} languages.")
-
-    # ── Keyword-based patterns ──
-    patterns = {
-        "it": [
-            r'YTP\s?ITA|YTM|YTG|YTK|YouTube\s+Poop(?:\s+ITA)?|Sentence\s+Mix|Ear\s?rape|G-Major|Reverse|Pitch\s+Shift|YTP\s+(?:Tennis|Soccer|Ping\s+pong|Round)',
-            *COMMON_WORDS_IT_LIST,
-            *MEME_KEYWORDS_IT,
-            r'Youtube poop ita|You tube poop ita|YTP ITA|Youtube merda|YTM|S\.Itario|Shitstorm pt\.'
-        ],
-        "es": [
-            r'YTPH|Pooppa[ñn]ol|YouTube\s+Poop(?:\s+en\s+español)?',
-            *COMMON_WORDS_ES_LIST,
-            *MEME_KEYWORDS_ES
-        ],
-        "fr": [
-            r'YTPFR|YTP\s+FR|YouTube\s+Poop(?:\s+FR)?',
-            *COMMON_WORDS_FR_LIST,
-            *MEME_KEYWORDS_FR
-        ],
-        "de": [
-            r'YouTube\s+Kacke|YouTube\s+Kaka',
-            *COMMON_WORDS_DE_LIST,
-            *MEME_KEYWORDS_DE
-        ],
-        "ru": [
-            r'RYTP|РУТП',
-            *COMMON_WORDS_RU_LIST,
-            *MEME_KEYWORDS_RU
-        ],
-        "br": [
-            r'YTPBR|YTP\s+BR|YouTube\s+Poop(?:\s+BR)?',
-            *COMMON_WORDS_BR_LIST,
-            *MEME_KEYWORDS_BR
-        ],
-        "en": [
-            *COMMON_WORDS_EN_LIST,
-            *MEME_KEYWORDS_EN
-        ]
-    }
-
-    compiled_patterns = {}
-    for lang, p_list in patterns.items():
-        combined = '|'.join(p_list)
-        compiled_patterns[lang] = re.compile(combined, re.IGNORECASE)
-
-    meme_keyword_groups = {
-        "it": MEME_KEYWORDS_IT,
-        "es": MEME_KEYWORDS_ES,
-        "fr": MEME_KEYWORDS_FR,
-        "de": MEME_KEYWORDS_DE,
-        "ru": MEME_KEYWORDS_RU,
-        "br": MEME_KEYWORDS_BR,
-        "en": MEME_KEYWORDS_EN,
-    }
-    compiled_meme_patterns = {
-        lang: re.compile("|".join(patterns), re.IGNORECASE)
-        for lang, patterns in meme_keyword_groups.items()
-    }
-
-    ytp_lang_keyword_groups = {
+    # ── Pattern sets ──
+    ytp_keywords_patterns = {
         "it": YTP_KEYWORDS_IT,
         "es": YTP_KEYWORDS_ES,
         "fr": YTP_KEYWORDS_FR,
         "de": YTP_KEYWORDS_DE,
         "ru": YTP_KEYWORDS_RU,
         "br": YTP_KEYWORDS_BR,
+        "en": YTP_KEYWORDS_GENERIC
     }
-    compiled_ytp_lang_patterns = {
-        lang: re.compile("|".join(k_list), re.IGNORECASE)
-        for lang, k_list in ytp_lang_keyword_groups.items()
+    common_word_patterns = {
+        "it": COMMON_WORDS_IT_LIST,
+        "es": COMMON_WORDS_ES_LIST,
+        "fr": COMMON_WORDS_FR_LIST,
+        "de": COMMON_WORDS_DE_LIST,
+        "ru": COMMON_WORDS_RU_LIST,
+        "br": COMMON_WORDS_BR_LIST,
+        "en": COMMON_WORDS_EN_LIST
+    }
+
+    compiled_ytp_keywords_patterns = {
+        lang: re.compile("|".join(p_list), re.IGNORECASE)
+        for lang, p_list in ytp_keywords_patterns.items() if p_list
+    }
+    compiled_common_word_patterns = {
+        lang: re.compile("|".join(p_list), re.IGNORECASE)
+        for lang, p_list in common_word_patterns.items() if p_list
     }
 
     count = 0
-    channel_match_count = 0
-    regex_match_count = 0
-    meme_match_count = 0
-    langs = set(lang_channel_lists.keys()) | set(patterns.keys()) | set(meme_keyword_groups.keys())
+    tag_match_count = 0
+    common_word_match_count = 0
+    langs = set(ytp_keywords_patterns.keys()) | set(common_word_patterns.keys())
     tagged_counts = {lang: 0 for lang in langs}
-    channels_by_lang = defaultdict(set)
 
     # Combine all video data from all databases
     all_ytp = {**index.data, **index.sources_data, **index.ytpmv_data, **index.collabs_data}
 
     for video_id, video in all_ytp.items():
-        title = video.get('title')
+        title = video.get('title') or video_id
         thread_titles = video.get('thread_titles', [])
-        channel_url = video.get('channel_url')
+        current_lang = video.get('language') or "none"
 
         matched_lang = None
 
-        # ── Priority 1: keyword regex matching on title/thread_titles ──
+        # ── Priority 1: YTP_KEYWORDS match (100% certainty) ──
         search_text = []
         if title:
             search_text.append(title)
@@ -3414,58 +3516,48 @@ def do_auto_languages(index):
         full_text = " ".join(search_text)
 
         if full_text:
-            scores = defaultdict(int)
-            
-            # 1. High Weight: Language-specific YTP keywords
-            for lang, regex in compiled_ytp_lang_patterns.items():
-                matches = regex.findall(full_text)
-                scores[lang] += len(matches) * 5
-
-            # 2. Medium Weight: Meme keywords
-            for lang, regex in compiled_meme_patterns.items():
-                matches = regex.findall(full_text)
-                scores[lang] += len(matches) * 2
-
-            # 3. Base Weight: Common words and patterns
-            for lang, regex in compiled_patterns.items():
-                matches = regex.findall(full_text)
-                scores[lang] += len(matches)
-
-            if scores:
-                max_score = max(scores.values())
-                if max_score > 0:
-                    # Tie-breaking: use the order in 'patterns' (prioritizes 'it')
-                    for lang in patterns:
-                        if scores[lang] == max_score:
-                            matched_lang = lang
-                            regex_match_count += 1
-                            break
-
-        # ── Priority 2: match by meme keywords in title/thread_titles ──
-        if not matched_lang and title:
-            for lang, regex in compiled_meme_patterns.items():
-                if regex.search(title):
+            # 1. Check YTP tags first
+            for lang, regex in compiled_ytp_keywords_patterns.items():
+                if regex.search(full_text):
+                    if lang == "en":
+                        # If it matches English (generic), we don't pick it immediately.
+                        # We instead let it fall through to common words to be more accurate.
+                        break 
                     matched_lang = lang
-                    meme_match_count += 1
+                    tag_match_count += 1
                     break
+            
+            # 2. Fallback: Common words scoring
+            if not matched_lang:
+                scores = defaultdict(int)
+                for lang, regex in compiled_common_word_patterns.items():
+                    matches = regex.findall(full_text)
+                    scores[lang] += len(matches)
+                
+                if scores:
+                    max_score = max(scores.values())
+                    if max_score > 0:
+                        # Tie-breaking: prioritizes the order below
+                        for lang in ["it", "es", "fr", "de", "ru", "br", "en"]:
+                            if scores.get(lang) == max_score:
+                                matched_lang = lang
+                                common_word_match_count += 1
+                                break
 
-        # ── Priority 3: match by channel in ytpoopers.db ──
-        if not matched_lang and channel_url:
-            norm_url = _normalize_url(channel_url)
-            matched_lang = channel_lang_map.get(norm_url)
-            if matched_lang:
-                channel_match_count += 1
-
-        if matched_lang:
-            video['language'] = matched_lang
-            tagged_counts[matched_lang] += 1
+        new_lang = matched_lang or current_lang
+        
+        if new_lang != current_lang:
+            print(f"  [*] {title[:60]:<60} [{current_lang}] -> [{new_lang}]")
+            video['language'] = new_lang
+            tagged_counts[new_lang] += 1
             count += 1
-
-            if channel_url:
-                channels_by_lang[matched_lang].add(channel_url)
+        else:
+            print(f"  [*] {title[:60]:<60} [{current_lang}]")
+            if current_lang != "none":
+                tagged_counts[current_lang] += 1
 
     print(f"  Finished tagging. Total videos updated: {count}")
-    print(f"    (regex matches: {regex_match_count}, meme keyword matches: {meme_match_count}, channel matches: {channel_match_count})")
+    print(f"    (YTP tag matches: {tag_match_count}, common word matches: {common_word_match_count})")
     for lang, c in sorted(tagged_counts.items()):
         print(f"    - {lang}: {c}")
 
@@ -3632,10 +3724,16 @@ def do_scrape_sources_metadata(index):
     print(f"  (title, description, channel link, tags)...")
     print()
 
+    start_time = time.time()
     for i, vid in enumerate(need_meta, 1):
+        elapsed = time.time() - start_time
+        avg_time = elapsed / i
+        eta_seconds = avg_time * (total_meta - i)
+        eta_str = format_eta(eta_seconds)
+
         overall_pct = i / total_meta * 100
         ov_bar = bar(overall_pct, 30)
-        print(f"\r  {ov_bar}  {i}/{total_meta}", end="", flush=True)
+        print(f"\r  {ov_bar}  {i}/{total_meta}  ETA: {eta_str}", end="", flush=True)
 
         meta = fetch_yt_metadata(vid)
         e = sources_data[vid]
@@ -3665,8 +3763,9 @@ def do_scrape_sources_metadata(index):
                 if extracted:
                     e["channel_name"] = extracted
 
-        if i % 20 == 0:
+        if i % 100 == 0:
             index.save()
+            print(f"\n    [LOG] Auto-saved sources index ({i} videos processed so far)")
 
     clear_line()
     index.save()
