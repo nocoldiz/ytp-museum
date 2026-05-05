@@ -53,17 +53,19 @@
               <span class="theme-sep">|</span>
             </span>
             <a href="http://localhost:3001" target="_blank"
-              style="color: inherit; border: none; padding: 0; font-weight: bold;" data-i18n="ytp_forum">YTP Italian Forum</a> <span
-              class="theme-sep">|</span>
+              style="color: inherit; border: none; padding: 0; font-weight: bold;" data-i18n="ytp_forum">YTP Italian
+              Forum</a> <span class="theme-sep">|</span>
             <a href="#" id="toggle-modern-old" onclick="toggleThemeMode(); return false;"
-              style="color: inherit; border: none; padding: 0;" data-i18n="switch_modern_mode">Switch to Modern Mode</a> <span
-              class="theme-sep">|</span>
+              style="color: inherit; border: none; padding: 0;" data-i18n="switch_modern_mode">Switch to Modern Mode</a>
+            <span class="theme-sep">|</span>
             <a href="#" id="toggle-night-day" onclick="toggleNightDay(); return false;"
               style="color: inherit; border: none; padding: 0;" data-i18n="night_mode">Switch to Night Mode</a>
           </div>
           <a href="#" id="btn-import" onclick="openImportModal(); return false;"
-            style="display:none; color: inherit; border: none; padding: 0; font-size: 12px; margin-right: 15px;" data-i18n="import">Import</a>
-          <a href="#" id="btn-help" style="color: inherit; border: none; padding: 0; font-size: 12px;" data-i18n="help">Help</a>
+            style="display:none; color: inherit; border: none; padding: 0; font-size: 12px; margin-right: 15px;"
+            data-i18n="import">Import</a>
+          <a href="#" id="btn-help" style="color: inherit; border: none; padding: 0; font-size: 12px;"
+            data-i18n="help">Help</a>
         </div>
         <div style="clear:both;"></div>
       </div>
@@ -74,9 +76,9 @@
         <div id="masthead-nav-right">
           <div id="masthead-search">
             <div class="search-form" style="position: relative;">
-              <input type="text" class="search-term" id="global-search-input" placeholder="Search" data-i18n="search_placeholder"
-                oninput="onGlobalSearchInput()" onkeypress="if(event.key==='Enter')performSearch(this.value)"
-                autocomplete="off">
+              <input type="text" class="search-term" id="global-search-input" placeholder="Search"
+                data-i18n="search_placeholder" oninput="onGlobalSearchInput()"
+                onkeypress="if(event.key==='Enter')performSearch(this.value)" autocomplete="off">
               <button class="search-button" data-i18n="search"
                 onclick="performSearch(document.getElementById('global-search-input').value)">Search</button>
               <div id="search-suggestions" class="search-suggestions"></div>
@@ -143,7 +145,8 @@
 
           <div class="nav-tab setting-tab">
             <svg class="nav-icon" viewBox="0 0 24 24">
-               <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2 0 .68.06 1.34.14 2H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.9-4.33-3.56zm2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66c-.09-.66-.16-1.32-.16-2 0-.68.07-1.34.16-2h4.68c.09.66.16 1.32.16 2 0 .68-.07 1.34-.16 2zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56zM16.36 14c.08-.66.14-1.32.14-2 0-.68-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z"/>
+              <path
+                d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2 0 .68.06 1.34.14 2H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.9-4.33-3.56zm2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66c-.09-.66-.16-1.32-.16-2 0-.68.07-1.34.16-2h4.68c.09.66.16 1.32.16 2 0 .68-.07 1.34-.16 2zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56zM16.36 14c.08-.66.14-1.32.14-2 0-.68-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z" />
             </svg>
             <div class="setting-content">
               <label data-i18n="language">Language</label>
@@ -522,7 +525,8 @@
           <h2>Video Search</h2>
           <span class="count-badge" id="videos-count-label"></span>
           <div id="management-actions" style="display:none; margin-left: 15px; gap: 8px; align-items: center;">
-            <select id="mgmt-move-select" style="font-size:12px; padding:5px; border-radius:6px; border:1px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer;">
+            <select id="mgmt-move-select"
+              style="font-size:12px; padding:5px; border-radius:6px; border:1px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer;">
               <option value="">Move to...</option>
               <option value="ytp">ytp.db</option>
               <option value="other">other.db</option>
@@ -640,7 +644,8 @@
           <span class="count-badge" id="channels-count-label"></span>
         </div>
         <div class="search-bar">
-          <input type="text" id="channel-search" placeholder="Search channels..." onkeypress="if(event.key==='Enter')renderChannelGrid()">
+          <input type="text" id="channel-search" placeholder="Search channels..."
+            onkeypress="if(event.key==='Enter')renderChannelGrid()">
           <label>First Video ≥</label>
           <div class="range-group"><input type="number" id="channel-year-min" placeholder="YYYY"
               onchange="renderChannelGrid()"></div>
@@ -720,13 +725,17 @@
           <h2>Poopers Management</h2>
           <span class="count-badge" id="poopers-count-label"></span>
           <div style="margin-left: auto; display: flex; gap: 8px;">
-            <button class="btn-mgmt" onclick="openScrapeModal()" id="btn-scrape-channel" style="background:var(--accent); color:white; border:none;">Add & Scrape Channel</button>
-            <button class="btn-mgmt" onclick="filterOrphanPoopers()" id="btn-filter-orphans">Filter Sources Only</button>
-            <button class="btn-mgmt" onclick="location.reload()" style="background:var(--surface); opacity:0.8;">Refresh</button>
+            <button class="btn-mgmt" onclick="openScrapeModal()" id="btn-scrape-channel"
+              style="background:var(--accent); color:white; border:none;">Add & Scrape Channel</button>
+            <button class="btn-mgmt" onclick="filterOrphanPoopers()" id="btn-filter-orphans">Filter Sources
+              Only</button>
+            <button class="btn-mgmt" onclick="location.reload()"
+              style="background:var(--surface); opacity:0.8;">Refresh</button>
           </div>
         </div>
         <div class="search-bar">
-          <input type="text" id="pooper-search-input" placeholder="Search pooper name or URL..." onkeypress="if(event.key==='Enter')renderPoopersTable()">
+          <input type="text" id="pooper-search-input" placeholder="Search pooper name or URL..."
+            onkeypress="if(event.key==='Enter')renderPoopersTable()">
         </div>
         <div class="table-wrap">
           <table id="poopers-table">
@@ -968,9 +977,19 @@
             <span>Other Videos (other.db)</span>
           </label>
         </div>
+        m
+        <hr style="margin: 15px 0; border: 0; border-top: 1px solid var(--border);">
+        <h4 style="margin-bottom: 10px; font-size: 15px;">Language Filter</h4>
+        <p style="margin-bottom: 12px; font-size: 12px; color: var(--text-muted);">Toggle languages to show or hide
+          videos globally.</p>
+        <div id="languages-list"
+          style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-height: 200px; overflow-y: auto; padding-right: 5px;">
+          <!-- Language checkboxes injected via JS -->
+        </div>
       </div>
       <div class="modal-footer">
-        <button class="btn-cancel" style="margin-right: auto; background: var(--unavailable); color: white;" onclick="forceRefreshDBs()">Force Refresh DBs</button>
+        <button class="btn-cancel" style="margin-right: auto; background: var(--unavailable); color: white;"
+          onclick="forceRefreshDBs()">Force Refresh DBs</button>
         <button class="btn-cancel" onclick="closeSourcesModal()">Cancel</button>
         <button class="btn-submit" onclick="applySources()">Apply & Reload</button>
       </div>
@@ -986,14 +1005,19 @@
       </div>
       <div class="modal-body">
         <label>YouTube Channel URL:</label>
-        <input type="text" id="scrape-channel-url" placeholder="https://youtube.com/@..." style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-bottom: 10px;">
-        
+        <input type="text" id="scrape-channel-url" placeholder="https://youtube.com/@..."
+          style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-bottom: 10px;">
+
         <div id="scrape-progress-container" style="display:none; margin-top: 15px;">
-          <div style="font-size: 13px; font-weight: bold; margin-bottom: 5px;" id="scrape-status-text">Starting scrape...</div>
-          <div style="width: 100%; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; margin-bottom: 10px;">
-            <div id="scrape-progress-bar" style="width: 0%; height: 100%; background: var(--accent); transition: width 0.2s;"></div>
+          <div style="font-size: 13px; font-weight: bold; margin-bottom: 5px;" id="scrape-status-text">Starting
+            scrape...</div>
+          <div
+            style="width: 100%; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; margin-bottom: 10px;">
+            <div id="scrape-progress-bar"
+              style="width: 0%; height: 100%; background: var(--accent); transition: width 0.2s;"></div>
           </div>
-          <textarea id="scrape-log" readonly style="width: 100%; height: 150px; background: var(--background); border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); font-size: 11px; padding: 8px; font-family: monospace; resize: none;"></textarea>
+          <textarea id="scrape-log" readonly
+            style="width: 100%; height: 150px; background: var(--background); border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); font-size: 11px; padding: 8px; font-family: monospace; resize: none;"></textarea>
         </div>
       </div>
       <div class="modal-footer">

@@ -44,10 +44,23 @@ function getLanguageFlag(lang) {
     'ru': '🇷🇺',
     'fr': '🇫🇷',
     'de': '🇩🇪',
-    'pt': '🇵🇹'
+    'pt': '🇵🇹',
+    'br': '🇧🇷'
   };
   return maps[lang.toLowerCase()] || '🌐';
 }
+
+window.LANGUAGES = [
+  { id: 'en', label: 'English', flag: '🇬🇧' },
+  { id: 'it', label: 'Italian', flag: '🇮🇹' },
+  { id: 'es', label: 'Spanish', flag: '🇪🇸' },
+  { id: 'de', label: 'German', flag: '🇩🇪' },
+  { id: 'fr', label: 'French', flag: '🇫🇷' },
+  { id: 'ru', label: 'Russian', flag: '🇷🇺' },
+  { id: 'pt', label: 'Portuguese', flag: '🇵🇹' },
+  { id: 'br', label: 'Brazilian', flag: '🇧🇷' },
+  { id: 'none', label: 'Unknown', flag: '🌐' }
+];
 
 // Expose functions to global scope
 window.fmtNum = fmtNum;

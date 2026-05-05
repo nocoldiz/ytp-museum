@@ -212,6 +212,17 @@ function openSourcesModal() {
     const cb = document.getElementById(`source-${id}`);
     if (cb) cb.checked = window.enabledSources[id];
   });
+
+  // Populate and sync languages
+  const langList = document.getElementById('languages-list');
+  if (langList) {
+    langList.innerHTML = window.LANGUAGES.map(l => `
+      <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px;">
+        <input type="checkbox" class="lang-check" data-id="${l.id}" ${window.enabledLanguages.includes(l.id) ? 'checked' : ''} onchange="toggleLanguageState('${l.id}')">
+        <span>${l.flag} ${l.label}</span>
+      </label>
+    `).join('');
+  }
 }
 
 function closeSourcesModal() {
@@ -227,14 +238,32 @@ function toggleSourceState(key) {
   }
 }
 
+function toggleLanguageState(id) {
+  const checks = document.querySelectorAll('.lang-check');
+  const enabled = [];
+  checks.forEach(c => {
+    if (c.checked) enabled.push(c.getAttribute('data-id'));
+  });
+  window.enabledLanguages = enabled;
+  localStorage.setItem('ytp-enabled-languages', JSON.stringify(enabled));
+}
+
 function applySources() {
   const ids = ['ytp', 'ytpmv', 'collabs', 'other'];
   ids.forEach(id => {
     const cb = document.getElementById(`source-${id}`);
     if (cb) window.enabledSources[id] = cb.checked;
   });
-  
   localStorage.setItem('ytp-enabled-sources', JSON.stringify(window.enabledSources));
+
+  const checks = document.querySelectorAll('.lang-check');
+  const enabled = [];
+  checks.forEach(c => {
+    if (c.checked) enabled.push(c.getAttribute('data-id'));
+  });
+  window.enabledLanguages = enabled;
+  localStorage.setItem('ytp-enabled-languages', JSON.stringify(enabled));
+  
   location.reload();
 }
 
@@ -257,6 +286,32 @@ function queryDB(sql, params = [], targetDB = null) {
     } else {
       db = window.dbYTP;
     }
+  }
+
+  // GLOBAL LANGUAGE FILTERING
+  // We apply this to any query that selects from "videos" or "channels" (except for specific lookups by ID)
+  const lowerSql = sql.toLowerCase();
+  if ((lowerSql.includes('from videos') || lowerSql.includes('from channels')) && 
+      !lowerSql.includes('where id =') && !lowerSql.includes('where channel_url =') &&
+      window.enabledLanguages && window.enabledLanguages.length > 0) {
+      
+      const langList = window.enabledLanguages.filter(l => l !== 'none');
+      const includeUnknown = window.enabledLanguages.includes('none');
+      
+      let langClause = "";
+      if (langList.length > 0) {
+          langClause = `language IN (${langList.map(l => `'${l}'`).join(',')})`;
+      }
+      
+      if (includeUnknown) {
+          if (langClause) langClause = `(${langClause} OR language IS NULL OR language = '')`;
+          else langClause = `(language IS NULL OR language = '')`;
+      }
+      
+      if (langClause) {
+          // Wrap the original query as a subquery to apply the filter globally without breaking complex joins
+          sql = `SELECT * FROM (${sql}) WHERE ${langClause}`;
+      }
   }
 
   if (!db) return [];
@@ -310,6 +365,7 @@ window.initSQLite = initSQLite;
 window.openSourcesModal = openSourcesModal;
 window.closeSourcesModal = closeSourcesModal;
 window.toggleSourceState = toggleSourceState;
+window.toggleLanguageState = toggleLanguageState;
 window.applySources = applySources;
 window.queryDB = queryDB;
 window.findVideoAcrossDBs = findVideoAcrossDBs;
