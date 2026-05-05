@@ -228,7 +228,7 @@ YTP_KEYWORDS_LIST = (
 )
 
 YTPMV_KEYWORDS_LIST = [
-    r'YTPMV', r'Sparta Remix',r'音MAD'r'音MAD'
+    r'YTPMV', r'Sparta Remix',r'音MAD', r'Veg Replace',r'We are number one'
 ]
 
 COLLABS_KEYWORDS_LIST = [
@@ -2661,12 +2661,12 @@ def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed):
 def do_stats(index, output_path="stats.md"):
     from collections import defaultdict
 
-    sources_data = index.sources_data
-    if not sources_data:
-        print("  Sources database is empty.")
+    all_ytp = {**index.data, **index.ytpmv_data, **index.collabs_data}
+    if not all_ytp:
+        print("  Index is empty. No stats to generate.")
         return
 
-    filtered = sources_data
+    filtered = all_ytp
 
     # Grand totals (unique video count)
     grand = {"total": len(filtered), "downloaded": 0, "unavailable": 0,
@@ -2691,7 +2691,7 @@ def do_stats(index, output_path="stats.md"):
 
     # Build markdown
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-    md = [f"# YTP Backup Sources Stats", f"", f"Generated: {now}", ""]
+    md = [f"# YTP Backup Collection Stats", f"", f"Generated: {now}", ""]
 
     md += ["## Totals", ""]
     md += ["| Total | Downloaded | Unavailable | % N/A | Pending | Failed |"]
@@ -2720,6 +2720,59 @@ def do_stats(index, output_path="stats.md"):
     # Print summary to terminal
     print(f"\n  {'TOTAL':<32} {grand['total']:>5}  {grand['unavailable']:>4}  {grand_pct:>6}")
     print()
+
+
+def do_channel_report(index):
+    """
+    Dumps a report of channels where over 90% of their videos are in the Sources (Other) database.
+    """
+    print("\n>>> Generating Channel Video Report (Source-heavy channels >90%)...")
+    
+    # channel_name -> { 'total': 0, 'other_vids': [] }
+    stats = {}
+    
+    def count_vids(data_dict, is_other=False):
+        for vid_id, info in data_dict.items():
+            ch_name = info.get('channel_name') or "(Unknown Channel)"
+            if ch_name not in stats:
+                stats[ch_name] = {'total': 0, 'other_vids': []}
+            stats[ch_name]['total'] += 1
+            if is_other:
+                title = info.get('title') or f"Untitled [{vid_id}]"
+                stats[ch_name]['other_vids'].append(title)
+
+    count_vids(index.data)
+    count_vids(index.ytpmv_data)
+    count_vids(index.collabs_data)
+    count_vids(index.sources_data, is_other=True)
+    
+    # Filter channels with > 90% other videos
+    qualifying_channels = []
+    for ch_name, data in stats.items():
+        total = data['total']
+        other_count = len(data['other_vids'])
+        if total > 0 and (other_count / total) > 0.9:
+            qualifying_channels.append(ch_name)
+    
+    # Sort by total video count descending
+    qualifying_channels.sort(key=lambda ch: stats[ch]['total'], reverse=True)
+    
+    # 2. Output
+    output_file = os.path.join(PROJECT_ROOT, "channel_report.txt")
+    with open(output_file, "w", encoding="utf-8") as f:
+        for channel in qualifying_channels:
+            ch_data = stats[channel]
+            percentage = (len(ch_data['other_vids']) / ch_data['total']) * 100
+            
+            f.write("############################\n")
+            f.write(f"{channel} ({percentage:.1f}% Source Ratio - {len(ch_data['other_vids'])}/{ch_data['total']})\n\n")
+            
+            for v in sorted(ch_data['other_vids']):
+                f.write(f"{v}\n")
+            
+            f.write("\n#########################\n\n")
+            
+    print(f"\n>>> Channel report generated: {os.path.abspath(output_file)}")
 
 
 def do_chronology(index, top_n=20):
@@ -4007,6 +4060,9 @@ def main():
     print("  13 Random Video Search")
     print("       Pick random videos from the collection and search for similar content.")
     print()
+    print("  14 Channel Video Report")
+    print("       Generate a full report of videos per channel (alphabetical).")
+    print()
     print("  f  Forum Scrape (Site Mirror)")
     print("       Crawl archived forum folders to extract legacy YouTube links.")
     print()
@@ -4030,8 +4086,8 @@ def main():
     print()
     print("  q  Quit")
     print()
-    choice = ask("  Choice [1-13/f/r/s/x/d/p/a/q]: ",
-                 {"1","2","3","4","5","6","7","8","9","10","11","12","13","f","r","s","x","d","p","a","q"})
+    choice = ask("  Choice [1-14/f/r/s/x/d/p/a/q]: ",
+                 {"1","2","3","4","5","6","7","8","9","10","11","12","13","14","f","r","s","x","d","p","a","q"})
 
     if choice == "q":
         sys.exit(0)
@@ -4131,6 +4187,9 @@ def main():
 
     if choice == "13":
         do_random_video_scrape(index)
+
+    if choice == "14":
+        do_channel_report(index)
 
     if choice == "f":
         do_forum_scrape(index, args.site_dir)

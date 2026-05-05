@@ -2,7 +2,7 @@
 let selectedYear = null;
 
 function getStatsDBs() {
-  return [window.dbYTP, window.dbYTPMV, window.dbSources].filter(db => db);
+  return [window.dbYTP, window.dbYTPMV, window.dbCollabs].filter(db => db);
 }
 
 function buildYearData() {

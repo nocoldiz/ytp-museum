@@ -29,7 +29,7 @@ function renderChannelCard(c, mode = 'grid') {
 
   let videosCount = 0, viewsCount = 0, url;
   if (typeof c === 'string') {
-    const dbs = [window.dbYTP, window.dbSources, window.dbYTPMV, window.dbCollabs];
+    const dbs = [window.dbYTP, window.dbYTPMV, window.dbCollabs];
     for (const db of dbs) {
       if (db) {
         const res = window.queryDB("SELECT COUNT(*) as count, SUM(view_count) as views FROM videos WHERE channel_name = ?", [name], db);

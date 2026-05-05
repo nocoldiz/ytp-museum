@@ -3,7 +3,7 @@ const PALETTE = ['#6c63ff', '#ff6584', '#43e97b', '#f7971e', '#38f9d7', '#fa709a
 const STATUS_COLORS = { available: '#43e97b', unavailable: '#ff6584', pending: '#f7971e', unknown: '#888' };
 
 function getStatsDBs() {
-  return [window.dbYTP, window.dbYTPMV, window.dbSources].filter(db => db);
+  return [window.dbYTP, window.dbYTPMV, window.dbCollabs].filter(db => db);
 }
 
 function updateBadges() {
@@ -12,7 +12,8 @@ function updateBadges() {
   let totalYears = new Set();
 
   dbs.forEach(db => {
-    totalVideos += queryDBRow("SELECT COUNT(*) as c FROM videos", [], db).c || 0;
+    const res = queryDBRow("SELECT COUNT(*) as c FROM videos", [], db);
+    totalVideos += res.c || 0;
     const years = queryDB("SELECT DISTINCT substr(publish_date, 1, 4) as y FROM videos WHERE publish_date IS NOT NULL", [], db);
     years.forEach(r => totalYears.add(r.y));
   });
@@ -25,6 +26,13 @@ function updateBadges() {
   if (bC) bC.textContent = totalChannels;
   const bY = document.getElementById('badge-years');
   if (bY) bY.textContent = totalYears.size;
+
+  // Re-build overview if we are on the stats page to show data from background-loaded DBs
+  const overviewPage = document.getElementById('page-overview');
+  if (overviewPage && overviewPage.classList.contains('active')) {
+    buildOverview();
+    if (window.renderYearGrid) window.renderYearGrid();
+  }
 }
 
 function buildOverview() {
@@ -128,6 +136,14 @@ function buildOverview() {
 
   // Videos by year
   const sortedYears = Object.keys(yearsMap).sort();
+  const datedTotal = Object.values(yearsMap).reduce((a, b) => a + b, 0);
+  const noDateCount = Math.max(0, combinedStats.total - datedTotal);
+
+  const chartHeader = document.querySelector('#page-overview .chart-card.box .box-header');
+  if (chartHeader) {
+    chartHeader.textContent = `Videos by Year (${fmtNum(noDateCount)} video${noDateCount !== 1 ? 's' : ''} with no date)`;
+  }
+
   makeChart('chart-year', 'bar', sortedYears, [{
     label: 'Videos', data: sortedYears.map(y => yearsMap[y]),
     backgroundColor: sortedYears.map((_, i) => PALETTE[i % PALETTE.length] + 'bb'),
