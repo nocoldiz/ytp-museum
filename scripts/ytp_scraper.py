@@ -232,7 +232,7 @@ YTPMV_KEYWORDS_LIST = [
 ]
 
 COLLABS_KEYWORDS_LIST = [
-    r'Tennis', r'Soccer', r'Collab', r'Pingpong', r'ping\s+pong', 
+    r'Tennis', r'Soccer', r'Collab', r'Pingpong', r'pinpg\s+pong', 
     r'san\'itario', r's\.itario', r's\.antonino', r'catena\s+di', r'Shitstorm\s+pt'
 ]
 

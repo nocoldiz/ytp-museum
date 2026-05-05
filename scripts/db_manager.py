@@ -8,6 +8,7 @@ SOURCES_DB = 'public/db/other.db'
 POOPERS_DB = 'public/db/ytpoopers.db'
 YTPMV_DB = 'public/db/ytpmv.db'
 COLLABS_DB = 'public/db/collabs.db'
+EXCLUDED_JSON = 'scripts/db/excluded_videos.json'
 
 def get_conn(db_type='ytp'):
     path = YTP_DB
@@ -148,36 +149,64 @@ def import_videos(urls, target):
     return {"success": True, "results": {"added": added, "skipped": skipped}}
 
 def remove_channel(channel_url):
-    deleted_videos = []
+    deleted_videos_count = 0
+    channel_removed = False
     
-    # 1. Find all videos for this channel across all DBs
-    for db_type in ['ytp', 'sources', 'ytpmv', 'collabs']:
-        conn = get_conn(db_type)
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()
-        
-        # In some DBs we might have channel_url, in others just channel_name.
-        # But ytpoopers.db uses channel_url as PK.
-        # Let's try to match by channel_url first, then by channel_name if we can get it from poopers.db
-        
-        cursor.execute("SELECT id, local_file FROM videos WHERE channel_url = ?", (channel_url,))
-        videos = cursor.fetchall()
-        
-        # If no hits by URL, try by name (get name from poopers.db)
-        if not videos:
-            p_conn = get_conn('poopers')
-            p_cursor = p_conn.cursor()
-            p_cursor.execute("SELECT channel_name FROM channels WHERE channel_url = ?", (channel_url,))
-            row = p_cursor.fetchone()
-            p_conn.close()
-            if row:
-                name = row[0]
-                cursor.execute("SELECT id, local_file FROM videos WHERE channel_name = ?", (name,))
-                videos = cursor.fetchall()
+    # Get channel name for matching if needed
+    channel_name = None
+    p_conn = get_conn('poopers')
+    p_cursor = p_conn.cursor()
+    p_cursor.execute("SELECT channel_name FROM channels WHERE channel_url = ?", (channel_url,))
+    row = p_cursor.fetchone()
+    p_conn.close()
+    if row:
+        channel_name = row[0]
+
+    # 1. Handle videos in sources (other.db) ONLY
+    conn = get_conn('sources')
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM videos WHERE channel_url = ?", (channel_url,))
+    videos = [dict(r) for r in cursor.fetchall()]
+    
+    if not videos and channel_name:
+        cursor.execute("SELECT * FROM videos WHERE channel_name = ?", (channel_name,))
+        videos = [dict(r) for r in cursor.fetchall()]
+    
+    if videos:
+        # Load existing excluded videos
+        excluded_data = {}
+        if os.path.exists(EXCLUDED_JSON):
+            try:
+                with open(EXCLUDED_JSON, 'r', encoding='utf-8') as f:
+                    excluded_data = json.load(f)
+            except: pass
+            
+        ytp_conn = get_conn('ytp')
+        ytp_cursor = ytp_conn.cursor()
         
         for v in videos:
             vid_id = v['id']
-            local_file = v['local_file']
+            local_file = v.get('local_file')
+            
+            # Add to JSON
+            excluded_data[vid_id] = {
+                "url": v.get('url'),
+                "title": v.get('title'),
+                "description": v.get('description'),
+                "channel_name": v.get('channel_name'),
+                "channel_url": v.get('channel_url'),
+                "publish_date": v.get('publish_date'),
+                "view_count": v.get('view_count'),
+                "like_count": v.get('like_count'),
+                "language": v.get('language'),
+                "status": "excluded",
+                "local_file": None # We are deleting it
+            }
+            
+            # Add to ytp.db excluded_videos table
+            ytp_cursor.execute("INSERT OR IGNORE INTO excluded_videos (id, reason) VALUES (?, ?)", (vid_id, "Channel removed from Poopers"))
             
             # Delete local file
             if local_file:
@@ -186,24 +215,51 @@ def remove_channel(channel_url):
                     try: os.remove(abs_path)
                     except: pass
             
-            # Delete from DB
+            # Delete from sources DB
             cursor.execute("DELETE FROM videos WHERE id = ?", (vid_id,))
             cursor.execute("DELETE FROM video_tags WHERE video_id = ?", (vid_id,))
-            cursor.execute("DELETE FROM video_sections WHERE video_id = ?", (vid_id,))
-            cursor.execute("DELETE FROM playlist_videos WHERE video_id = ?", (vid_id,))
-            deleted_videos.append(vid_id)
+            deleted_videos_count += 1
             
-        conn.commit()
-        conn.close()
+        # Save JSON
+        try:
+            with open(EXCLUDED_JSON, 'w', encoding='utf-8') as f:
+                json.dump(excluded_data, f, indent=2, ensure_ascii=False)
+        except: pass
         
-    # 2. Remove channel from ytpoopers.db
-    p_conn = get_conn('poopers')
-    p_cursor = p_conn.cursor()
-    p_cursor.execute("DELETE FROM channels WHERE channel_url = ?", (channel_url,))
-    p_conn.commit()
-    p_conn.close()
+        ytp_conn.commit()
+        ytp_conn.close()
+        conn.commit()
+        
+    conn.close()
     
-    return {"success": True, "deletedVideosCount": len(deleted_videos)}
+    # 2. Check if channel should be removed from ytpoopers.db
+    # It should be removed ONLY if it has NO videos in ytp.db, ytpmv.db, collabs.db
+    total_remaining = 0
+    for db_type in ['ytp', 'ytpmv', 'collabs']:
+        c = get_conn(db_type)
+        cur = c.cursor()
+        cur.execute("SELECT COUNT(*) FROM videos WHERE channel_url = ?", (channel_url,))
+        count = cur.fetchone()[0]
+        if count == 0 and channel_name:
+            cur.execute("SELECT COUNT(*) FROM videos WHERE channel_name = ?", (channel_name,))
+            count = cur.fetchone()[0]
+        total_remaining += count
+        c.close()
+        
+    if total_remaining == 0:
+        p_conn = get_conn('poopers')
+        p_cursor = p_conn.cursor()
+        p_cursor.execute("DELETE FROM channels WHERE channel_url = ?", (channel_url,))
+        p_conn.commit()
+        p_conn.close()
+        channel_removed = True
+    
+    return {
+        "success": True, 
+        "deletedVideosCount": deleted_videos_count,
+        "channelRemovedFromPoopers": channel_removed,
+        "remainingVideosInCollections": total_remaining
+    }
 
 def set_language(video_ids, language):
     updated = []
