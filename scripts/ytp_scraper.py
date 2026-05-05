@@ -197,7 +197,7 @@ import re
 
 YTP_KEYWORDS_IT = [
     r'YTPITA', r'YTP-ITA', r'YTP\s?ITA', r'YTM', r'Youtube\s+poop\s+ITA', 
-    r'YouTube\s+Poop\s+ITA', r'[ITA]', r'YTG', r'YouTube\s+Poop(?:\s+ITA)?', 
+    r'YouTube\s+Poop\s+ITA', r'\[ITA\]', r'YTG', r'YouTube\s+Poop(?:\s+ITA)?', 
     r'Youtube poop ita', r'You tube poop ita', r'YTP ITA', r'Youtube merda', 
     r'S\.Itario', r'Shitstorm pt\.'
 ]
@@ -206,28 +206,28 @@ YTP_KEYWORDS_ES = [
     r'YTPH', r'YTPHSHORT', r'Poop Hispano', r'YTPES', r'YTP\s?ES', 
     r'Pooppa[ñn]ol', r'YouTube\s+Poop\s+en\s+español', 
     r'YouTube\s+Poop(?:\s+en\s+español)?', r'YouTube\s+Poop\s+Hispano', 
-    r'YTP\s?ESP', r'[ES]', r'YTP\s?Castellano', r'YTP\s?Latino', r'Poop\s?Hispano'
+    r'YTP\s?ESP', r'\[ES\]', r'YTP\s?Castellano', r'YTP\s?Latino', r'Poop\s?Hispano'
 ]
 
 YTP_KEYWORDS_FR = [
     r'YTPFR', r'YTP\s+FR', r'YouTube\s+Poop\s+FR', 
-    r'YouTube\s+Poop(?:\s+FR)?', r'[FR]', r'YTP\s?France', r'YTP\s?Francais'
+    r'YouTube\s+Poop(?:\s+FR)?', r'\[FR\]', r'YTP\s?France', r'YTP\s?Francais'
 ]
 
 YTP_KEYWORDS_DE = [
     r'YouTube\s+Kacke', r'YouTube\s+Kaka', r'YTPDE', r'YTP\s?DE', 
-    r'[DE]', r'YTP\s?Deutsch', r'YTP\s?GER'
+    r'\[DE\]', r'YTP\s?Deutsch', r'YTP\s?GER'
 ]
 
 YTP_KEYWORDS_RU = [
     r'RYTP', r'РУТП', r'YTPRU', r'YTP\s?RU', r'РЮТП', 
-    r'Russian\s+YouTube\s+Poop', r'Русский\s+RYTP', r'RYTP\s?МЕМ', r'[RU]'
+    r'Russian\s+YouTube\s+Poop', r'Русский\s+RYTP', r'RYTP\s?МЕМ', r'\[RU\]'
 ]
 
 YTP_KEYWORDS_BR = [
     r'YTPBR', r'YTP\s+BR', r'YouTube\s+Poop\s+BR', 
     r'YouTube\s+Poop(?:\s+BR)?', r'YTP\s?PT-BR', r'YTP\s?Brasil', 
-    r'Poop\s?BR', r'[BR]'
+    r'Poop\s?BR', r'\[BR\]'
 ]
 YTP_KEYWORDS_GENERIC = [
         r'YTPMV', r'Collab',
@@ -455,14 +455,14 @@ COMMON_WORDS_IT_LIST = [
     r'\b(?:dal|dallo|dalla|dai|dagli|dalle|dall\'?)\b',
     r'\b(?:nel|nello|nella|nei|negli|nelle|nell\'?)\b',
     r'\b(?:sul|sullo|sulla|sui|sugli|sulle|sull\'?)\b',
-    r'\b(?:col|coi|collo|colla|colle|per|tra|fra)\b',
-    r'\b(?:che|chi|cui|quale|quali|quanto|quanti|quanta|quante|ed|oppure|anche|perché|poiché|affinché|benché|dove|mentre|quindi|dunque|però|tuttavia|infatti|ovvero|ossia|cioè|sebbene|finché|siccome|eppure|perciò|nonché)\b',
+    r'\b(?:col|coi|collo|colla|colle|tra|fra)\b',
+    r'\b(?:che|chi|cui|quale|quali|quanto|quanti|quanta|quante|oppure|anche|perché|poiché|affinché|benché|dove|mentre|quindi|dunque|però|tuttavia|infatti|ovvero|ossia|cioè|sebbene|finché|siccome|eppure|perciò|nonché)\b',
     r'\b(?:io|lei|noi|voi|loro|esso|essi)\b',
     r'\b(?:gli|ci|li|m\'?|t\'?|s\'?|v\'?|c\'?|n\'?)\b',
     r'\b(?:mio|mia|miei|mie|tuo|tuoi|tue|suo|suoi|sue|nostro|nostra|nostri|nostre|vostro|vostra|vostri|vostre)\b',
     r'\b(?:questo|questa|questi|queste|quello|quella|quelli|quelle|quel|quei|quegli|cio|ciò|colui|colei|coloro)\b',
     r'\b(?:niente|nulla|qualcosa|qualcuno|nessuno|ognuno|chiunque|tutto|tutta|tutti|tutte|alcuni|alcune|ogni|qualche)\b',
-    r'\b(?:più|molto|troppo|bene|male|ora|oggi|ieri|domani|lì|qua|già|ancora|forse|mai|magari|purtroppo|comunque|ovviamente|sicuramente|probabilmente|insomma|allora|così|davvero|quasi|meno|piuttosto|pure|neanche|nemmeno|mica|appena|infine|invece|spesso|subito|soltanto|tanto|almeno|davanti|dietro|sopra|sotto|fuori)\b',
+    r'\b(?:più|molto|troppo|bene|male|ora|oggi|ieri|domani|lì|qua|già|ancora|forse|mai|magari|purtroppo|comunque|ovviamente|sicuramente|probabilmente|insomma|allora|così|davvero|quasi|meno|piuttosto|neanche|nemmeno|mica|appena|infine|invece|spesso|subito|soltanto|tanto|almeno|davanti|dietro|sopra|sotto|fuori)\b',
     r'\b(?:sono|è|siamo|siete|hanno|ho|hai|abbiamo|avete|eri|eravamo|eravate|erano|aveva|avevo|avevi|avevamo|avevate|avevano|fosti|fu|fummo|foste|furono|ebbi|avesti|ebbe|avemmo|aveste|ebbero|sarò|sarai|sarà|saremo|sarete|saranno|avrò|avrai|avrà|avremo|avrete|avranno|sarei|saresti|sarebbe|saremmo|sareste|sarebbero|avrei|avresti|avrebbe|avremmo|avreste|avrebbero|sia|siate|siano|abbia|abbiate|abbiano|stato|stata|stati|state|avuto|avuta|avuti|avute)\b',
     r'\b(?:fare|vedere|andare|venire|volere|potere|dovere|sapere|stare|dare|prendere|mettere|trovare|parlare|pensare|credere|sembrare|lasciare|guardare|capire|chiamare|cercare|entrare|uscire|portare|sentire|scrivere|leggere|vivere|mangiare|bere|dormire|lavorare|fatto|detto|andato|andata|andati|andate|vista|visti|viste|preso|messo|scritto|letto|capito|sentito)\b',
     r'\b(?:faccio|fai|fa|facciamo|fate|fanno|facevo|faceva|feci|farò|farà|farei|farebbe)\b',
@@ -476,7 +476,7 @@ COMMON_WORDS_IT_LIST = [
     r'\b(?:sai|sappiamo|sapete|sanno|sapevo|sapeva|seppi|saprò|saprà|saprei|saprebbe|saputo)\b',
     r'\b(?:sto|stai|sta|stiamo|state|stanno|stavo|stava|stetti|starò|starà|starei|starebbe)\b',
     r'\b(?:dai|dà|diamo|date|danno|davo|dava|diedi|darò|darà)\b',
-    r'\b(?:piccolo|buono|de luca|sheids|cattivo|bello|ITA|[ITA]|brutto|nuovo|vecchio|vero|primo|ultimo|stesso|diverso|giusto|sbagliato|uomo|donna|anno|giorno|volta|vita|mondo|paese|lavoro|ragazzo|ragazza|amico|amica|famiglia|storia|modo|numero|signore|signora|via|parola|città|amore|notte|ora|occhio|voce|acqua|sole|mare|strada|scuola|musica|gioco|fine|inizio|anima|cuore|spirito|luce|ombra|sogno|realtà|verità|bugia|paura|gioia|rabbia|dolore|felicità|tristezza|speranza|fortuna|successo|fallimento|vittoria|sconfitta|sfida|avventura|viaggio|vacanza)\b',
+    r'\b(?:piccolo|buono|de luca|sheids|cattivo|bello|ITA|\[ITA\]|brutto|nuovo|vecchio|vero|primo|ultimo|stesso|diverso|giusto|sbagliato|uomo|donna|anno|giorno|volta|vita|mondo|paese|lavoro|ragazzo|ragazza|amico|amica|famiglia|storia|modo|numero|signore|signora|parola|città|amore|notte|ora|occhio|voce|acqua|strada|scuola|musica|gioco|inizio|cuore|spirito|luce|ombra|sogno|realtà|verità|bugia|paura|gioia|rabbia|dolore|felicità|tristezza|speranza|fortuna|successo|fallimento|vittoria|sconfitta|sfida|avventura|viaggio|vacanza)\b',
     r'\b(?:c\'è|ce\s+n\'è|non\s+è|è\s+un|che\s+cosa|non\s+lo\s+so|non\s+importa|per\s+favore|grazie\s+mille|come\s+mai|che\s+succede|per\s+il|di\s+un|che\s+ha|e\s+poi|con\s+la|in\s+un|per\s+la|fratello|finito|le\s+idee|acqua|fantabosco|una\s+società|cazzo|altra\s+dimensione|sono\s+dei|d\'accordo|a\s+proposito|in\s+fondo|di\s+nuovo|per\s+forza|più\s+o\s+meno|a\s+presto|a\s+dopo|buongiorno|buonasera|ciao|arrivederci|mi\s+dispiace|ti\s+prego|ci\s+vediamo)\b'
 ]
 COMMON_WORDS_IT = re.compile("|".join(COMMON_WORDS_IT_LIST), re.IGNORECASE)
