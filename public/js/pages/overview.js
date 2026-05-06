@@ -12,13 +12,13 @@ function updateBadges() {
   let totalYears = new Set();
 
   dbs.forEach(db => {
-    const res = queryDBRow("SELECT COUNT(*) as c FROM videos", [], db);
-    totalVideos += res.c || 0;
-    const years = queryDB("SELECT DISTINCT substr(publish_date, 1, 4) as y FROM videos WHERE publish_date IS NOT NULL", [], db);
+    const res = getGlobalStats(db);
+    totalVideos += res.total || 0;
+    const years = getGlobalYears(db);
     years.forEach(r => totalYears.add(r.y));
   });
 
-  const totalChannels = queryDBRow("SELECT COUNT(*) as c FROM channels", [], window.dbPoopers).c || 0;
+  const totalChannels = getChannelCount();
 
   const bV = document.getElementById('badge-videos');
   if (bV) bV.textContent = totalVideos;
@@ -58,16 +58,7 @@ function buildOverview() {
   let allTopViews = [];
 
   dbs.forEach(db => {
-    const s = queryDBRow(`
-      SELECT 
-        COUNT(*) as total,
-        SUM(CASE WHEN title IS NOT NULL THEN 1 ELSE 0 END) as withTitle,
-        SUM(CASE WHEN view_count IS NOT NULL AND view_count > 0 THEN 1 ELSE 0 END) as withViewsCount,
-        SUM(view_count) as totalViews,
-        SUM(like_count) as totalLikes,
-        SUM(CASE WHEN local_file IS NULL THEN 1 ELSE 0 END) as available
-      FROM videos
-    `, [], db);
+    const s = getGlobalStats(db);
 
     combinedStats.total += s.total || 0;
     combinedStats.withTitle += s.withTitle || 0;
@@ -77,24 +68,15 @@ function buildOverview() {
     combinedStats.available += s.available || 0;
 
     // Years
-    queryDB("SELECT substr(publish_date, 1, 4) as y, COUNT(*) as c FROM videos WHERE publish_date IS NOT NULL GROUP BY y", [], db)
+    getVideosCountByYear(db)
       .forEach(r => { yearsMap[r.y] = (yearsMap[r.y] || 0) + r.c; });
 
     // Channels
-    queryDB("SELECT channel_name, COUNT(*) as c FROM videos GROUP BY channel_name", [], db)
+    getAllCreators(db)
       .forEach(r => { channelsMap[r.channel_name] = (channelsMap[r.channel_name] || 0) + r.c; });
 
     // Distribution (Skipping 0 and NULL)
-    const d = queryDBRow(`
-      SELECT 
-        SUM(CASE WHEN view_count > 0 AND view_count < 100 THEN 1 ELSE 0 END) as v100,
-        SUM(CASE WHEN view_count >= 100 AND view_count < 1000 THEN 1 ELSE 0 END) as v1k,
-        SUM(CASE WHEN view_count >= 1000 AND view_count < 10000 THEN 1 ELSE 0 END) as v10k,
-        SUM(CASE WHEN view_count >= 10000 AND view_count < 100000 THEN 1 ELSE 0 END) as v100k,
-        SUM(CASE WHEN view_count >= 100000 AND view_count < 1000000 THEN 1 ELSE 0 END) as v1m,
-        SUM(CASE WHEN view_count >= 1000000 THEN 1 ELSE 0 END) as v1mp
-      FROM videos
-    `, [], db);
+    const d = getViewsDistribution(db);
     buckets['1-100'] += d.v100 || 0;
     buckets['100-1K'] += d.v1k || 0;
     buckets['1K-10K'] += d.v10k || 0;
@@ -103,7 +85,7 @@ function buildOverview() {
     buckets['1M+'] += d.v1mp || 0;
 
     // Top Lists (Combined)
-    allTopViews = allTopViews.concat(queryDB("SELECT * FROM videos WHERE view_count IS NOT NULL ORDER BY view_count DESC LIMIT 20", [], db));
+    allTopViews = allTopViews.concat(getTopVideosByViews(20, db));
   });
 
   const total = combinedStats.total || 1;

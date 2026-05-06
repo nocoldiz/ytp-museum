@@ -1,6 +1,7 @@
 import { initI18n } from './js/core/i18n.js';
 import './js/core/state.js';
 import './js/core/db.js';
+import './js/core/services.js';
 import './js/pages/profiles.js';
 import './js/core/routing.js';
 import './js/ui/theme.js';
@@ -60,7 +61,7 @@ function initApp() {
 
   const yearSelectors = [document.getElementById('global-year-selector'), document.getElementById('modern-global-year-selector')];
   if (yearSelectors[0] || yearSelectors[1]) {
-    const minYearRes = queryDB("SELECT MIN(CAST(substr(publish_date, 1, 4) AS INTEGER)) as m FROM videos");
+    const minYearRes = [getMinYear()];
     const minYear = (minYearRes && minYearRes[0] && minYearRes[0].m) ? parseInt(minYearRes[0].m) : 2005;
     const currentYear = new Date().getFullYear();
     globalMaxYear = currentYear;
@@ -136,7 +137,7 @@ async function autoLoad() {
 
   // If pooperMap still empty or needs update from real DB (if loaded)
   if (!window.pooperMap || Object.keys(window.pooperMap).length < 10) {
-    const channels = queryDB("SELECT * FROM channels");
+    const channels = getAllChannels();
     window.pooperMap = window.pooperMap || {};
     channels.forEach(p => {
       if (p.channel_name) window.pooperMap[p.channel_name] = p;

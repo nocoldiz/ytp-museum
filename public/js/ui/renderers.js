@@ -12,14 +12,7 @@ function buildFilterOptions() {
   const isSource = appMode === 'sources' ? 1 : 0;
 
   // 1. Build Sections
-  const sectionsRes = queryDB(`
-    SELECT DISTINCT s.name 
-    FROM sections s
-    JOIN video_sections vs ON s.id = vs.section_id
-    JOIN videos v ON vs.video_id = v.id
-    WHERE 1=1
-    ORDER BY s.name ASC
-  `, [], isSource ? dbSources : dbYTP);
+  const sectionsRes = getSectionsList(isSource, window.dbYTP, window.dbSources);
 
   const sections = sectionsRes.map(r => r.name === 'Scraped Channel' ? 'Youtube' : r.name);
   const secHtml = '<option value="">All Sections</option>' + [...new Set(sections)].map(s => `<option value="${s}">${s}</option>`).join('');
@@ -27,13 +20,13 @@ function buildFilterOptions() {
   if (sectionSelSearch) sectionSelSearch.innerHTML = secHtml;
 
   // 2. Build Channels
-  const channelsRes = queryDB("SELECT DISTINCT channel_name FROM videos WHERE channel_name IS NOT NULL AND channel_name != '' ORDER BY channel_name ASC", [], isSource ? dbSources : dbYTP);
+  const channelsRes = getChannelsList(isSource, window.dbYTP, window.dbSources);
   if (channelDatalist) {
     channelDatalist.innerHTML = channelsRes.map(r => `<option value="${escAttr(r.channel_name)}">`).join('');
   }
 
   // 3. Build Years
-  const yearsRes = queryDB("SELECT DISTINCT substr(publish_date, 1, 4) as y FROM videos WHERE publish_date IS NOT NULL ORDER BY y ASC", [], isSource ? dbSources : dbYTP);
+  const yearsRes = getYearsList(isSource, window.dbYTP, window.dbSources);
   const years = yearsRes.map(r => r.y);
 
   const minYearHtml = '<option value="">Min</option>' + years.map(y => `<option value="${y}">${y}</option>`).join('');
