@@ -149,6 +149,33 @@ def load_excluded_channels():
     return excluded
 
 
+DOWNLOAD_CACHE_FILE = os.path.join(PROJECT_ROOT, "scripts", "db", "downloaded_cache.json")
+
+def load_download_cache():
+    """Load video IDs that are already downloaded from downloaded_cache.json."""
+    if os.path.exists(DOWNLOAD_CACHE_FILE):
+        try:
+            with open(DOWNLOAD_CACHE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return set(data) if isinstance(data, list) else set()
+        except Exception as e:
+            print(f"  [!] Error loading downloaded_cache.json: {e}")
+    return set()
+
+def save_to_download_cache(video_id):
+    """Add a video ID to downloaded_cache.json."""
+    if not video_id: return
+    cache = load_download_cache()
+    if video_id not in cache:
+        cache.add(video_id)
+        try:
+            os.makedirs(os.path.dirname(DOWNLOAD_CACHE_FILE), exist_ok=True)
+            with open(DOWNLOAD_CACHE_FILE, "w", encoding="utf-8") as f:
+                json.dump(sorted(list(cache)), f, indent=4)
+        except Exception as e:
+            print(f"  [!] Error saving to downloaded_cache.json: {e}")
+
+
 def get_all_registered_channels(index):
     urls = set()
     try:
@@ -1007,12 +1034,14 @@ class VideoIndex:
         self.collabs_ids = set()
         self.excluded_ids = set()
         self.excluded_channels = set()  # Load excluded channels from JSON
+        self.download_cache = set()     # Load from downloaded_cache.json
         
         # ── Backup Databases ──────────────────────────────────────────────────
         self.backup_databases()
         
-        # Load excluded channels before other operations
+        # Load excluded channels and download cache before other operations
         self.excluded_channels = load_excluded_channels()
+        self.download_cache = load_download_cache()
         self.load_excluded()
 
     def backup_databases(self):
@@ -1150,6 +1179,12 @@ class VideoIndex:
                 print(f"  [!] Error loading {db_type} database: {e}", flush=True)
         finally:
             conn.close()
+        
+        # Update download cache with what's in the DB
+        for vid, e in data.items():
+            if e.get("status") == "downloaded":
+                self.download_cache.add(vid)
+                
         return data
 
     def check_disk_existence(self):
@@ -1193,6 +1228,17 @@ class VideoIndex:
             clear_line()
             print(f"  [Disk Check] Found {found} videos already on disk.")
             if found > 0:
+                # Update cache with everything we found
+                for vid, e in {**self.data, **self.sources_data, **self.ytpmv_data, **self.collabs_data}.items():
+                    if e.get("status") == "downloaded":
+                        self.download_cache.add(vid)
+                
+                # Save full cache to disk
+                try:
+                    with open(DOWNLOAD_CACHE_FILE, "w", encoding="utf-8") as f:
+                        json.dump(sorted(list(self.download_cache)), f, indent=4)
+                except Exception: pass
+
                 self.save()
 
     def cleanup_index(self):
@@ -1593,7 +1639,15 @@ class VideoIndex:
         self._fix_channel_name(e)
 
     def is_done(self, vid):
-        return self.data.get(vid, {}).get("status") in ("downloaded", "unavailable")
+        # Check all main indices
+        all_ytp = {**self.data, **self.ytpmv_data, **self.collabs_data, **self.sources_data}
+        status = all_ytp.get(vid, {}).get("status")
+        if status in ("downloaded", "unavailable"):
+            return True
+        # Check local cache
+        if vid in self.download_cache:
+            return True
+        return False
 
     def set_downloaded(self, vid, local_file, title=None):
         e = self.data.get(vid) or self.sources_data.get(vid) or \
@@ -1601,6 +1655,8 @@ class VideoIndex:
         if e:
             e["status"] = "downloaded"
             e["local_file"] = local_file
+            save_to_download_cache(vid)
+            self.download_cache.add(vid)
             if title:
                 e["title"] = title
 
@@ -4528,6 +4584,9 @@ def main():
     print("  14 Channel Video Report")
     print("       Generate a full report of videos per channel (alphabetical).")
     print()
+    print("  15 Download YTP/Collabs/YTPMV (Selected Channels Only)")
+    print("       Targeted download: Only fetch videos from your selected_channels.txt.")
+    print()
     print("  f  Forum Scrape (Site Mirror)")
     print("       Crawl archived forum folders to extract legacy YouTube links.")
     print()
@@ -4551,8 +4610,8 @@ def main():
     print()
     print("  q  Quit")
     print()
-    choice = ask("  Choice [1-14/f/r/s/x/d/p/a/q]: ",
-                 {"1","2","3","4","5","6","7","8","9","10","11","12","13","14","f","r","s","x","d","p","a","q"})
+    choice = ask("  Choice [1-15/f/r/s/x/d/p/a/q]: ",
+                 {"1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","f","r","s","x","d","p","a","q"})
 
     if choice == "q":
         sys.exit(0)
@@ -4738,6 +4797,16 @@ def main():
 
     if choice == "14":
         do_channel_report(index)
+
+    if choice == "15":
+        selected_chans = get_selected_channels()
+        if not selected_chans:
+            print("  [!] Selected channels list is empty or file not found. Aborting.")
+            print()
+            return
+        
+        should_convert = ask_conversion()
+        do_download(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, custom_channels=selected_chans, should_convert=should_convert)
 
     if choice == "f":
         do_forum_scrape(index, args.site_dir)
