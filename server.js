@@ -193,11 +193,14 @@ function onRequest(req, res) {
 
   // ── API: Playlists ───────────────────────────────────────────────────────
   if (pathname === '/api/playlists' && req.method === 'GET') {
-    // For GET playlists, we can still use a shell command or just serve a JSON if we had it.
-    // Let's use the Python manager to get them.
-    // Actually, I'll add a 'get-playlists' command to the manager.
-    // For now, let's just return empty or implement it.
     const result = runDbCommand('get-playlists', {});
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(result));
+    return;
+  }
+
+  if (pathname === '/api/home-lite' && req.method === 'GET') {
+    const result = runDbCommand('get-home-lite', {});
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(result));
     return;

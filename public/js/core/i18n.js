@@ -21,7 +21,10 @@ export const translations = {
     'sources': 'Sources',
     'import': 'Import',
     'help': 'Help',
-    'search_placeholder': 'Search'
+    'search_placeholder': 'Search',
+    'watched': 'Watched',
+    'clear_watched': 'Clear history',
+    'clear_watched_confirm': 'Are you sure you want to clear your watch history?'
   },
   it: {
     'home': 'Home',
@@ -30,7 +33,7 @@ export const translations = {
     'playlists': 'Playlist',
     'explore': 'Esplora',
     'manager': 'Gestione',
-    'timeline': 'Cronologia',
+    'timeline': 'Timeline',
     'stats': 'Statistiche',
     'settings': 'Impostazioni',
     'year_limit': 'Limite Anno',
@@ -45,7 +48,10 @@ export const translations = {
     'sources': 'Fonti',
     'import': 'Importa',
     'help': 'Aiuto',
-    'search_placeholder': 'Cerca'
+    'search_placeholder': 'Cerca',
+    'watched': 'Guardati',
+    'clear_watched': 'Cancella cronologia',
+    'clear_watched_confirm': 'Sei sicuro di voler cancellare la cronologia dei video guardati?'
   }
 };
 
@@ -60,7 +66,7 @@ export function setLanguage(lang) {
     currentLang = lang;
     localStorage.setItem('ytp-lang', lang);
     applyTranslations();
-    
+
     const oldSelector = document.getElementById('lang-selector-old');
     const modernSelector = document.getElementById('lang-selector-modern');
     if (oldSelector) oldSelector.value = lang;
@@ -88,11 +94,11 @@ export function applyTranslations() {
 window.setLanguage = setLanguage;
 
 export function initI18n() {
-    const oldSelector = document.getElementById('lang-selector-old');
-    const modernSelector = document.getElementById('lang-selector-modern');
-    if (oldSelector) oldSelector.value = currentLang;
-    if (modernSelector) modernSelector.value = currentLang;
-    applyTranslations();
+  const oldSelector = document.getElementById('lang-selector-old');
+  const modernSelector = document.getElementById('lang-selector-modern');
+  if (oldSelector) oldSelector.value = currentLang;
+  if (modernSelector) modernSelector.value = currentLang;
+  applyTranslations();
 }
 
 document.addEventListener('DOMContentLoaded', initI18n);

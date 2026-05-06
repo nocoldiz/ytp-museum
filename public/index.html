@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="style.css">
 </head>
 
-<body class="theme-old theme-light">
+<body class="theme-old theme-light is-loading">
   <script>
     (function () {
       const mode = localStorage.getItem('lastThemeMode') || 'old';
@@ -78,7 +78,7 @@
             <div class="search-form" style="position: relative;">
               <input type="text" class="search-term" id="global-search-input" placeholder="Search"
                 data-i18n="search_placeholder" oninput="onGlobalSearchInput()"
-                onkeypress="if(event.key==='Enter')performSearch(this.value)" autocomplete="off">
+                onkeypress="if(event.key==='Enter')performSearch(this.value)" autocomplete="off" disabled>
               <button class="search-button" data-i18n="search"
                 onclick="performSearch(document.getElementById('global-search-input').value)">Search</button>
               <div id="search-suggestions" class="search-suggestions"></div>
@@ -112,6 +112,12 @@
               <path d="M4 10h12v2H4zm0-4h12v2H4zm0 8h8v2H4zm10 0v6l5-3-5-3z" />
             </svg>
             <span data-i18n="playlists">Playlists</span>
+          </a>
+          <a href="#" class="nav-tab" onclick="showPage('watched'); return false;">
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z" />
+            </svg>
+            <span data-i18n="watched">Watched</span>
           </a>
         </div>
 
@@ -803,6 +809,22 @@
         </div>
         <div id="saved-videos-grid" class="video-grid"></div>
       </div>
+      <!-- WATCHED -->
+      <div class="page is-loading" id="page-watched">
+        <div class="page-loader">
+          <div class="spinner"></div>Loading watch history...
+        </div>
+        <div class="section-header">
+          <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <div>
+              <h2 data-i18n="watched">Watched</h2>
+              <span class="count-badge" id="watched-count-label">Videos in your watch history</span>
+            </div>
+            <button class="yt-button" onclick="clearWatched()" data-i18n="clear_watched" style="padding: 5px 10px; font-size: 13px;">Clear history</button>
+          </div>
+        </div>
+        <div id="watched-videos-grid" class="video-grid"></div>
+      </div>
 
     </div>
   </div>
@@ -987,8 +1009,12 @@
             <input type="checkbox" id="source-other" onchange="toggleSourceState('other')">
             <span>Other Videos (other.db)</span>
           </label>
+          <label
+            style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; font-weight: bold;">
+            <input type="checkbox" id="source-comments" onchange="toggleSourceState('comments')">
+            <span>Comments (comments.db)</span>
+          </label>
         </div>
-        m
         <hr style="margin: 15px 0; border: 0; border-top: 1px solid var(--border);">
         <h4 style="margin-bottom: 10px; font-size: 15px;">Language Filter</h4>
         <p style="margin-bottom: 12px; font-size: 12px; color: var(--text-muted);">Toggle languages to show or hide

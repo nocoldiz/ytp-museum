@@ -39,6 +39,10 @@ function initApp() {
   syncSearchLayout();
   initI18n();
 
+  const searchInput = document.getElementById('global-search-input');
+  if (searchInput) searchInput.disabled = false;
+
+  document.body.classList.remove('is-loading');
   document.getElementById('app').style.display = 'block';
 
   // Hide all loaders
@@ -102,6 +106,15 @@ window.initApp = initApp;
 async function autoLoad() {
   const isHttp = window.location.protocol.startsWith('http');
 
+  // Start loading lite data immediately
+  // Try API first (local server), fallback to static JSON (GitHub Pages)
+  const litePromise = fetch('/api/home-lite')
+    .then(r => {
+        if (!r.ok) throw new Error('API not available');
+        return r.json();
+    })
+    .catch(() => fetch('db/home_lite.json').then(r => r.json()).catch(() => null));
+
   try {
     await initSQLite();
   } catch (e) {
@@ -110,12 +123,25 @@ async function autoLoad() {
     return;
   }
 
-  // Load essential metadata for app init
-  const channels = queryDB("SELECT * FROM channels");
-  window.pooperMap = {};
-  channels.forEach(p => {
-    if (p.channel_name) window.pooperMap[p.channel_name] = p;
-  });
+  const liteData = await litePromise;
+  if (liteData && liteData.success) {
+    window.homeLiteVideos = liteData.videos;
+    window.pooperMap = {};
+    if (liteData.channels) {
+      liteData.channels.forEach(p => {
+        if (p.channel_name) window.pooperMap[p.channel_name] = p;
+      });
+    }
+  }
+
+  // If pooperMap still empty or needs update from real DB (if loaded)
+  if (!window.pooperMap || Object.keys(window.pooperMap).length < 10) {
+    const channels = queryDB("SELECT * FROM channels");
+    window.pooperMap = window.pooperMap || {};
+    channels.forEach(p => {
+      if (p.channel_name) window.pooperMap[p.channel_name] = p;
+    });
+  }
 
 
   initApp();

@@ -137,8 +137,16 @@ function showPage(name, pushToHistory = true) {
     if (targetPage === 'videos') {
       buildFilterOptions();
       applyFilters();
+      // Force load other.db if not already loaded, so "Other videos" tab works
+      if (typeof ensureOtherDB === 'function') {
+        ensureOtherDB().then(() => {
+          if (appMode === 'sources') applyFilters();
+        });
+      }
     } else if (targetPage === 'poopers') {
       renderPoopersTable();
+      // Poopers might also need other.db for "Sources only" filter
+      if (typeof ensureOtherDB === 'function') ensureOtherDB();
     }
   }
 
@@ -188,6 +196,9 @@ function showPage(name, pushToHistory = true) {
   }
   if (name === 'playlists') {
     renderPlaylistsPage();
+  }
+  if (name === 'watched') {
+    renderWatchedPage();
   }
 }
 

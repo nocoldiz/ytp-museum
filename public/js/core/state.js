@@ -21,11 +21,14 @@ window.enabledSources = JSON.parse(localStorage.getItem('ytp-enabled-sources')) 
   ytp: true,
   ytpmv: true,
   collabs: true,
-  other: true
+  other: false,
+  comments: false
 };
 window.enabledLanguages = JSON.parse(localStorage.getItem('ytp-enabled-languages')) || ['it', 'en', 'es', 'de', 'fr', 'ru', 'pt', 'br', 'none'];
 window.playbackMode = localStorage.getItem('ytp-playback-mode') || 'youtube';
 window.sourceChannels = new Set();
+window.viewMode = 'table';
+window.searchViewMode = 'list';
 
 function getAppRoot() {
   return window.location.pathname.startsWith('/ytp-museum/') ? '/ytp-museum/' : '/';
@@ -36,6 +39,7 @@ window.getAppRoot = getAppRoot;
 window.dbName = 'YTPArchiveDB';
 window.storeName = 'savedVideos';
 window.playlistStoreName = 'playlists';
+window.watchedStoreName = 'watchedVideos';
 window.idb = undefined; // IndexedDB
 window.dbYTP = undefined;
 window.dbSources = undefined;

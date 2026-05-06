@@ -203,6 +203,11 @@ function performSearch(query) {
   const suggestionsBox = document.getElementById('search-suggestions');
   if (suggestionsBox) suggestionsBox.style.display = 'none';
 
+  const container = document.getElementById('search-videos-results');
+  if (!window.dbYTP && container) {
+    container.innerHTML = '<p class="empty" style="padding:40px; text-align:center;">Il database è in fase di caricamento... la ricerca sarà disponibile tra pochi secondi.</p>';
+  }
+
   const searchPage = document.getElementById('page-search');
   if (searchPage && !searchPage.classList.contains('active')) {
     window.showPage('search');
@@ -357,7 +362,7 @@ function renderSearchVideos(append = false) {
   if (countLabel) countLabel.textContent = `${total} videos found`;
 
   const isModern = !document.body.classList.contains('theme-old');
-  if (searchViewMode === 'grid') {
+  if (window.searchViewMode === 'grid') {
     container.className = isModern ? 'modern-videos-grid-search' : 'video-grid';
   } else {
     container.className = isModern ? 'video-list-modern-search' : 'video-list';

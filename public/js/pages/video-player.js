@@ -3,7 +3,7 @@ async function openVideo(vidId, pushToHistory = true) {
   if (pushToHistory) updateURL({ v: vidId }, '/watch');
   window.scrollTo(0, 0);
   showPage('video', false);
-  if (typeof updateVideoLayoutForTheme === 'function') updateVideoLayoutForTheme();
+  // Layout will be updated after basic elements are rendered
 
   const { video, db } = findVideoAcrossDBs(vidId);
   if (!video) {
@@ -45,6 +45,8 @@ async function openVideo(vidId, pushToHistory = true) {
     }
   }
   document.getElementById('watch-description').innerHTML = linkify(escHtml(desc)) + tagsHtml;
+  
+  if (typeof updateVideoLayoutForTheme === 'function') updateVideoLayoutForTheme();
 
   const playerContainer = document.getElementById('watch-player');
   const hasLocal = !!v.local_file;
@@ -96,9 +98,10 @@ async function openVideo(vidId, pushToHistory = true) {
     moreContainer.innerHTML = moreVids.map(x => renderVideoItem(x, 'grid')).join('');
   }
   updateSaveButton(vidId);
-  loadVideoResponses(v);
-  loadRelatedVideos(v);
+  loadVideoResponses(video);
+  loadRelatedVideos(video);
   loadComments(vidId);
+  saveToWatched(video);
   return false;
 }
 
@@ -177,22 +180,41 @@ async function loadComments(vidId) {
   const container = document.getElementById('watch-comments');
   const title = document.getElementById('comments-count-title');
   if (!container) return;
+
+  if (!window.enabledSources.comments) {
+    container.innerHTML = `
+      <p class="empty" style="padding:10px; color: var(--text-muted); font-size: 13px;">
+        Comments are disabled by default to improve performance.<br>
+        <a href="#" onclick="openSourcesModal(); return false;" style="color: var(--accent); text-decoration: underline;">Enable Comments in the Sources menu</a> to see them.
+      </p>
+    `;
+    if (title) title.textContent = "Comments (Disabled)";
+    return;
+  }
+
   container.innerHTML = '<p class="empty" style="padding:10px;">Loading comments...</p>';
 
   try {
-    const comments = queryDB("SELECT * FROM comments WHERE video_id = ?", [vidId]);
+    const db = await ensureCommentsDB();
+    if (!db) {
+      container.innerHTML = '<p class="empty" style="padding:10px;">Could not load comments database.</p>';
+      return;
+    }
+    const comments = queryDB("SELECT * FROM comments WHERE video_id = ? ORDER BY published_at ASC", [vidId], db);
     if (!comments || comments.length === 0) {
+      console.log(`No comments found for video ${vidId}`);
       container.innerHTML = '<p class="empty" style="padding:10px;">No comments available.</p>';
-      title.textContent = "Comments";
+      if (title) title.textContent = "Comments";
       return;
     }
 
-    title.textContent = `${fmtNum(comments.length)} Comments`;
+    console.log(`Loaded ${comments.length} comments for video ${vidId}`);
+    if (title) title.textContent = `${fmtNum(comments.length)} Comments`;
     renderCommentTree(comments);
   } catch (e) {
     console.error("Error loading comments:", e);
-    container.innerHTML = '<p class="empty" style="padding:10px;">No comments available for this video.</p>';
-    title.textContent = "Comments";
+    container.innerHTML = '<p class="empty" style="padding:10px;">Error loading comments.</p>';
+    if (title) title.textContent = "Comments";
   }
 }
 
@@ -467,14 +489,16 @@ function updateVideoLayoutForTheme() {
   const actions = document.getElementById('watch-actions');
   const date = document.getElementById('watch-date');
 
-  if (!mainCol || !sideCol || !title || !video || !channel || !desc) return;
+  if (!mainCol || !sideCol || !title || !video || !channel || !desc || !stats || !actions) return;
 
   let channelRow = document.getElementById('modern-channel-row');
 
   if (isOld) {
     // Restore Old Mode
     mainCol.insertBefore(title, video);
-    sideCol.insertBefore(stats, sideCol.firstChild);
+    if (sideCol.firstChild !== stats) {
+        sideCol.insertBefore(stats, sideCol.firstChild);
+    }
 
     // Put date back into channel info if it was moved
     const channelTextWrap = channel.querySelector('div');
@@ -501,13 +525,13 @@ function updateVideoLayoutForTheme() {
     }
     channelRow.style.display = 'flex';
     channelRow.appendChild(channel);
-    channelRow.appendChild(actions);
+    if (actions) channelRow.appendChild(actions);
 
     mainCol.insertBefore(desc, channelRow.nextSibling);
     desc.insertBefore(stats, desc.firstChild);
 
     // Move date next to views in description box
-    if (date) {
+    if (date && stats) {
       stats.appendChild(date);
       date.style.display = 'inline-block';
       date.style.marginLeft = '8px';
@@ -547,6 +571,9 @@ function setGlobalMaxYear(year) {
 }
 
 function getActiveVideos(forHome = false, limit = null) {
+  if (forHome && (!window.dbYTP) && window.homeLiteVideos) {
+    return window.homeLiteVideos;
+  }
   const cacheKey = `activeVideos_${appMode}_${globalMaxYear}_${forHome}_${limit}`;
   return getCachedQuery(cacheKey, () => {
     let whereClauses = [];
@@ -571,7 +598,11 @@ function getActiveVideos(forHome = false, limit = null) {
       sql += ` LIMIT ${limit}`;
     }
 
-    return queryDB(sql, params);
+    const res = queryDB(sql, params);
+    if (forHome && res.length === 0 && window.homeLiteVideos) {
+      return window.homeLiteVideos;
+    }
+    return res;
   });
 }
 
@@ -641,6 +672,14 @@ function renderModernGrid() {
   // Modern grid usually shows a limited set per tab
   const ytData = getActiveVideos(true, 200);
   const validVideos = ytData; // Status filter removed, all indexed videos are considered available
+  
+  // If we have lite videos and the main DB is not yet ready, use them as fallback
+  if (validVideos.length === 0 && window.homeLiteVideos) {
+    const mHtml = window.homeLiteVideos.map(v => renderModernHomeCard(v)).join('');
+    modernContainer.innerHTML = mHtml;
+    return;
+  }
+
   if (validVideos.length === 0) return;
 
   let videos;
@@ -743,6 +782,13 @@ function setFeaturedTab(tab) {
   const validVideos = ytData;
   const featuredContainer = document.getElementById("featured-videos");
   if (!featuredContainer) return;
+
+  // Fallback to lite videos if DB not loaded
+  if (validVideos.length === 0 && window.homeLiteVideos) {
+    featuredContainer.innerHTML = window.homeLiteVideos.slice(0, 8).map(v => renderVideoItem(v, 'list')).join('');
+    return;
+  }
+
   if (tab !== "all" && tab !== "random" && validVideos.length === 0) return;
   let videos;
 

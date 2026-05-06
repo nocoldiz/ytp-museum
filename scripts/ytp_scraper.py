@@ -2201,13 +2201,23 @@ def do_forum_scrape(index, site_dir):
     print(f"    Total links processed: {total_links_found}")
 
 
-def do_download(index, video_dir, yt_format, rate_limit, retry_failed):
+def do_download(index, video_dir, yt_format, rate_limit, retry_failed, custom_channels=None):
     if retry_failed:
         index.clear_failed()
         index.save()
         print("  Cleared failed status — will retry.\n")
 
     pending = index.pending()
+
+    if custom_channels:
+        print(f"  Filtering for {len(custom_channels)} selected channels...")
+        normalized_custom = {normalize_channel_url(c) for c in custom_channels}
+        filtered_pending = []
+        for vid in pending:
+            e = index.data.get(vid) or index.ytpmv_data.get(vid) or index.collabs_data.get(vid)
+            if e and e.get("channel_url") and normalize_channel_url(e["channel_url"]) in normalized_custom:
+                filtered_pending.append(vid)
+        pending = filtered_pending
     if not pending:
         print("  Nothing to download — either run 'Update index' first")
         print("  or everything is already downloaded / unavailable.")
@@ -2899,7 +2909,7 @@ def do_download_italian(index, video_dir, yt_format, rate_limit, retry_failed, y
 
 
 
-def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed):
+def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed, custom_channels=None):
     sources_data = index.sources_data
 
     if not sources_data:
@@ -2914,6 +2924,14 @@ def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed):
         print("  Cleared failed status in sources database — will retry.\n")
 
     pending = [vid for vid, e in sources_data.items() if e.get("status") == "pending"]
+
+    if custom_channels:
+        print(f"  Filtering for {len(custom_channels)} selected channels...")
+        normalized_custom = {normalize_channel_url(c) for c in custom_channels}
+        pending = [
+            vid for vid in pending 
+            if sources_data[vid].get("channel_url") and normalize_channel_url(sources_data[vid]["channel_url"]) in normalized_custom
+        ]
 
     if not pending:
         print("  Nothing to download in sources database.")
@@ -4120,43 +4138,43 @@ def create_progressive_backup(index, step_name):
             print(f"  [!] Failed to create backup: {e}")
 
 
-def do_full_scrape_run(index, args):
+def do_full_scrape_run(index, args, custom_channels=None):
     print("\n>>> Starting Full Scrape Run...")
     
     print("\nStep 1: Scrape Channels (Option 3)")
-    do_scrape_channels(index, ignore_sources=False)
+    do_scrape_channels(index, ignore_sources=False, custom_channels=custom_channels)
     create_progressive_backup(index, "step1_channels")
     
     print("\nStep 2: Fetch Missing Metadata (Option 1)")
-    do_update_index(index)
-    do_scrape_sources_metadata(index)
+    do_update_index(index, custom_channels=custom_channels)
+    do_scrape_sources_metadata(index, custom_channels=custom_channels)
     create_progressive_backup(index, "step2_metadata")
     
     print("\nStep 3: Scrape Channel Profiles and Thumbnails (Option 7)")
-    do_scrape_profiles(index, args.public_dir)
+    do_scrape_profiles(index, args.public_dir, specific_channels=custom_channels)
     create_progressive_backup(index, "step3_thumbnails")
     
     print("\nStep 4: Scrape Comments (Option 6)")
-    do_scrape_comments(index, args.public_dir)
+    do_scrape_comments(index, args.public_dir, custom_channels=custom_channels)
     create_progressive_backup(index, "step4_comments")
     
     print("\n>>> Full Scrape Run Complete.")
 
 
-def do_full_scrape_run_ignore_sources(index, args):
+def do_full_scrape_run_ignore_sources(index, args, custom_channels=None):
     print("\n>>> Starting Full Scrape Run (Ignore Sources)...")
     
     print("\nStep 1: Scrape Channels (Option 3) - Ignoring Sources")
-    do_scrape_channels(index, ignore_sources=True)
+    do_scrape_channels(index, ignore_sources=True, custom_channels=custom_channels)
     create_progressive_backup(index, "step1_channels_ignore_sources")
     
     print("\nStep 2: Fetch Missing Metadata (Option 1) - Only YTP")
-    do_update_index(index)
+    do_update_index(index, custom_channels=custom_channels)
     # Skip do_scrape_sources_metadata
     create_progressive_backup(index, "step2_metadata_ignore_sources")
     
     print("\nStep 3: Scrape Channel Profiles and Thumbnails (Option 7)")
-    do_scrape_profiles(index, args.public_dir)
+    do_scrape_profiles(index, args.public_dir, specific_channels=custom_channels)
     create_progressive_backup(index, "step3_thumbnails_ignore_sources")
     
     # Skip Step 4: Scrape Comments (sources only)
@@ -4203,7 +4221,7 @@ def do_full_download_parallel():
     
     print("\n>>> All processes launched.")
 
-def do_download_parallel_internal(index, video_dir, yt_format, rate_limit, workers=4, no_db_update=False):
+def do_download_parallel_internal(index, video_dir, yt_format, rate_limit, workers=4, no_db_update=False, custom_channels=None):
     """
     Internal parallel download logic using ThreadPoolExecutor.
     Downloads and then immediately calls compress_videos.process_video.
@@ -4212,6 +4230,16 @@ def do_download_parallel_internal(index, video_dir, yt_format, rate_limit, worke
     import compress_videos
 
     pending = index.pending()
+    
+    if custom_channels:
+        print(f"  Filtering for {len(custom_channels)} selected channels...")
+        normalized_custom = {normalize_channel_url(c) for c in custom_channels}
+        filtered_pending = []
+        for vid in pending:
+            e = index.data.get(vid) or index.ytpmv_data.get(vid) or index.collabs_data.get(vid)
+            if e and e.get("channel_url") and normalize_channel_url(e["channel_url"]) in normalized_custom:
+                filtered_pending.append(vid)
+        pending = filtered_pending
     if not pending:
         print("  Nothing to download.")
         return
@@ -4546,10 +4574,24 @@ def main():
         print("2. Only YTP videos")
         print("3. Only sources videos")
         sub = ask("Choice [1-3]: ", {"1", "2", "3"})
+
+        print("\nSelect Channel Filter:")
+        print("1. All Indexed Channels")
+        print("2. Selected Channels (from selected_channels.txt)")
+        chan_sub = ask("Choice [1-2]: ", {"1", "2"})
+        
+        selected_chans = None
+        if chan_sub == "2":
+            selected_chans = get_selected_channels()
+            if not selected_chans:
+                print("  [!] Selected channels list is empty or file not found. Aborting.")
+                print()
+                return
+
         if sub in ("1", "2"):
-            do_download(index, args.video_dir, args.format, args.rate_limit, args.retry_failed)
+            do_download(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, custom_channels=selected_chans)
         if sub in ("1", "3"):
-            do_download_risorse(index, args.video_dir, args.format, args.rate_limit, args.retry_failed)
+            do_download_risorse(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, custom_channels=selected_chans)
         print()
     if choice == "3":
         print("\nSelect Scraping Mode:")
@@ -4622,7 +4664,20 @@ def main():
         do_scrape_comments(index, args.public_dir, custom_channels=selected_chans)
 
     if choice == "7":
-        do_scrape_profiles(index, args.public_dir)
+        print("\nSelect Channel Filter for Profiles:")
+        print("1. All Indexed Channels")
+        print("2. Selected Channels (from selected_channels.txt)")
+        chan_sub = ask("Choice [1-2]: ", {"1", "2"})
+        
+        selected_chans = None
+        if chan_sub == "2":
+            selected_chans = get_selected_channels()
+            if not selected_chans:
+                print("  [!] Selected channels list is empty or file not found. Aborting.")
+                print()
+                return
+                
+        do_scrape_profiles(index, args.public_dir, specific_channels=selected_chans)
 
     if choice == "8":
         do_auto_languages(index)
@@ -4654,16 +4709,55 @@ def main():
         index.resort_videos()
 
     if choice == "s":
-        do_full_scrape_run(index, args)
+        print("\nSelect Channel Filter for Full Run:")
+        print("1. All Indexed Channels")
+        print("2. Selected Channels (from selected_channels.txt)")
+        chan_sub = ask("Choice [1-2]: ", {"1", "2"})
+        
+        selected_chans = None
+        if chan_sub == "2":
+            selected_chans = get_selected_channels()
+            if not selected_chans:
+                print("  [!] Selected channels list is empty or file not found. Aborting.")
+                print()
+                return
+
+        do_full_scrape_run(index, args, custom_channels=selected_chans)
 
     if choice == "d":
         do_full_download_parallel()
 
     if choice == "x":
-        do_full_scrape_run_ignore_sources(index, args)
+        print("\nSelect Channel Filter for Full Run (Ignore Sources):")
+        print("1. All Indexed Channels")
+        print("2. Selected Channels (from selected_channels.txt)")
+        chan_sub = ask("Choice [1-2]: ", {"1", "2"})
+        
+        selected_chans = None
+        if chan_sub == "2":
+            selected_chans = get_selected_channels()
+            if not selected_chans:
+                print("  [!] Selected channels list is empty or file not found. Aborting.")
+                print()
+                return
+
+        do_full_scrape_run_ignore_sources(index, args, custom_channels=selected_chans)
 
     if choice == "p":
-        do_download_parallel_internal(index, args.video_dir, args.format, args.rate_limit, workers=args.workers, no_db_update=args.no_db_update)
+        print("\nSelect Channel Filter:")
+        print("1. All Indexed Channels")
+        print("2. Selected Channels (from selected_channels.txt)")
+        chan_sub = ask("Choice [1-2]: ", {"1", "2"})
+        
+        selected_chans = None
+        if chan_sub == "2":
+            selected_chans = get_selected_channels()
+            if not selected_chans:
+                print("  [!] Selected channels list is empty or file not found. Aborting.")
+                print()
+                return
+
+        do_download_parallel_internal(index, args.video_dir, args.format, args.rate_limit, workers=args.workers, no_db_update=args.no_db_update, custom_channels=selected_chans)
 
     if choice == "a":
         do_full_scrape_run(index, args)

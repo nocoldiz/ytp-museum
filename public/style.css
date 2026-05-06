@@ -153,6 +153,11 @@
     display: block;
   }
 
+  body.is-loading #masthead-search,
+  body.is-loading #masthead-utility {
+    visibility: hidden;
+  }
+
   /* MASTHEAD & YOUTUBE LAYOUT */
   #baseDiv {
     max-width: 1400px;
@@ -617,12 +622,33 @@
     width: 240px;
     background: var(--surface);
     overflow-y: auto;
+    overflow-x: hidden;
     border-right: 1px solid var(--border);
     padding-top: 12px;
     display: flex;
     flex-direction: column;
+    flex-wrap: nowrap;
     z-index: 1001;
     transition: transform 0.2s, width 0.2s;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
+
+  body:not(.theme-old) #masthead-nav::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  body:not(.theme-old) #masthead-nav::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  body:not(.theme-old) #masthead-nav::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 10px;
+  }
+
+  body:not(.theme-old) #masthead-nav::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
   }
 
   body.sidebar-collapsed:not(.theme-old) #masthead-nav {
