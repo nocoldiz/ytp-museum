@@ -468,4 +468,21 @@ window.applySources = applySources;
 window.queryDB = queryDB;
 window.findVideoAcrossDBs = findVideoAcrossDBs;
 window.queryDBRow = queryDBRow;
+async function ensureOtherDB() {
+  if (window.dbSources) return window.dbSources;
+  if (!SQL_INSTANCE) return null;
+  
+  console.log("Forcing load of other.db...");
+  const db = await loadDB('other.db', SQL_INSTANCE);
+  window.dbSources = db;
+  if (db) {
+    applyLanguageFilters(db);
+    const sources = queryDB("SELECT DISTINCT channel_name FROM videos", [], db);
+    window.sourceChannels = new Set(sources.map(s => s.channel_name));
+    if (window.updateBadges) window.updateBadges();
+  }
+  return db;
+}
+
 window.ensureCommentsDB = ensureCommentsDB;
+window.ensureOtherDB = ensureOtherDB;

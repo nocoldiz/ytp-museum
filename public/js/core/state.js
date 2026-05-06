@@ -27,6 +27,8 @@ window.enabledSources = JSON.parse(localStorage.getItem('ytp-enabled-sources')) 
 window.enabledLanguages = JSON.parse(localStorage.getItem('ytp-enabled-languages')) || ['it', 'en', 'es', 'de', 'fr', 'ru', 'pt', 'br', 'none'];
 window.playbackMode = localStorage.getItem('ytp-playback-mode') || 'youtube';
 window.sourceChannels = new Set();
+window.viewMode = 'table';
+window.searchViewMode = 'list';
 
 function getAppRoot() {
   return window.location.pathname.startsWith('/ytp-museum/') ? '/ytp-museum/' : '/';

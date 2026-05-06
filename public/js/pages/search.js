@@ -362,7 +362,7 @@ function renderSearchVideos(append = false) {
   if (countLabel) countLabel.textContent = `${total} videos found`;
 
   const isModern = !document.body.classList.contains('theme-old');
-  if (searchViewMode === 'grid') {
+  if (window.searchViewMode === 'grid') {
     container.className = isModern ? 'modern-videos-grid-search' : 'video-grid';
   } else {
     container.className = isModern ? 'video-list-modern-search' : 'video-list';
