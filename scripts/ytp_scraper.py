@@ -828,7 +828,7 @@ def find_video_on_disk(video_id, search_dirs):
                 return str(match)
     return None
 
-def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, channels_list, language, year_limit=None, skip_scan=False, restricted_mode=False):
+def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, channels_list, language, year_limit=None, skip_scan=False, restricted_mode=False, should_convert=False):
     # Check if the skip flag is True before doing anything else
     if skip_scan:
         print(f"\n>>> Skipping Language Scan as requested.")
@@ -889,7 +889,7 @@ def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, 
     # Restored automatic download:
     # We pass limit_channels=None because we want to download ALL videos matching the language in the DB
     # as requested: "Download by language should use the language column to determine which videos to download"
-    do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, limit_channels=None, language_filter=language)
+    do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, limit_channels=None, language_filter=language, should_convert=should_convert)
 
 def is_disallowed_channel(channel_name):
     if not channel_name:
@@ -2201,7 +2201,7 @@ def do_forum_scrape(index, site_dir):
     print(f"    Total links processed: {total_links_found}")
 
 
-def do_download(index, video_dir, yt_format, rate_limit, retry_failed, custom_channels=None):
+def do_download(index, video_dir, yt_format, rate_limit, retry_failed, custom_channels=None, should_convert=False):
     if retry_failed:
         index.clear_failed()
         index.save()
@@ -2257,6 +2257,15 @@ def do_download(index, video_dir, yt_format, rate_limit, retry_failed, custom_ch
             )
 
             if status == "ok":
+                if should_convert and local_file and os.path.exists(local_file):
+                    try:
+                        import compress_videos
+                        print(f"    [Compressing] {os.path.basename(local_file)}")
+                        compressed_path = compress_videos.process_video(local_file)
+                        local_file = str(compressed_path)
+                    except Exception as e:
+                        print(f"    [!] Compression failed: {e}")
+
                 rel = os.path.relpath(local_file, ".") if local_file else None
                 index.set_downloaded(vid, rel, dl_title)
                 print(f"  ✓ {os.path.basename(local_file or '')}", flush=True)
@@ -2678,7 +2687,7 @@ def do_scrape_single_channel(index, ch_url, docs_dir, video_dir):
 
     print("\n--- Single Channel Scraping Complete ---")
 
-def do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, limit_channels=None, language_filter=None):
+def do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, limit_channels=None, language_filter=None, should_convert=False):
     if retry_failed:
         for e in index.data.values():
             if "Youtube" in e.get("sections", []) and e["status"] == "failed":
@@ -2753,6 +2762,14 @@ def do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, l
             )
 
             if status == "ok":
+                if should_convert and local_file and os.path.exists(local_file):
+                    try:
+                        import compress_videos
+                        print(f"    [Compressing] {os.path.basename(local_file)}")
+                        compressed_path = compress_videos.process_video(local_file)
+                        local_file = str(compressed_path)
+                    except Exception as e:
+                        print(f"    [!] Compression failed: {e}")
                 rel = os.path.relpath(local_file, ".") if local_file else None
                 index.set_downloaded(vid, rel, dl_title)
                 print(f"  ✓ {os.path.basename(local_file or '')}")
@@ -2909,7 +2926,7 @@ def do_download_italian(index, video_dir, yt_format, rate_limit, retry_failed, y
 
 
 
-def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed, custom_channels=None):
+def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed, custom_channels=None, should_convert=False):
     sources_data = index.sources_data
 
     if not sources_data:
@@ -2969,6 +2986,15 @@ def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed, c
             )
 
             if status == "ok":
+                if should_convert and local_file and os.path.exists(local_file):
+                    try:
+                        import compress_videos
+                        print(f"    [Compressing] {os.path.basename(local_file)}")
+                        compressed_path = compress_videos.process_video(local_file)
+                        local_file = str(compressed_path)
+                    except Exception as e:
+                        print(f"    [!] Compression failed: {e}")
+
                 e["status"] = "downloaded"
                 e["local_file"] = os.path.relpath(local_file, ".") if local_file else None
                 if dl_title: e["title"] = dl_title
@@ -2990,8 +3016,7 @@ def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed, c
                 err_count += 1
 
             # Save after each download
-            with open(src_path, "w", encoding="utf-8") as f:
-                json.dump(sources_data, f, separators=(',', ':'), ensure_ascii=False)
+            index.save()
 
             if status == "ok":
                 time.sleep(1)
@@ -4194,7 +4219,7 @@ def do_full_scrape_run_ignore_sources(index, args, custom_channels=None):
             print(f"  [!] Failed to create progressive backup: {e}")
 
 
-def do_full_download_parallel():
+def do_full_download_parallel(should_convert=True):
     print("\n>>> Launching Full Download in parallel terminals...")
     # Path to scripts
     scraper_script = os.path.abspath(__file__)
@@ -4216,18 +4241,22 @@ def do_full_download_parallel():
     print(f"  [+] Starting: {cmd4}")
     subprocess.Popen(f'start cmd /k {cmd4}', shell=True)
     
-    print(f"  [+] Starting: {cmdC}")
-    subprocess.Popen(f'start cmd /k {cmdC}', shell=True)
+    if should_convert:
+        print(f"  [+] Starting: {cmdC}")
+        subprocess.Popen(f'start cmd /k {cmdC}', shell=True)
     
     print("\n>>> All processes launched.")
 
-def do_download_parallel_internal(index, video_dir, yt_format, rate_limit, workers=4, no_db_update=False, custom_channels=None):
+def do_download_parallel_internal(index, video_dir, yt_format, rate_limit, workers=4, no_db_update=False, custom_channels=None, should_convert=None):
     """
     Internal parallel download logic using ThreadPoolExecutor.
     Downloads and then immediately calls compress_videos.process_video.
     """
     from concurrent.futures import ThreadPoolExecutor, as_completed
     import compress_videos
+
+    if should_convert is None:
+        should_convert = ask_conversion()
 
     pending = index.pending()
     
@@ -4262,7 +4291,7 @@ def do_download_parallel_internal(index, video_dir, yt_format, rate_limit, worke
 
             if status in ("ok", "exists"):
                 # 2. Compress
-                if local_file and os.path.exists(local_file):
+                if should_convert and local_file and os.path.exists(local_file):
                     print(f"    [Compressing] {os.path.basename(local_file)}")
                     compressed_path = compress_videos.process_video(local_file)
                     local_file = str(compressed_path)
@@ -4323,6 +4352,13 @@ def ask(prompt, choices):
         if ans in choices:
             return ans
         print(f"  Please enter one of: {' / '.join(choices)}")
+
+
+def ask_conversion():
+    print("\n  After downloading, do you want to convert (compress) the videos?")
+    print("  (Requires ffmpeg + NVIDIA GPU for HEVC NVENC)")
+    ans = ask("  Choice [y/n]: ", {"y", "n"})
+    return ans == "y"
 
 
 def get_selected_channels():
@@ -4588,10 +4624,11 @@ def main():
                 print()
                 return
 
+        should_convert = ask_conversion()
         if sub in ("1", "2"):
-            do_download(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, custom_channels=selected_chans)
+            do_download(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, custom_channels=selected_chans, should_convert=should_convert)
         if sub in ("1", "3"):
-            do_download_risorse(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, custom_channels=selected_chans)
+            do_download_risorse(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, custom_channels=selected_chans, should_convert=should_convert)
         print()
     if choice == "3":
         print("\nSelect Scraping Mode:")
@@ -4640,7 +4677,8 @@ def main():
         
         if lang_name:
             selected_list = get_channels_by_language(index, lang_name)
-            do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, selected_list, lang_name, year_limit=args.year_limit, skip_scan=should_skip, restricted_mode=restricted)
+            should_convert = ask_conversion()
+            do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, selected_list, lang_name, year_limit=args.year_limit, skip_scan=should_skip, restricted_mode=restricted, should_convert=should_convert)
         else:
             print("Invalid language selection.")
 
@@ -4725,7 +4763,8 @@ def main():
         do_full_scrape_run(index, args, custom_channels=selected_chans)
 
     if choice == "d":
-        do_full_download_parallel()
+        should_convert = ask_conversion()
+        do_full_download_parallel(should_convert=should_convert)
 
     if choice == "x":
         print("\nSelect Channel Filter for Full Run (Ignore Sources):")
@@ -4757,11 +4796,13 @@ def main():
                 print()
                 return
 
-        do_download_parallel_internal(index, args.video_dir, args.format, args.rate_limit, workers=args.workers, no_db_update=args.no_db_update, custom_channels=selected_chans)
+        should_convert = ask_conversion()
+        do_download_parallel_internal(index, args.video_dir, args.format, args.rate_limit, workers=args.workers, no_db_update=args.no_db_update, custom_channels=selected_chans, should_convert=should_convert)
 
     if choice == "a":
         do_full_scrape_run(index, args)
-        do_full_download_parallel()
+        should_convert = ask_conversion()
+        do_full_download_parallel(should_convert=should_convert)
 
     # No migration needed for SQL version
     pass
