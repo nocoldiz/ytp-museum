@@ -38,8 +38,21 @@ DEFAULT_VIDEO_DIR = str(PROJECT_ROOT / "videos")
 DEFAULT_SITE_DIR = str(PROJECT_ROOT / "site_mirror")
 DEFAULT_DOCS_DIR = str(PROJECT_ROOT / "public" / "db")
 DEFAULT_PUBLIC_DIR = str(PROJECT_ROOT / "public")
-DEFAULT_SOURCES_DIR = str(PROJECT_ROOT / "sources")
+DEFAULT_OTHER_DIR = str(PROJECT_ROOT / "other")
 DEFAULT_FORMAT = "bestvideo[height<=720]+bestaudio/best[height<=720]/best"
+
+# ── yt-dlp binary detection ───────────────────────────────────────────────────
+
+def get_ytdlp_bin():
+    local_ytdlp = os.path.join(PROJECT_ROOT, "scripts", "yt-dlp")
+    if os.path.exists(local_ytdlp) and os.access(local_ytdlp, os.X_OK):
+        return local_ytdlp
+    return "yt-dlp"
+
+YTDLP_BIN = get_ytdlp_bin()
+
+# Extra arguments to avoid JS runtime warnings in 2026
+YTDLP_ARGS = ["--js-runtimes", "node"]
 
 SCAN_SECTIONS = [
     "YTP nostrane", "YTP fai da te", "YTPMV dimportazione", "YTP da internet",
@@ -492,7 +505,7 @@ COLLABS_KEYWORDS = re.compile("|".join(COLLABS_KEYWORDS_LIST), re.IGNORECASE)
 def get_target_index(title):
     """
     Determines where a video should go based on its title.
-    Returns: 'video', 'sources', 'ytpmv', 'collabs', or 'none'.
+    Returns: 'video', 'other', 'ytpmv', 'collabs', or 'none'.
     """
     if not title:
         return "none"
@@ -507,7 +520,7 @@ def get_target_index(title):
     if YTP_KEYWORDS.search(title):
         return "video"
     if MEME_KEYWORDS.search(title):
-        return "sources"
+        return "other"
     return "none"
 
 RESTRICTED_ITALIAN_KEYWORDS = re.compile(
@@ -868,7 +881,7 @@ def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, 
         base_url = chan_url.split('/featured')[0].split('/videos')[0]
         print(f"[*] Scraping channel: {base_url}",flush=True)
         
-        cmd = ["yt-dlp", "--flat-playlist", "--print", "%(id)s|%(title)s|%(upload_date)s", base_url]
+        cmd = [YTDLP_BIN] + YTDLP_ARGS + ["--flat-playlist", "--print", "%(id)s|%(title)s|%(upload_date)s", base_url]
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, check=True)
             lines = result.stdout.strip().split('\n')
@@ -894,7 +907,7 @@ def do_download_language(index, video_dir, yt_format, rate_limit, retry_failed, 
                             target=target
                         )
                         # Tag with language immediately
-                        entry = index.data.get(v_id) or index.ytpmv_data.get(v_id) or index.collabs_data.get(v_id) or index.sources_data.get(v_id)
+                        entry = index.data.get(v_id) or index.ytpmv_data.get(v_id) or index.collabs_data.get(v_id) or index.other_data.get(v_id)
                         if entry:
                             entry['language'] = language
                         new_entries += 1
@@ -982,7 +995,7 @@ def do_download_by_section(index, video_dir, yt_format, rate_limit):
         
         info["status"] = "downloading"
         success = False
-        cmd = ["yt-dlp", "-f", yt_format, "-o", out_tmpl, "--no-playlist", "--quiet", "--no-warnings"]        
+        cmd = [YTDLP_BIN] + YTDLP_ARGS + ["-f", yt_format, "-o", out_tmpl, "--no-playlist", "--quiet", "--no-warnings"]        
         if rate_limit:
             cmd += ["--rate-limit", rate_limit]
         cmd.append(f"https://www.youtube.com/watch?v={v_id}")
@@ -1000,13 +1013,7 @@ def do_download_by_section(index, video_dir, yt_format, rate_limit):
             print(f"    [FAILED] Error downloading {v_id}", flush=True)
 
         download_count += 1
-        
-        # Save index every 10 entries
-        if download_count % 10 == 0:
-            index.save()
-            print(f"    [LOG] Auto-saved progress ({download_count}/{len(to_download)})", flush=True)
 
-    index.save() # Final save
     print(f"\n>>> Section '{selected_section}' batch complete.", flush=True)
 # ── Video Index ───────────────────────────────────────────────────────────────
 
@@ -1017,7 +1024,7 @@ class VideoIndex:
         
         # Split DB Paths (now located in public/db)
         self.ytp_db_path = os.path.join(PROJECT_ROOT, "public", "db", "ytp.db")
-        self.sources_db_path = os.path.join(PROJECT_ROOT, "public", "db", "other.db")
+        self.other_db_path = os.path.join(PROJECT_ROOT, "public", "db", "other.db")
         self.poopers_db_path = os.path.join(PROJECT_ROOT, "public", "db", "ytpoopers.db")
         self.ytpmv_db_path = os.path.join(PROJECT_ROOT, "public", "db", "ytpmv.db")
         self.collabs_db_path = os.path.join(PROJECT_ROOT, "public", "db", "collabs.db")
@@ -1025,11 +1032,11 @@ class VideoIndex:
         self.filepath = self.ytp_db_path # Backward compatibility for code expecting a single filepath
         
         self.data = {}
-        self.sources_data = {}
+        self.other_data = {}
         self.ytpmv_data = {}
         self.collabs_data = {}
         self.actually_excluded_ids = set()
-        self.sources_ids = set()
+        self.other_ids = set()
         self.ytpmv_ids = set()
         self.collabs_ids = set()
         self.excluded_ids = set()
@@ -1043,11 +1050,12 @@ class VideoIndex:
         self.excluded_channels = load_excluded_channels()
         self.download_cache = load_download_cache()
         self.load_excluded()
+        self._migrate_sources_table()
 
     def backup_databases(self):
         print("\n  [Backup] Creating backups of SQLite databases...", flush=True)
         paths = [
-            self.ytp_db_path, self.sources_db_path, self.poopers_db_path,
+            self.ytp_db_path, self.other_db_path, self.poopers_db_path,
             self.ytpmv_db_path, self.collabs_db_path, self.comments_db_path
         ]
         for path in paths:
@@ -1057,7 +1065,7 @@ class VideoIndex:
 
     def get_conn(self, db_type='ytp'):
         path = self.ytp_db_path
-        if db_type == 'sources': path = self.sources_db_path
+        if db_type == 'other': path = self.other_db_path
         elif db_type == 'poopers': path = self.poopers_db_path
         elif db_type == 'ytpmv': path = self.ytpmv_db_path
         elif db_type == 'collabs': path = self.collabs_db_path
@@ -1072,7 +1080,7 @@ class VideoIndex:
 
     def load_excluded(self):
         self.actually_excluded_ids = set()
-        self.sources_ids = set()
+        self.other_ids = set()
         self.ytpmv_ids = set()
         self.collabs_ids = set()
         
@@ -1088,10 +1096,10 @@ class VideoIndex:
         
         # 2. Load sources IDs from other.db
         try:
-            conn = self.get_conn('sources')
+            conn = self.get_conn('other')
             cursor = conn.cursor()
             cursor.execute("SELECT id FROM videos")
-            self.sources_ids.update(row[0] for row in cursor.fetchall())
+            self.other_ids.update(row[0] for row in cursor.fetchall())
             conn.close()
         except Exception as e:
             print(f"  [!] Error loading sources from SQL: {e}")
@@ -1118,16 +1126,16 @@ class VideoIndex:
         except Exception as e:
             print(f"  [!] Error loading Collabs IDs: {e}")
         
-        self.excluded_ids = self.actually_excluded_ids | self.sources_ids | self.ytpmv_ids | self.collabs_ids
+        self.excluded_ids = self.actually_excluded_ids | self.other_ids | self.ytpmv_ids | self.collabs_ids
 
     def load(self):
         print("  [Load] Reading videos from SQLite databases...", flush=True)
         self.data = self._load_db_to_dict('ytp')
-        self.sources_data = self._load_db_to_dict('sources')
+        self.other_data = self._load_db_to_dict('other')
         self.ytpmv_data = self._load_db_to_dict('ytpmv') if os.path.exists(self.ytpmv_db_path) else {}
         self.collabs_data = self._load_db_to_dict('collabs') if os.path.exists(self.collabs_db_path) else {}
-        
-        self.check_disk_existence()
+        # We no longer check disk on load; we trust the downloaded_cache.json
+        # self.check_disk_existence()
         self.cleanup_index()
 
     def _load_db_to_dict(self, db_type):
@@ -1156,8 +1164,8 @@ class VideoIndex:
                 d['sections'] = [r[0] for r in cursor.fetchall()]
                 
                 # Fetch source pages
-                if db_type == 'sources':
-                    cursor.execute("SELECT sp.path FROM source_pages sp JOIN video_sources vs ON sp.id = vs.source_page_id WHERE vs.video_id = ?", (vid_id,))
+                if db_type == 'other':
+                    cursor.execute("SELECT sp.path FROM source_pages sp JOIN video_other vs ON sp.id = vs.source_page_id WHERE vs.video_id = ?", (vid_id,))
                     d['source_pages'] = [r[0] for r in cursor.fetchall()]
                 else:
                     d['source_pages'] = []
@@ -1189,10 +1197,10 @@ class VideoIndex:
 
     def check_disk_existence(self):
         """Checks if pending videos exist on disk and updates their status."""
-        search_dirs = [DEFAULT_VIDEO_DIR, DEFAULT_SOURCES_DIR]
+        search_dirs = [DEFAULT_VIDEO_DIR, DEFAULT_OTHER_DIR]
         
         pending_ids = [vid for vid, e in self.data.items() if e.get("status") == "pending"]
-        pending_sources = [vid for vid, e in self.sources_data.items() if e.get("status") == "pending"]
+        pending_sources = [vid for vid, e in self.other_data.items() if e.get("status") == "pending"]
         
         checked = 0
         found = 0
@@ -1216,8 +1224,8 @@ class VideoIndex:
             path = find_video_on_disk(vid, search_dirs)
             if path:
                 rel = os.path.relpath(path, ".")
-                self.sources_data[vid]["status"] = "downloaded"
-                self.sources_data[vid]["local_file"] = rel
+                self.other_data[vid]["status"] = "downloaded"
+                self.other_data[vid]["local_file"] = rel
                 found += 1
             checked += 1
             if checked % 100 == 0 or checked == total_to_check:
@@ -1229,7 +1237,7 @@ class VideoIndex:
             print(f"  [Disk Check] Found {found} videos already on disk.")
             if found > 0:
                 # Update cache with everything we found
-                for vid, e in {**self.data, **self.sources_data, **self.ytpmv_data, **self.collabs_data}.items():
+                for vid, e in {**self.data, **self.other_data, **self.ytpmv_data, **self.collabs_data}.items():
                     if e.get("status") == "downloaded":
                         self.download_cache.add(vid)
                 
@@ -1340,7 +1348,7 @@ class VideoIndex:
         print(f"\n  [Reclaim] Checking specialized DBs for missed YTPs...")
         # Check sources (other.db), ytpmv (ytpmv.db), and collabs (collabs.db)
         databases = [
-            ('sources', self.sources_data),
+            ('other', self.other_data),
             ('ytpmv', self.ytpmv_data),
             ('collabs', self.collabs_data)
         ]
@@ -1370,13 +1378,13 @@ class VideoIndex:
                     cursor.execute("DELETE FROM videos WHERE id = ?", (vid,))
                     cursor.execute("DELETE FROM video_tags WHERE video_id = ?", (vid,))
                     cursor.execute("DELETE FROM video_sections WHERE video_id = ?", (vid,))
-                    if db_name == 'sources':
-                        cursor.execute("DELETE FROM video_sources WHERE video_id = ?", (vid,))
+                    if db_name == 'other':
+                        cursor.execute("DELETE FROM video_other WHERE video_id = ?", (vid,))
                 conn.commit()
                 conn.close()
                 
                 # Update local data store
-                if db_name == 'sources': self.sources_data = to_keep
+                if db_name == 'other': self.other_data = to_keep
                 elif db_name == 'ytpmv': self.ytpmv_data = to_keep
                 elif db_name == 'collabs': self.collabs_data = to_keep
                 
@@ -1391,7 +1399,7 @@ class VideoIndex:
     def save(self):
         try:
             self._save_dict_to_sql(self.data, 'ytp')
-            self._save_dict_to_sql(self.sources_data, 'sources')
+            self._save_dict_to_sql(self.other_data, 'other')
             self._save_dict_to_sql(self.ytpmv_data, 'ytpmv')
             self._save_dict_to_sql(self.collabs_data, 'collabs')
 
@@ -1465,11 +1473,11 @@ class VideoIndex:
                     if sid: cursor.execute("INSERT OR IGNORE INTO video_sections (video_id, section_id) VALUES (?, ?)", (vid_id, sid))
 
             # 4. Source Pages (for other.db)
-            if db_type == 'sources':
+            if db_type == 'other':
                 for sp_path in info.get('source_pages', []):
                     if sp_path:
                         spid = get_or_create('source_pages', 'path', sp_path, source_cache)
-                        if spid: cursor.execute("INSERT OR IGNORE INTO video_sources (video_id, source_page_id) VALUES (?, ?)", (vid_id, spid))
+                        if spid: cursor.execute("INSERT OR IGNORE INTO video_other (video_id, source_page_id) VALUES (?, ?)", (vid_id, spid))
 
         conn.commit()
         conn.close()
@@ -1497,11 +1505,27 @@ class VideoIndex:
         cursor.execute("CREATE TABLE IF NOT EXISTS video_sections (video_id TEXT, section_id INTEGER, PRIMARY KEY (video_id, section_id))")
         # source_pages only needed for other.db usually, but adding for completeness
         cursor.execute("CREATE TABLE IF NOT EXISTS source_pages (id INTEGER PRIMARY KEY AUTOINCREMENT, path TEXT UNIQUE NOT NULL)")
-        cursor.execute("CREATE TABLE IF NOT EXISTS video_sources (video_id TEXT, source_page_id INTEGER, PRIMARY KEY (video_id, source_page_id))")
+        cursor.execute("CREATE TABLE IF NOT EXISTS video_other (video_id TEXT, source_page_id INTEGER, PRIMARY KEY (video_id, source_page_id))")
+    def _migrate_sources_table(self):
+        """Migrate video_sources table to video_other in other.db."""
+        if not os.path.exists(self.other_db_path):
+            return
+        try:
+            conn = self.get_conn('other')
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='video_sources'")
+            if cursor.fetchone():
+                print("  [Migration] Renaming video_sources to video_other in other.db...")
+                cursor.execute("ALTER TABLE video_sources RENAME TO video_other")
+                conn.commit()
+            conn.close()
+        except Exception as e:
+            pass
+
     def is_indexed(self, video_id):
         """Checks if a video ID is already present in any database or the excluded list."""
         return (video_id in self.data or 
-                video_id in self.sources_data or 
+                video_id in self.other_data or 
                 video_id in self.ytpmv_data or 
                 video_id in self.collabs_data or 
                 video_id in self.actually_excluded_ids)
@@ -1524,7 +1548,7 @@ class VideoIndex:
         if video_id in self.data: existing_store = "video"
         elif video_id in self.ytpmv_data: existing_store = "ytpmv"
         elif video_id in self.collabs_data: existing_store = "collabs"
-        elif video_id in self.sources_data: existing_store = "sources"
+        elif video_id in self.other_data: existing_store = "sources"
 
         if existing_store and existing_store != target:
             # Already exists in another database, skip
@@ -1537,7 +1561,7 @@ class VideoIndex:
         elif target == "collabs":
             data_store = self.collabs_data
         else:
-            data_store = self.sources_data
+            data_store = self.other_data
             # Don't add to sources if it already exists in other main indices (Redundant but safe)
             if video_id in self.data or video_id in self.ytpmv_data or video_id in self.collabs_data:
                 return
@@ -1592,7 +1616,7 @@ class VideoIndex:
 
     def needs_metadata(self, video_id):
         # Look in all stores
-        e = self.data.get(video_id) or self.sources_data.get(video_id) or \
+        e = self.data.get(video_id) or self.other_data.get(video_id) or \
             self.ytpmv_data.get(video_id) or self.collabs_data.get(video_id) or {}
         
         # Don't try to fetch data for videos we know are dead/removed
@@ -1616,7 +1640,7 @@ class VideoIndex:
                      channel_name=None, channel_url=None,
                      publish_date=None, view_count=None, like_count=None, tags=None):
         # Look in all indices
-        e = self.data.get(video_id) or self.sources_data.get(video_id) or \
+        e = self.data.get(video_id) or self.other_data.get(video_id) or \
             self.ytpmv_data.get(video_id) or self.collabs_data.get(video_id)
         if not e:
             return
@@ -1639,21 +1663,13 @@ class VideoIndex:
         self._fix_channel_name(e)
 
     def is_done(self, vid):
-        # Check all main indices
-        all_ytp = {**self.data, **self.ytpmv_data, **self.collabs_data, **self.sources_data}
-        status = all_ytp.get(vid, {}).get("status")
-        if status in ("downloaded", "unavailable"):
-            return True
-        # Check local cache
-        if vid in self.download_cache:
-            return True
-        return False
+        # The download_cache is now the source of truth
+        return vid in self.download_cache
 
     def set_downloaded(self, vid, local_file, title=None):
-        e = self.data.get(vid) or self.sources_data.get(vid) or \
+        e = self.data.get(vid) or self.other_data.get(vid) or \
             self.ytpmv_data.get(vid) or self.collabs_data.get(vid)
         if e:
-            e["status"] = "downloaded"
             e["local_file"] = local_file
             save_to_download_cache(vid)
             self.download_cache.add(vid)
@@ -1661,35 +1677,41 @@ class VideoIndex:
                 e["title"] = title
 
     def set_unavailable(self, vid):
-        e = self.data.get(vid) or self.sources_data.get(vid) or \
+        e = self.data.get(vid) or self.other_data.get(vid) or \
             self.ytpmv_data.get(vid) or self.collabs_data.get(vid)
         if e:
-            e["status"] = "unavailable"
+            pass # status is deprecated
 
     def set_failed(self, vid):
-        e = self.data.get(vid) or self.sources_data.get(vid) or \
+        e = self.data.get(vid) or self.other_data.get(vid) or \
             self.ytpmv_data.get(vid) or self.collabs_data.get(vid)
         if e:
-            e["status"] = "failed"
+            pass # status is deprecated
 
     def clear_failed(self):
-        for e in self.data.values():
-            if e["status"] == "failed":
+        all_ytp = {**self.data, **self.ytpmv_data, **self.collabs_data, **self.other_data}
+        for e in all_ytp.values():
+            if e.get("status") == "failed":
                 e["status"] = "pending"
 
     def pending(self):
+        """Return all videos in the main collections (YTP, YTPMV, Collabs) not in the download cache."""
         all_ytp = {**self.data, **self.ytpmv_data, **self.collabs_data}
-        return [vid for vid, e in all_ytp.items() 
-                if e["status"] == "pending" and vid not in self.actually_excluded_ids]
+        return [vid for vid in all_ytp if vid not in self.download_cache and vid not in self.actually_excluded_ids]
 
     def stats(self):
-        s = {"total": 0, "downloaded": 0, "unavailable": 0, "failed": 0, "pending": 0}
+        """Collection breakdown using the download cache as the source of truth."""
         all_ytp = {**self.data, **self.ytpmv_data, **self.collabs_data}
-        for e in all_ytp.values():
-            s["total"] += 1
-            key = e.get("status", "pending")
-            s[key] = s.get(key, 0) + 1
-        return s
+        total = len(all_ytp)
+        downloaded = sum(1 for vid in all_ytp if vid in self.download_cache)
+        pending_count = total - downloaded
+        return {
+            "total": total,
+            "downloaded": downloaded,
+            "pending": pending_count,
+            "unavailable": 0, # Deprecated
+            "failed": 0       # Deprecated
+        }
 
     def remove_disallowed_channels(self):
         to_remove = [vid for vid, e in self.data.items()
@@ -1842,7 +1864,7 @@ def fetch_yt_metadata(video_id):
     url = canonical_yt_url(video_id)
     try:
         r = subprocess.run(
-            ["yt-dlp", "--dump-json", "--no-playlist",
+            [YTDLP_BIN] + YTDLP_ARGS + ["--dump-json", "--no-playlist",
              "--socket-timeout", "20", url],
             capture_output=True, text=True, timeout=60,
         )
@@ -1889,7 +1911,7 @@ def fetch_yt_metadata_batch(video_ids):
         # Use --ignore-errors so one dead link doesn't stop the batch
         # --retries 0 to fail fast on dead links
         r = subprocess.run(
-            ["yt-dlp", "--dump-json", "--no-playlist", "--ignore-errors",
+            [YTDLP_BIN] + YTDLP_ARGS + ["--dump-json", "--no-playlist", "--ignore-errors",
              "--socket-timeout", "15", "--retries", "0", "--no-warnings"] + urls,
             capture_output=True, text=True, timeout=240,
         )
@@ -1964,8 +1986,7 @@ def download_video(video_id, output_dir, yt_format, rate_limit,
     os.makedirs(output_dir, exist_ok=True)
     outtmpl = os.path.join(output_dir, "%(title).80s - %(id)s.%(ext)s")
 
-    cmd = [
-        "yt-dlp",
+    cmd = [YTDLP_BIN] + YTDLP_ARGS + [
         "--no-playlist", "--no-overwrites",
         "--write-thumbnail", "--convert-thumbnails", "jpg",
         "--embed-thumbnail", "--add-metadata",
@@ -2037,11 +2058,24 @@ def download_video(video_id, output_dir, yt_format, rate_limit,
                 local_file = matches[0]
 
         if is_exists:
-            return "exists", local_file, title
-        if proc.returncode == 0:
             if not local_file:
-                # Fallback check if --print didn't work as expected
                 local_file = find_video_on_disk(video_id, [output_dir])
+            return "exists", local_file, title
+            
+        # Fallback check if --print didn't work as expected or we missed the line
+        if not local_file:
+            local_file = find_video_on_disk(video_id, [output_dir])
+
+        if proc.returncode == 0:
+            if local_file and os.path.exists(local_file):
+                return "ok", local_file, title
+            else:
+                print(f"\n    [!] yt-dlp finished but no video file was found for {video_id}.")
+                print(f"    Check if ffmpeg is installed and if the format '{yt_format}' is available.")
+                return "error", None, title
+
+        # Robustness: If yt-dlp failed but the file is actually there, consider it OK
+        if local_file and os.path.exists(local_file):
             return "ok", local_file, title
 
         return "error", None, None
@@ -2072,7 +2106,7 @@ def do_update_index(index, language=None, custom_channels=None):
     print()
 
     # Collect all videos that might need metadata
-    all_vids = {**index.data, **index.sources_data, **index.ytpmv_data, **index.collabs_data}
+    all_vids = {**index.data, **index.other_data, **index.ytpmv_data, **index.collabs_data}
     need_meta_ids = [vid for vid in all_vids if index.needs_metadata(vid) and vid not in index.actually_excluded_ids]
 
     if custom_channels:
@@ -2242,7 +2276,7 @@ def do_forum_scrape(index, site_dir):
                                     print(f"    [Found] {vid} -> video_index", flush=True)
                                 else:
                                     new_found_source += 1
-                                    print(f"    [Found] {vid} -> sources_index", flush=True)
+                                    print(f"    [Found] {vid} -> other_index", flush=True)
 
                 pages_scanned += 1
                 if pages_scanned % 50 == 0:
@@ -2253,101 +2287,161 @@ def do_forum_scrape(index, site_dir):
     sync_ytpoopers_index(index)
     print(f"\n>>> Forum Scrape Complete. Scanned {pages_scanned} pages.")
     print(f"    Added {new_found_video} new videos to video_index.")
-    print(f"    Added {new_found_source} new videos to sources_index.")
+    print(f"    Added {new_found_source} new videos to other_index.")
     print(f"    Total links processed: {total_links_found}")
 
 
-def do_download(index, video_dir, yt_format, rate_limit, retry_failed, custom_channels=None, should_convert=False):
-    if retry_failed:
-        index.clear_failed()
-        index.save()
-        print("  Cleared failed status — will retry.\n")
-
-    pending = index.pending()
-
+def do_download(index, video_dir, yt_format, rate_limit, retry_failed=False, custom_channels=None, should_convert=False):
+    # status is deprecated; we just fetch what's not in the cache
+    
+    all_ytp = {**index.data, **index.ytpmv_data, **index.collabs_data}
+    
     if custom_channels:
-        print(f"  Filtering for {len(custom_channels)} selected channels...")
-        normalized_custom = {normalize_channel_url(c) for c in custom_channels}
-        filtered_pending = []
-        for vid in pending:
-            e = index.data.get(vid) or index.ytpmv_data.get(vid) or index.collabs_data.get(vid)
-            if e and e.get("channel_url") and normalize_channel_url(e["channel_url"]) in normalized_custom:
-                filtered_pending.append(vid)
-        pending = filtered_pending
-    if not pending:
-        print("  Nothing to download — either run 'Update index' first")
-        print("  or everything is already downloaded / unavailable.")
-        return
+        print(f"  Downloading channel-by-channel for {len(custom_channels)} selected channels...")
+        normalized_custom = {normalize_channel_url(c): c for c in custom_channels}
+        
+        # Group pending videos by channel
+        channel_to_vids = {}
+        for vid, e in all_ytp.items():
+            if vid in index.download_cache or vid in index.actually_excluded_ids:
+                continue
+            ch_url = e.get("channel_url")
+            if not ch_url:
+                continue
+            norm = normalize_channel_url(ch_url)
+            if norm in normalized_custom:
+                if norm not in channel_to_vids:
+                    channel_to_vids[norm] = []
+                channel_to_vids[norm].append(vid)
+        
+        total_vids = sum(len(v) for v in channel_to_vids.values())
+        if total_vids == 0:
+            print("  No pending videos found for the selected channels.")
+            return
 
-    total = len(pending)
-    print(f"  {total} videos pending.\n")
-
-    ok_count = skip_count = unavail_count = err_count = 0
-
-    for i, vid in enumerate(pending, 1):
-        try:
-            e = index.data.get(vid) or index.ytpmv_data.get(vid) or index.collabs_data.get(vid)
+        print(f"  Found {total_vids} pending videos across {len(channel_to_vids)} channels.")
+        
+        ok_count = skip_count = unavail_count = err_count = 0
+        processed_in_loop = 0
+        
+        for norm_ch, vids in channel_to_vids.items():
+            ch_display = normalized_custom[norm_ch]
+            print(f"\n>>> Channel: {ch_display} ({len(vids)} videos)")
             
-            if e.get("title") == "warnings.warn(":
-                meta = fetch_yt_metadata(vid)
-                if isinstance(meta, dict) and meta.get("title"):
-                    e["title"] = meta["title"]
-                    index.save()
+            for vid in vids:
+                processed_in_loop += 1
+                try:
+                    e = all_ytp[vid]
                     
-            sec = e["sections"][0] if e["sections"] else "Unknown"
-            thread = (e.get("thread_titles") or [""])[0] or vid
-            yt_title = e.get("title") or vid
+                    if e.get("title") == "warnings.warn(":
+                        meta = fetch_yt_metadata(vid)
+                        if isinstance(meta, dict) and meta.get("title"):
+                            e["title"] = meta["title"]
+                            
+                    thread = (e.get("thread_titles") or [""])[0] or vid
+                    ch_name = e.get("channel_name")
+                    folder_name = safe_filename(ch_name) if ch_name else "Unknown Channel"
+                    out_dir = os.path.join(video_dir, folder_name)
 
-            ch_name = e.get("channel_name")
-            folder_name = safe_filename(ch_name) if ch_name else "Unknown Channel"
-            out_dir = os.path.join(video_dir, folder_name)
+                    print(f"  [{processed_in_loop}/{total_vids}] {thread[:60]}")
+                    status, local_file, dl_title = download_video(
+                        vid, out_dir, yt_format, rate_limit, processed_in_loop, total_vids,
+                    )
 
-            print(f"  [{i}/{total}] {thread[:60]}")
-            if e.get("channel_name"):
-                ch_url = e.get("channel_url", "")
-                print(f"  Channel: {e['channel_name']}  {ch_url}")
-            print(f"  URL:     {canonical_yt_url(vid)}")
+                    if status == "ok":
+                        if should_convert and local_file and os.path.exists(local_file):
+                            try:
+                                import compress_videos
+                                print(f"    [Compressing] {os.path.basename(local_file)}")
+                                compressed_path = compress_videos.process_video(local_file)
+                                local_file = str(compressed_path)
+                            except Exception as ex:
+                                print(f"    [!] Compression failed: {ex}")
 
-            status, local_file, dl_title = download_video(
-                vid, out_dir, yt_format, rate_limit, i, total,
-            )
+                        rel = os.path.relpath(local_file, ".") if local_file else None
+                        index.set_downloaded(vid, rel, dl_title)
+                        print(f"  ✓ {os.path.basename(local_file or '')}", flush=True)
+                        ok_count += 1
+                    elif status == "exists":
+                        if not index.is_done(vid):
+                            rel = os.path.relpath(local_file, ".") if local_file else None
+                            index.set_downloaded(vid, rel, dl_title)
+                        print(f"  = already downloaded")
+                        skip_count += 1
+                    elif status == "unavailable":
+                        index.set_unavailable(vid)
+                        print("  ⊘ Unavailable (removed / private)")
+                        unavail_count += 1
+                    else:
+                        print("  ✗ Failed")
+                        err_count += 1
 
-            if status == "ok":
-                if should_convert and local_file and os.path.exists(local_file):
-                    try:
-                        import compress_videos
-                        print(f"    [Compressing] {os.path.basename(local_file)}")
-                        compressed_path = compress_videos.process_video(local_file)
-                        local_file = str(compressed_path)
-                    except Exception as e:
-                        print(f"    [!] Compression failed: {e}")
+                    if status == "ok":
+                        time.sleep(1)
+                except Exception as ex:
+                    print(f"\n  [!] Unexpected error processing {vid}: {ex}")
+                    err_count += 1
+    else:
+        pending = index.pending()
+        if not pending:
+            print("  Nothing to download.")
+            return
 
-                rel = os.path.relpath(local_file, ".") if local_file else None
-                index.set_downloaded(vid, rel, dl_title)
-                print(f"  ✓ {os.path.basename(local_file or '')}", flush=True)
-                ok_count += 1
-            elif status == "exists":
-                if not index.is_done(vid):
+        total = len(pending)
+        print(f"  {total} videos pending.\n")
+        ok_count = skip_count = unavail_count = err_count = 0
+
+        for i, vid in enumerate(pending, 1):
+            try:
+                e = all_ytp[vid]
+                if e.get("title") == "warnings.warn(":
+                    meta = fetch_yt_metadata(vid)
+                    if isinstance(meta, dict) and meta.get("title"):
+                        e["title"] = meta["title"]
+                        
+                thread = (e.get("thread_titles") or [""])[0] or vid
+                ch_name = e.get("channel_name")
+                folder_name = safe_filename(ch_name) if ch_name else "Unknown Channel"
+                out_dir = os.path.join(video_dir, folder_name)
+
+                print(f"  [{i}/{total}] {thread[:60]}")
+                status, local_file, dl_title = download_video(
+                    vid, out_dir, yt_format, rate_limit, i, total,
+                )
+
+                if status == "ok":
+                    if should_convert and local_file and os.path.exists(local_file):
+                        try:
+                            import compress_videos
+                            print(f"    [Compressing] {os.path.basename(local_file)}")
+                            compressed_path = compress_videos.process_video(local_file)
+                            local_file = str(compressed_path)
+                        except Exception as ex:
+                            print(f"    [!] Compression failed: {ex}")
+
                     rel = os.path.relpath(local_file, ".") if local_file else None
                     index.set_downloaded(vid, rel, dl_title)
-                print(f"  = already downloaded")
-                skip_count += 1
-            elif status == "unavailable":
-                index.set_unavailable(vid)
-                print("  ⊘ Unavailable (removed / private)")
-                unavail_count += 1
-            else:
-                index.set_failed(vid)
-                print("  ✗ Failed")
+                    print(f"  ✓ {os.path.basename(local_file or '')}", flush=True)
+                    ok_count += 1
+                elif status == "exists":
+                    if not index.is_done(vid):
+                        rel = os.path.relpath(local_file, ".") if local_file else None
+                        index.set_downloaded(vid, rel, dl_title)
+                    print(f"  = already downloaded")
+                    skip_count += 1
+                elif status == "unavailable":
+                    index.set_unavailable(vid)
+                    print("  ⊘ Unavailable (removed / private)")
+                    unavail_count += 1
+                else:
+                    print("  ✗ Failed")
+                    err_count += 1
+
+                if status == "ok":
+                    time.sleep(1)
+            except Exception as ex:
+                print(f"\n  [!] Unexpected error processing {vid}: {ex}")
                 err_count += 1
-
-            index.save()
-
-            if status == "ok":
-                time.sleep(1)
-        except Exception as ex:
-            print(f"\n  [!] Unexpected error processing {vid}: {ex}")
-            err_count += 1
 
     print("─" * 54)
     print(f"  Downloaded:  {ok_count}")
@@ -2357,7 +2451,7 @@ def do_download(index, video_dir, yt_format, rate_limit, retry_failed, custom_ch
     print(f"  Index:       {os.path.abspath(index.filepath)}")
 
 
-def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping", quiet=False, ignore_sources=False):
+def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping", quiet=False, ignore_other=False):
     """Scrape videos based on YouTube searches."""
     if not quiet:
         print(f"\n--- {title_header} ---")
@@ -2391,7 +2485,7 @@ def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping
         try:
             # ytsearch50 gets top 50 results
             r = subprocess.run(
-                ["yt-dlp", f"ytsearch50:{search_query}", "--flat-playlist", "--dump-json", 
+                [YTDLP_BIN] + YTDLP_ARGS + [f"ytsearch50:{search_query}", "--flat-playlist", "--dump-json", 
                  "--no-warnings", "--socket-timeout", "20"],
                 capture_output=True, text=True, timeout=180,
             )
@@ -2420,8 +2514,8 @@ def do_scrape_search(index, keywords=None, title_header="YouTube Search Scraping
                     if target == "none":
                         continue
                     
-                    # If ignore_sources is True, skip videos that are classified as sources (meme keywords)
-                    if ignore_sources and target == "sources":
+                    # If ignore_other is True, skip videos that are classified as sources (meme keywords)
+                    if ignore_other and target == "sources":
                         continue
                     
                     # 1. Ignore if already in any index or excluded
@@ -2606,7 +2700,7 @@ def do_keyword_search_scraping(index):
     print(f"  Keyword Search Scraping Complete. Added {total_added} new videos.")
 
 
-def do_scrape_channels(index, ignore_sources=False, custom_channels=None):
+def do_scrape_channels(index, ignore_other=False, custom_channels=None):
     """Scans channels for new YTP videos matching keywords."""
     
     if custom_channels:
@@ -2638,7 +2732,7 @@ def do_scrape_channels(index, ignore_sources=False, custom_channels=None):
         try:
             # Use flat-playlist to quickly get the list of video IDs and titles
             r = subprocess.run(
-                ["yt-dlp", "--flat-playlist", "--dump-json", "--no-warnings", 
+                [YTDLP_BIN] + YTDLP_ARGS + ["--flat-playlist", "--dump-json", "--no-warnings", 
                  "--socket-timeout", "20", videos_url],
                 capture_output=True, text=True, timeout=120,
             )
@@ -2673,7 +2767,7 @@ def do_scrape_channels(index, ignore_sources=False, custom_channels=None):
 
                         # If it matches and is not already in the index (and not excluded), log and add it
                         if target != "none" and vid and not index.is_indexed(vid):
-                            if ignore_sources and target == "sources" and not custom_channels:
+                            if ignore_other and target == "sources" and not custom_channels:
                                 continue
                             clear_line()
                             print(f"    [+] New {target} match found: {title} ({vid})")
@@ -2728,7 +2822,7 @@ def do_scrape_single_channel(index, ch_url, docs_dir, video_dir):
 
     # 1. Scrape videos
     print("\n  [1/3] Scraping Videos...")
-    do_scrape_channels(index, ignore_sources=False, specific_channels=[ch_url])
+    do_scrape_channels(index, ignore_other=False, custom_channels=[ch_url])
 
     # 2. Scrape profile
     print("\n  [2/3] Scraping Profile...")
@@ -2743,16 +2837,8 @@ def do_scrape_single_channel(index, ch_url, docs_dir, video_dir):
 
     print("\n--- Single Channel Scraping Complete ---")
 
-def do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, limit_channels=None, language_filter=None, should_convert=False):
-    if retry_failed:
-        for e in index.data.values():
-            if "Youtube" in e.get("sections", []) and e["status"] == "failed":
-                # If language filter is active, only reset if language matches
-                if language_filter and e.get("language") != language_filter:
-                    continue
-                e["status"] = "pending"
-        index.save()
-        print("  Cleared failed status for 'Youtube' section — will retry.\n")
+def do_download_youtube(index, video_dir, yt_format, rate_limit, limit_channels=None, language_filter=None, should_convert=False):
+    # status is deprecated; we just fetch what's not in the cache
 
     def is_channel_allowed(e):
         if not limit_channels:
@@ -2776,7 +2862,7 @@ def do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, l
     all_ytp = {**index.data, **index.ytpmv_data, **index.collabs_data}
     pending = [
         vid for vid, e in all_ytp.items()
-        if e["status"] == "pending"
+        if vid not in index.download_cache
         and vid not in index.actually_excluded_ids
         and is_channel_allowed(e)
         and is_language_match(e)
@@ -2800,7 +2886,6 @@ def do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, l
                 meta = fetch_yt_metadata(vid)
                 if isinstance(meta, dict) and meta.get("title"):
                     e["title"] = meta["title"]
-                    index.save()
                     
             label = (e.get("thread_titles") or [""])[0] or e.get("title") or vid
 
@@ -2845,8 +2930,6 @@ def do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, l
                 print("  ✗ Failed")
                 err_count += 1
 
-            index.save()
-
             if status == "ok":
                 time.sleep(1)
         except Exception as ex:
@@ -2861,7 +2944,42 @@ def do_download_youtube(index, video_dir, yt_format, rate_limit, retry_failed, l
     print(f"  Index:       {os.path.abspath(index.filepath)}")
 
 
-def do_download_italian(index, video_dir, yt_format, rate_limit, retry_failed, year_limit=2030):
+def do_verify_cache(index):
+    """Verify that every entry in download_cache.json actually exists on disk."""
+    print("\n--- Verify Download Cache ---")
+    print("  Checking if archived videos still exist on disk...")
+    
+    initial_count = len(index.download_cache)
+    if initial_count == 0:
+        print("  Cache is empty.")
+        return
+
+    to_remove = []
+    search_dirs = [DEFAULT_VIDEO_DIR, DEFAULT_OTHER_DIR]
+    
+    checked = 0
+    for vid in list(index.download_cache):
+        path = find_video_on_disk(vid, search_dirs)
+        if not path:
+            to_remove.append(vid)
+        
+        checked += 1
+        if checked % 100 == 0 or checked == initial_count:
+            print(f"    Checked {checked}/{initial_count}...", end="\r", flush=True)
+            
+    if to_remove:
+        print(f"\n  [!] Found {len(to_remove)} entries in cache with missing video files.")
+        for vid in to_remove:
+            index.download_cache.remove(vid)
+        save_download_cache(index.download_cache)
+        print("  [✓] Cache cleaned. These videos will be re-attempted in the next download run.")
+    else:
+        print("\n  [✓] All cached entries have corresponding video files on disk.")
+
+
+def do_download_italian(index, video_dir, yt_format, rate_limit, year_limit=2030, should_convert=False):
+    """Download Italian YTPs (Historic Sections + Channels) - Legacy logic refactored to use cache."""
+    
     def is_italian(e):
         # Must match keywords
         title = e.get("title") or ""
@@ -2869,8 +2987,6 @@ def do_download_italian(index, video_dir, yt_format, rate_limit, retry_failed, y
             return False
 
         secs = e.get("sections", [])
-        #TODO: reenable this after scraping all historic ones in secs 
-        # 
         if "YTP fai da te" in secs or "YTP nostrane" in secs or "Scraped Channel" in secs or "Youtube" in secs:
             return True
         ch_url = e.get("channel_url", "")
@@ -2895,18 +3011,13 @@ def do_download_italian(index, video_dir, yt_format, rate_limit, retry_failed, y
         except (ValueError, IndexError):
             return False
 
-    if retry_failed:
-        all_ytp = {**index.data, **index.ytpmv_data, **index.collabs_data}
-        for e in all_ytp.values():
-            if is_italian(e) and is_in_year_range(e) and e["status"] == "failed":
-                e["status"] = "pending"
-        index.save()
-        print(f"  Cleared failed status for Italian YTPs (until {year_limit}) — will retry.\n")
+    # retry_failed and status are deprecated for Italian YTPs
 
     all_ytp = {**index.data, **index.ytpmv_data, **index.collabs_data}
     pending = [
         vid for vid, e in all_ytp.items()
-        if is_italian(e) and is_in_year_range(e) and e["status"] == "pending"
+        if is_italian(e) and is_in_year_range(e)
+        and vid not in index.download_cache
         and vid not in index.actually_excluded_ids
     ]
 
@@ -2927,7 +3038,6 @@ def do_download_italian(index, video_dir, yt_format, rate_limit, retry_failed, y
                 meta = fetch_yt_metadata(vid)
                 if isinstance(meta, dict) and meta.get("title"):
                     e["title"] = meta["title"]
-                    index.save()
                     
             sec = e["sections"][0] if e["sections"] else "Unknown"
             label = (e.get("thread_titles") or [""])[0] or e.get("title") or vid
@@ -2965,8 +3075,6 @@ def do_download_italian(index, video_dir, yt_format, rate_limit, retry_failed, y
                 print("  ✗ Failed")
                 err_count += 1
 
-            index.save()
-
             if status == "ok":
                 time.sleep(1)
         except Exception as ex:
@@ -2982,32 +3090,27 @@ def do_download_italian(index, video_dir, yt_format, rate_limit, retry_failed, y
 
 
 
-def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed, custom_channels=None, should_convert=False):
-    sources_data = index.sources_data
+def do_download_other(index, video_dir, yt_format, rate_limit, retry_failed, custom_channels=None, should_convert=False):
+    other_data = index.other_data
 
-    if not sources_data:
-        print("  Sources database is empty.")
+    if not other_data:
+        print("  Other database is empty.")
         return
 
-    if retry_failed:
-        for e in sources_data.values():
-            if e.get("status") == "failed":
-                e["status"] = "pending"
-        index.save()
-        print("  Cleared failed status in sources database — will retry.\n")
+    # retry_failed is deprecated for sources
 
-    pending = [vid for vid, e in sources_data.items() if e.get("status") == "pending"]
+    pending = [vid for vid in other_data if vid not in index.download_cache]
 
     if custom_channels:
         print(f"  Filtering for {len(custom_channels)} selected channels...")
         normalized_custom = {normalize_channel_url(c) for c in custom_channels}
         pending = [
             vid for vid in pending 
-            if sources_data[vid].get("channel_url") and normalize_channel_url(sources_data[vid]["channel_url"]) in normalized_custom
+            if other_data[vid].get("channel_url") and normalize_channel_url(other_data[vid]["channel_url"]) in normalized_custom
         ]
 
     if not pending:
-        print("  Nothing to download in sources database.")
+        print("  Nothing to download in 'other' database.")
         return
 
     total = len(pending)
@@ -3017,12 +3120,12 @@ def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed, c
 
     for i, vid in enumerate(pending, 1):
         try:
-            e = sources_data[vid]
+            e = other_data[vid]
 
             ch_name = e.get("channel_name")
             folder_name = safe_filename(ch_name) if ch_name else "Unknown Channel"
-            # Target directory is ./sources/[channel_name]
-            out_dir = os.path.join(DEFAULT_SOURCES_DIR, folder_name)
+            # Target directory is ./other/[channel_name]
+            out_dir = os.path.join(DEFAULT_OTHER_DIR, folder_name)
             os.makedirs(out_dir, exist_ok=True)
             
             if e.get("title") == "warnings.warn(":
@@ -3051,28 +3154,21 @@ def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed, c
                     except Exception as e:
                         print(f"    [!] Compression failed: {e}")
 
-                e["status"] = "downloaded"
-                e["local_file"] = os.path.relpath(local_file, ".") if local_file else None
-                if dl_title: e["title"] = dl_title
+                index.set_downloaded(vid, os.path.relpath(local_file, ".") if local_file else None, dl_title)
                 print(f"  ✓ {os.path.basename(local_file or '')}")
                 ok_count += 1
             elif status == "exists":
-                e["status"] = "downloaded"
-                e["local_file"] = os.path.relpath(local_file, ".") if local_file else None
-                if dl_title: e["title"] = dl_title
+                index.set_downloaded(vid, os.path.relpath(local_file, ".") if local_file else None, dl_title)
                 print(f"  = already downloaded")
                 skip_count += 1
             elif status == "unavailable":
-                e["status"] = "unavailable"
+                index.set_unavailable(vid)
                 print("  ⊘ Unavailable (removed / private)")
                 unavail_count += 1
             else:
-                e["status"] = "failed"
+                index.set_failed(vid)
                 print("  ✗ Failed")
                 err_count += 1
-
-            # Save after each download
-            index.save()
 
             if status == "ok":
                 time.sleep(1)
@@ -3085,7 +3181,7 @@ def do_download_risorse(index, video_dir, yt_format, rate_limit, retry_failed, c
     print(f"  Skipped:     {skip_count}")
     print(f"  Unavailable: {unavail_count}")
     print(f"  Failed:      {err_count}")
-    print(f"  Sources:     {os.path.abspath(src_path)}")
+    print(f"  Sources DB:  {os.path.abspath(index.other_db_path)}")
 
 def do_stats(index, output_path="stats.md"):
     from collections import defaultdict
@@ -3173,7 +3269,7 @@ def do_channel_report(index):
     count_vids(index.data)
     count_vids(index.ytpmv_data)
     count_vids(index.collabs_data)
-    count_vids(index.sources_data, is_other=True)
+    count_vids(index.other_data, is_other=True)
     
     # Filter channels with > 90% other videos
     qualifying_channels = []
@@ -3203,6 +3299,34 @@ def do_channel_report(index):
             
     print(f"\n>>> Channel report generated: {os.path.abspath(output_file)}")
 
+
+def do_update_ytdlp():
+    """Downloads the latest yt-dlp binary from GitHub."""
+    print("\n--- Updating yt-dlp ---")
+    local_path = os.path.join(PROJECT_ROOT, "scripts", "yt-dlp")
+    url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
+    
+    print(f"  Downloading latest binary from: {url}")
+    try:
+        # Use urllib for a clean dependency-free download
+        with urllib.request.urlopen(url) as response, open(local_path, 'wb') as out_file:
+            shutil.copyfileobj(response, out_file)
+        
+        # Set executable permissions
+        os.chmod(local_path, 0o755)
+        print(f"  [✓] Updated successfully to: {local_path}")
+        
+        # Update global var
+        global YTDLP_BIN
+        YTDLP_BIN = local_path
+        
+        # Check version
+        r = subprocess.run([YTDLP_BIN] + YTDLP_ARGS + ["--version"], capture_output=True, text=True)
+        if r.returncode == 0:
+            print(f"  New version: {r.stdout.strip()}")
+            
+    except Exception as e:
+        print(f"  [!] Failed to update: {e}")
 
 def do_chronology(index, top_n=20):
     if not index.data:
@@ -3304,7 +3428,7 @@ def do_find_mirrors(index):
             query_safe = query[:100]
             try:
                 r = subprocess.run(
-                    ["yt-dlp", f"ytsearch5:{query_safe}",
+                    [YTDLP_BIN] + YTDLP_ARGS + [f"ytsearch5:{query_safe}",
                      "--flat-playlist", "--dump-json",
                      "--no-warnings", "--socket-timeout", "20"],
                     capture_output=True, text=True, timeout=60,
@@ -3362,7 +3486,7 @@ def sync_ytpoopers_index(index):
         conn.close()
 
     gather_from_db('ytp')
-    gather_from_db('sources')
+    gather_from_db('other')
     
     # 3. Sync to ytpoopers.db
     added = 0
@@ -3447,7 +3571,7 @@ def do_cleanup_other_db(index):
     # Get all channels from other.db (sources)
     channels_in_other_db = {}  # normalized_url -> {url, name}
     try:
-        conn = index.get_conn('sources')
+        conn = index.get_conn('other')
         cursor = conn.cursor()
         cursor.execute("SELECT DISTINCT channel_url, channel_name FROM videos WHERE channel_url IS NOT NULL")
         for row in cursor.fetchall():
@@ -3492,7 +3616,7 @@ def do_cleanup_other_db(index):
     
     # Perform deletion from other.db
     try:
-        conn = index.get_conn('sources')
+        conn = index.get_conn('other')
         cursor = conn.cursor()
         
         for channel_info in orphaned_channels:
@@ -3521,7 +3645,7 @@ def do_cleanup_other_db(index):
             """, (channel_url,))
             
             cursor.execute("""
-                DELETE FROM video_sources WHERE video_id IN (
+                DELETE FROM video_other WHERE video_id IN (
                     SELECT id FROM videos WHERE channel_url = ?
                 )
             """, (channel_url,))
@@ -3740,7 +3864,7 @@ def do_auto_languages(index):
     tagged_counts = {lang: 0 for lang in langs}
 
     # Combine all video data from all databases
-    all_ytp = {**index.data, **index.sources_data, **index.ytpmv_data, **index.collabs_data}
+    all_ytp = {**index.data, **index.other_data, **index.ytpmv_data, **index.collabs_data}
 
     for video_id, video in all_ytp.items():
         title = video.get('title') or video_id
@@ -3870,7 +3994,7 @@ def do_scrape_profiles(index, docs_dir, specific_channels=None):
 
         try:
             r = subprocess.run(
-                ["yt-dlp", "--dump-json", "--playlist-items", "0",
+                [YTDLP_BIN] + YTDLP_ARGS + ["--dump-json", "--playlist-items", "0",
                  "--no-warnings", "--socket-timeout", "20", about_url],
                 capture_output=True, text=True, timeout=60,
             )
@@ -3945,9 +4069,9 @@ def do_scrape_profiles(index, docs_dir, specific_channels=None):
 
 
 def do_scrape_sources_metadata(index, language=None, custom_channels=None):
-    sources_data = index.sources_data
+    other_data = index.other_data
 
-    need_meta_ids = [vid for vid, e in sources_data.items() if (
+    need_meta_ids = [vid for vid, e in other_data.items() if (
         e.get("title") is None or
         e.get("description") is None or
         e.get("channel_name") is None or
@@ -3963,8 +4087,8 @@ def do_scrape_sources_metadata(index, language=None, custom_channels=None):
         normalized_custom = {normalize_channel_url(c) for c in custom_channels}
         need_meta_ids = [
             vid for vid in need_meta_ids 
-            if sources_data.get(vid, {}).get("channel_url") and 
-            normalize_channel_url(sources_data[vid]["channel_url"]) in normalized_custom
+            if other_data.get(vid, {}).get("channel_url") and 
+            normalize_channel_url(other_data[vid]["channel_url"]) in normalized_custom
         ]
 
     if language:
@@ -3974,7 +4098,7 @@ def do_scrape_sources_metadata(index, language=None, custom_channels=None):
 
         filtered_ids = []
         for vid in need_meta_ids:
-            e = sources_data.get(vid, {})
+            e = other_data.get(vid, {})
             # Check for strict keyword match if title is available
             title_text = []
             if e.get("title") and e.get("title") != "warnings.warn(": title_text.append(e.get("title"))
@@ -4038,7 +4162,7 @@ def do_scrape_sources_metadata(index, language=None, custom_channels=None):
         
         for vid in batch_ids:
             meta = batch_results.get(vid)
-            e = sources_data[vid]
+            e = other_data[vid]
             if meta == "unavailable":
                 e["status"] = "unavailable"
                 print(f"\n    [SKIP] {vid}: Video unavailable", flush=True)
@@ -4106,13 +4230,13 @@ def do_scrape_comments(index, video_dir, custom_channels=None):
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_comments_video_id ON comments(video_id)")
     conn.commit()
 
-    sources_data = index.sources_data
+    other_data = index.other_data
 
     # Check which videos already have comments in the DB
     cursor.execute("SELECT DISTINCT video_id FROM comments")
     already_scraped = {row[0] for row in cursor.fetchall()}
 
-    videos = [(vid, e) for vid, e in sources_data.items()
+    videos = [(vid, e) for vid, e in other_data.items()
               if e.get("status") != "unavailable"]
 
     if custom_channels:
@@ -4149,7 +4273,7 @@ def do_scrape_comments(index, video_dir, custom_channels=None):
         url = canonical_yt_url(vid)
         try:
             r = subprocess.run(
-                ["yt-dlp", "--dump-single-json", "--write-comments",
+                [YTDLP_BIN] + YTDLP_ARGS + ["--dump-single-json", "--write-comments",
                  "--no-warnings", "--socket-timeout", "30", url],
                 capture_output=True, text=True, timeout=120,
             )
@@ -4223,7 +4347,7 @@ def do_full_scrape_run(index, args, custom_channels=None):
     print("\n>>> Starting Full Scrape Run...")
     
     print("\nStep 1: Scrape Channels (Option 3)")
-    do_scrape_channels(index, ignore_sources=False, custom_channels=custom_channels)
+    do_scrape_channels(index, ignore_other=False, custom_channels=custom_channels)
     create_progressive_backup(index, "step1_channels")
     
     print("\nStep 2: Fetch Missing Metadata (Option 1)")
@@ -4242,21 +4366,21 @@ def do_full_scrape_run(index, args, custom_channels=None):
     print("\n>>> Full Scrape Run Complete.")
 
 
-def do_full_scrape_run_ignore_sources(index, args, custom_channels=None):
+def do_full_scrape_run_ignore_other(index, args, custom_channels=None):
     print("\n>>> Starting Full Scrape Run (Ignore Sources)...")
     
     print("\nStep 1: Scrape Channels (Option 3) - Ignoring Sources")
-    do_scrape_channels(index, ignore_sources=True, custom_channels=custom_channels)
-    create_progressive_backup(index, "step1_channels_ignore_sources")
+    do_scrape_channels(index, ignore_other=True, custom_channels=custom_channels)
+    create_progressive_backup(index, "step1_channels_ignore_other")
     
     print("\nStep 2: Fetch Missing Metadata (Option 1) - Only YTP")
     do_update_index(index, custom_channels=custom_channels)
     # Skip do_scrape_sources_metadata
-    create_progressive_backup(index, "step2_metadata_ignore_sources")
+    create_progressive_backup(index, "step2_metadata_ignore_other")
     
     print("\nStep 3: Scrape Channel Profiles and Thumbnails (Option 7)")
     do_scrape_profiles(index, args.public_dir, specific_channels=custom_channels)
-    create_progressive_backup(index, "step3_thumbnails_ignore_sources")
+    create_progressive_backup(index, "step3_thumbnails_ignore_other")
     
     # Skip Step 4: Scrape Comments (sources only)
     
@@ -4454,6 +4578,24 @@ def print_header():
 
 def main():
     import io
+    # Check for dependencies
+    try:
+        ffmpeg_found = subprocess.run(["ffmpeg", "-version"], capture_output=True).returncode == 0
+        ffprobe_found = subprocess.run(["ffprobe", "-version"], capture_output=True).returncode == 0
+    except FileNotFoundError:
+        ffmpeg_found = False
+        ffprobe_found = False
+    
+    if not ffmpeg_found or not ffprobe_found:
+        print("\n" + "!" * 60)
+        print("  WARNING: ffmpeg or ffprobe not found in PATH!")
+        print("  YouTube downloads will likely fail to merge video and audio.")
+        print("  Compression features will not work.")
+        print("  Please ensure ffmpeg is installed and added to your system PATH.")
+        print("!" * 60 + "\n")
+        import time
+        time.sleep(2)
+
     # Ensure UTF-8 output on Windows
     if hasattr(sys.stdout, 'reconfigure'):
         sys.stdout.reconfigure(encoding='utf-8')
@@ -4539,6 +4681,19 @@ def main():
     print(f"  Video dir: {os.path.abspath(args.video_dir)}")
     print(f"  Docs dir:  {os.path.abspath(args.docs_dir)}")
     print(f"  Sections:  {', '.join(SCAN_SECTIONS)}")
+    print(f"  yt-dlp:    {YTDLP_BIN}")
+    
+    # Check yt-dlp version
+    try:
+        r = subprocess.run([YTDLP_BIN, "--version"], capture_output=True, text=True)
+        if r.returncode == 0:
+            v_str = r.stdout.strip()
+            print(f"  Version:   {v_str}")
+            if any(y in v_str for y in ["2023", "2024", "2025"]):
+                 print(f"\n  [!] WARNING: Your yt-dlp version is likely outdated for 2026.")
+                 print("      If downloads fail, use option 'u' to update it locally.")
+    except:
+        pass
     print()
     print("  What do you want to do?")
     print()
@@ -4608,10 +4763,13 @@ def main():
     print("  a  Full Automation (Scrape + Download)")
     print("       The works: Run Full Scrape Cycle followed by Full Download.")
     print()
+    print("  u  Update yt-dlp")
+    print("       Download the latest version of yt-dlp to scripts/ folder.")
+    print()
     print("  q  Quit")
     print()
-    choice = ask("  Choice [1-15/f/r/s/x/d/p/a/q]: ",
-                 {"1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","f","r","s","x","d","p","a","q"})
+    choice = ask("  Choice [1-15/u/f/r/s/x/d/p/a/q]: ",
+                 {"1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","u","f","r","s","x","d","p","a","q"})
 
     if choice == "q":
         sys.exit(0)
@@ -4687,7 +4845,7 @@ def main():
         if sub in ("1", "2"):
             do_download(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, custom_channels=selected_chans, should_convert=should_convert)
         if sub in ("1", "3"):
-            do_download_risorse(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, custom_channels=selected_chans, should_convert=should_convert)
+            do_download_other(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, custom_channels=selected_chans, should_convert=should_convert)
         print()
     if choice == "3":
         print("\nSelect Scraping Mode:")
@@ -4875,6 +5033,10 @@ def main():
 
     # No migration needed for SQL version
     pass
+
+    if choice == "u":
+        do_update_ytdlp()
+        return
 
     print()
 

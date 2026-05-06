@@ -4,7 +4,8 @@
   "description": "Local mirror server for the YouTube Poop Italian Forum",
   "main": "server.js",
   "scripts": {
-    "start": "node scripts/serve.js"
+    "start": "node scripts/serve.js",
+    "scrape": "python3 scripts/ytp_scraper.py"
   },
   "engines": {
     "node": ">=18"
