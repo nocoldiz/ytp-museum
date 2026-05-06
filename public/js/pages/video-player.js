@@ -3,7 +3,7 @@ async function openVideo(vidId, pushToHistory = true) {
   if (pushToHistory) updateURL({ v: vidId }, '/watch');
   window.scrollTo(0, 0);
   showPage('video', false);
-  if (typeof updateVideoLayoutForTheme === 'function') updateVideoLayoutForTheme();
+  // Layout will be updated after basic elements are rendered
 
   const { video, db } = findVideoAcrossDBs(vidId);
   if (!video) {
@@ -45,6 +45,8 @@ async function openVideo(vidId, pushToHistory = true) {
     }
   }
   document.getElementById('watch-description').innerHTML = linkify(escHtml(desc)) + tagsHtml;
+  
+  if (typeof updateVideoLayoutForTheme === 'function') updateVideoLayoutForTheme();
 
   const playerContainer = document.getElementById('watch-player');
   const hasLocal = !!v.local_file;
@@ -501,13 +503,13 @@ function updateVideoLayoutForTheme() {
     }
     channelRow.style.display = 'flex';
     channelRow.appendChild(channel);
-    channelRow.appendChild(actions);
+    if (actions) channelRow.appendChild(actions);
 
     mainCol.insertBefore(desc, channelRow.nextSibling);
     desc.insertBefore(stats, desc.firstChild);
 
     // Move date next to views in description box
-    if (date) {
+    if (date && stats) {
       stats.appendChild(date);
       date.style.display = 'inline-block';
       date.style.marginLeft = '8px';
