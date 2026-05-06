@@ -31,11 +31,10 @@ jobs:
         run: |
           mkdir _site
           cp -r public/* _site/
-          mkdir -p _site/db
-          cp -r db/* _site/db/
-          # Optional: handle large files or exclusions here
-          rm -rf _site/db/videos # Remove if you don't want to host videos on GH Pages
-          rm -rf _site/db/sources # Remove if you don't want to host sources on GH Pages
+          # Remove backup and unwanted files to save space
+          rm -f _site/db/*.bak
+          rm -rf _site/db/videos
+          rm -rf _site/db/sources
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

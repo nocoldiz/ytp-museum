@@ -58,9 +58,7 @@ CHANNELS_TO_PRESERVE = [
 ]
 
 # NocoldizTV: scrape everything except videos whose title matches these words
-NOCOLDIZ_BLACKLIST = re.compile(
-    r'(?i)(gameplay|hypernet|devlog|gioco|em\.Path|em\.Brace|Dwarf)'
-)
+
 
 
 def normalize_channel_url(url):
@@ -69,9 +67,23 @@ def normalize_channel_url(url):
     url = url.strip().rstrip("/")
     url = url.split("/featured")[0]
     url = url.replace("http://", "https://")
-    if url.startswith("https://youtube.com"):
-        url = url.replace("https://youtube.com", "https://www.youtube.com", 1)
-    return url.lower()
+
+    # Lowercase the domain and force www
+    if url.startswith("https://www.youtube.com"):
+        domain = "https://www.youtube.com"
+        path = url[len(domain):]
+    elif url.startswith("https://youtube.com"):
+        domain = "https://www.youtube.com"
+        path = url[len("https://youtube.com"):]
+    else:
+        return url.lower()
+
+    if path.startswith("/channel/"):
+        # Keep channel ID case-sensitive
+        return domain + path
+    else:
+        # For @handles, /user/, /c/, etc., lowercase is safe
+        return domain + path.lower()
 
 
 def get_channel_language_map(index):
@@ -199,7 +211,7 @@ import re
 
 YTP_KEYWORDS_IT = [
     r'YTPITA', r'YTP-ITA', r'YTP\s?ITA', r'YTM', r'Youtube\s+poop\s+ITA', 
-    r'YouTube\s+Poop\s+ITA', r'\[ITA\]', r'YTG', r'YouTube\s+Poop(?:\s+ITA)?', 
+    r'YouTube\s+Poop\s+ITA', r'\[ITA\]', r'YTG',
     r'Youtube poop ita', r'You tube poop ita', r'YTP ITA', r'Youtube merda', 
     r'S\.Itario', r'Shitstorm pt\.'
 ]
@@ -260,8 +272,18 @@ YTP_KEYWORDS_BY_LANG = {
     "en": YTP_KEYWORDS_GENERIC
 }
 
+def get_strict_regex(keywords):
+    strict_patterns = []
+    for kw in keywords:
+        # Add word boundaries if the keyword starts/ends with a word character
+        start = r'\b' if re.match(r'^\w', kw) else ''
+        end = r'\b' if re.search(r'\w$', kw) else ''
+        strict_patterns.append(f"{start}{kw}{end}")
+    return re.compile("|".join(strict_patterns), re.IGNORECASE)
+
+
 COMPILED_YTP_KEYWORDS = {
-    lang: re.compile("|".join(p_list), re.IGNORECASE)
+    lang: get_strict_regex(p_list)
     for lang, p_list in YTP_KEYWORDS_BY_LANG.items() if p_list
 }
 
@@ -1188,8 +1210,9 @@ class VideoIndex:
             self.save()
 
     def resort_videos(self):
-        print("\n--- Sort Videos (YTP.db -> Specialized DBs) ---")
-        self._do_extract_ytpmv()
+        print("\n--- Sort Videos (YTP.db <-> Specialized DBs) ---")
+        self._do_reclaim_ytp()
+        #self._do_extract_ytpmv()
         self._do_extract_collabs()
         print("\n>>> Sorting complete.")
 
@@ -1266,6 +1289,58 @@ class VideoIndex:
             print(f"\n  [Extract] Moved {len(moved_ids)} videos to Collabs database.")
         else:
             print("\n  [Extract] No matching videos found.")
+
+    def _do_reclaim_ytp(self):
+        print(f"\n  [Reclaim] Checking specialized DBs for missed YTPs...")
+        # Check sources (other.db), ytpmv (ytpmv.db), and collabs (collabs.db)
+        databases = [
+            ('sources', self.sources_data),
+            ('ytpmv', self.ytpmv_data),
+            ('collabs', self.collabs_data)
+        ]
+        
+        total_reclaimed = 0
+        for db_name, data_store in databases:
+            moved_ids = []
+            to_keep = {}
+            for vid, info in list(data_store.items()):
+                title = info.get("title") or ""
+                desc = info.get("description") or ""
+                text = f"{title} {desc}"
+                
+                # Check if it matches YTP keywords
+                if YTP_KEYWORDS.search(text):
+                    self.data[vid] = info
+                    moved_ids.append(vid)
+                    print(f"    [Reclaim] {vid} -> ytp.db ({title[:50]})")
+                else:
+                    to_keep[vid] = info
+            
+            if moved_ids:
+                # Delete from specialized SQL DB
+                conn = self.get_conn(db_name)
+                cursor = conn.cursor()
+                for vid in moved_ids:
+                    cursor.execute("DELETE FROM videos WHERE id = ?", (vid,))
+                    cursor.execute("DELETE FROM video_tags WHERE video_id = ?", (vid,))
+                    cursor.execute("DELETE FROM video_sections WHERE video_id = ?", (vid,))
+                    if db_name == 'sources':
+                        cursor.execute("DELETE FROM video_sources WHERE video_id = ?", (vid,))
+                conn.commit()
+                conn.close()
+                
+                # Update local data store
+                if db_name == 'sources': self.sources_data = to_keep
+                elif db_name == 'ytpmv': self.ytpmv_data = to_keep
+                elif db_name == 'collabs': self.collabs_data = to_keep
+                
+                total_reclaimed += len(moved_ids)
+        
+        if total_reclaimed:
+            self.save()
+            print(f"\n  [Reclaim] Reclaimed {total_reclaimed} videos to main YTP database.")
+        else:
+            print("  [Reclaim] No videos found to reclaim.")
 
     def save(self):
         try:
@@ -1927,7 +2002,7 @@ def download_video(video_id, output_dir, yt_format, rate_limit,
 
 # ── Interactive phases ────────────────────────────────────────────────────────
 
-def do_update_index(index, language=None):
+def do_update_index(index, language=None, custom_channels=None):
     # Skip scanning HTML pages as they are already scraped
     print("  Skipping HTML scan (all pages already scraped).")
 
@@ -1943,6 +2018,15 @@ def do_update_index(index, language=None):
     # Collect all videos that might need metadata
     all_vids = {**index.data, **index.sources_data, **index.ytpmv_data, **index.collabs_data}
     need_meta_ids = [vid for vid in all_vids if index.needs_metadata(vid) and vid not in index.actually_excluded_ids]
+
+    if custom_channels:
+        print(f"  Filtering for {len(custom_channels)} selected channels...")
+        normalized_custom = {normalize_channel_url(c) for c in custom_channels}
+        need_meta_ids = [
+            vid for vid in need_meta_ids 
+            if all_vids.get(vid, {}).get("channel_url") and 
+            normalize_channel_url(all_vids[vid]["channel_url"]) in normalized_custom
+        ]
 
     if language:
         print(f"  Filtering for language: {language.upper()} (Strict Keywords)...")
@@ -2447,97 +2531,11 @@ def do_keyword_search_scraping(index):
     print(f"  Keyword Search Scraping Complete. Added {total_added} new videos.")
 
 
-def do_random_video_scrape(index):
-    """
-    Selects random videos from ytp.db, ytpmv.db, and collabs.db,
-    and performs YouTube searches using their titles.
-    """
-    print("\n--- Random Video Search Scraping ---")
+def do_scrape_channels(index, ignore_sources=False, custom_channels=None):
+    """Scans channels for new YTP videos matching keywords."""
     
-    # 1. Ask for number of videos
-    try:
-        count_str = input("  How many random videos to pick? [default 5]: ").strip()
-        num_videos = int(count_str) if count_str else 5
-    except ValueError:
-        print("  Invalid number. Using default 5.")
-        num_videos = 5
-
-    # 2. Ask for language
-    print("\n  Select Language Filter:")
-    print("  1. Italian (IT)")
-    print("  2. English (EN)")
-    print("  3. Spanish (ES)")
-    print("  4. German (DE)")
-    print("  5. French (FR)")
-    print("  6. Russian (RU)")
-    print("  7. Any (includes uncategorized)")
-    
-    lang_choice = ask("  Choice [1-7]: ", {"1","2","3","4","5","6","7"})
-    
-    lang_map = {
-        "1": "it",
-        "2": "en",
-        "3": "es",
-        "4": "de",
-        "5": "fr",
-        "6": "ru",
-    }
-    target_lang = lang_map.get(lang_choice) # None if "7"
-
-    # 3. Gather candidate videos
-    candidates = []
-    # Combine main YTP, YTPMV and Collabs
-    sources = [
-        ("YTP", index.data), 
-        ("YTPMV", index.ytpmv_data), 
-        ("Collabs", index.collabs_data)
-    ]
-    
-    for db_name, db in sources:
-        for vid, info in db.items():
-            if target_lang:
-                if info.get('language') == target_lang:
-                    candidates.append(info)
-            else:
-                candidates.append(info)
-                
-    if not candidates:
-        print(f"  [!] No videos found matching language filter: {target_lang or 'Any'}")
-        return
-
-    # 4. Pick random ones
-    actual_count = min(num_videos, len(candidates))
-    selected_videos = random.sample(candidates, actual_count)
-    
-    print(f"\n  Selected {actual_count} random videos to use as search queries.")
-    
-    total_added = 0
-    start_time = time.time()
-    try:
-        for i, video in enumerate(selected_videos, 1):
-            elapsed = time.time() - start_time
-            avg_time = elapsed / i if i > 1 else 0
-            eta_seconds = avg_time * (actual_count - i)
-            eta_str = format_eta(eta_seconds)
-
-            title = video.get('title')
-            if not title: continue
-            
-            print(f"\n  [{i}/{actual_count}] Searching for: {title}  ETA: {eta_str}")
-            new_vids = do_scrape_search(index, keywords=[title], quiet=True, ignore_sources=True)
-            total_added += new_vids
-            
-    except KeyboardInterrupt:
-        print("\n  Scraping interrupted.")
-
-    print(f"\n  Random Video Search Scraping Complete. Added {total_added} new videos.")
-
-
-def do_scrape_channels(index, ignore_sources=False, specific_channels=None):
-    """Scans channels from ytpoopers.db for new YTP videos matching keywords."""
-    
-    if specific_channels:
-        channels_to_scrape = set(specific_channels)
+    if custom_channels:
+        channels_to_scrape = set(custom_channels)
     else:
         channels_to_scrape = set(get_all_registered_channels(index))
     
@@ -2585,19 +2583,22 @@ def do_scrape_channels(index, ignore_sources=False, specific_channels=None):
                         vid = d.get("id")
                         title = d.get("title", "")
                         
-                        # Match logic based on get_target_index or NOCOLDIZ_BLACKLIST
+                        # Match logic based on get_target_index
                         target = get_target_index(title)
                         
-                        if nocoldiz and target == "none":
+                        if target == "none":
                             # For nocoldiz, if it wasn't caught by YTP/Meme/Non-YTP keywords,
-                            # we still include it if it's not explicitly in the nocoldiz blacklist
-                            # and doesn't match the general non-YTP filter.
-                            if not NOCOLDIZ_BLACKLIST.search(title) and not NON_YTP_KEYWORDS.search(title):
+                            # we still include it if it doesn't match the general non-YTP filter.
+                            if nocoldiz and not NON_YTP_KEYWORDS.search(title):
                                 target = "video"
+                            elif custom_channels:
+                                # "channels in selected channels, should be preserved fully, 
+                                # put not matching videos in others.db"
+                                target = "sources"
 
                         # If it matches and is not already in the index (and not excluded), log and add it
                         if target != "none" and vid and not index.is_indexed(vid):
-                            if ignore_sources and target == "source":
+                            if ignore_sources and target == "sources" and not custom_channels:
                                 continue
                             clear_line()
                             print(f"    [+] New {target} match found: {title} ({vid})")
@@ -3844,7 +3845,7 @@ def do_scrape_profiles(index, docs_dir, specific_channels=None):
     print(f"  Thumbnails saved to: {os.path.abspath(thumb_dir)}")
 
 
-def do_scrape_sources_metadata(index, language=None):
+def do_scrape_sources_metadata(index, language=None, custom_channels=None):
     sources_data = index.sources_data
 
     need_meta_ids = [vid for vid, e in sources_data.items() if (
@@ -3857,6 +3858,15 @@ def do_scrape_sources_metadata(index, language=None):
         e.get("like_count") is None or 
         e.get("title") == "warnings.warn("
     ) and e.get("status") != "unavailable"]
+
+    if custom_channels:
+        print(f"  Filtering for {len(custom_channels)} selected channels...")
+        normalized_custom = {normalize_channel_url(c) for c in custom_channels}
+        need_meta_ids = [
+            vid for vid in need_meta_ids 
+            if sources_data.get(vid, {}).get("channel_url") and 
+            normalize_channel_url(sources_data[vid]["channel_url"]) in normalized_custom
+        ]
 
     if language:
         print(f"  Filtering for language: {language.upper()} (Strict Keywords)...")
@@ -3973,7 +3983,7 @@ def do_scrape_sources_metadata(index, language=None):
 
     print(f"  Done — sources database metadata updated.")
 
-def do_scrape_comments(index, video_dir):
+def do_scrape_comments(index, video_dir, custom_channels=None):
     """Scrape comments for every non-unavailable video in sources."""
     conn = index.get_conn('comments')
     cursor = conn.cursor()
@@ -4005,6 +4015,15 @@ def do_scrape_comments(index, video_dir):
 
     videos = [(vid, e) for vid, e in sources_data.items()
               if e.get("status") != "unavailable"]
+
+    if custom_channels:
+        print(f"  Filtering for {len(custom_channels)} selected channels...")
+        normalized_custom = {normalize_channel_url(c) for c in custom_channels}
+        videos = [
+            (vid, e) for vid, e in videos 
+            if e.get("channel_url") and normalize_channel_url(e["channel_url"]) in normalized_custom
+        ]
+
     total = len(videos)
 
     if not videos:
@@ -4278,6 +4297,17 @@ def ask(prompt, choices):
         print(f"  Please enter one of: {' / '.join(choices)}")
 
 
+def get_selected_channels():
+    sel_path = os.path.join(PROJECT_ROOT, "scripts", "db", "selected_channels.txt")
+    if not os.path.exists(sel_path):
+        print(f"  [!] File not found: {sel_path}")
+        return None
+    with open(sel_path, "r", encoding="utf-8") as f:
+        selected = [line.strip() for line in f if line.strip() and not line.startswith("#")]
+    print(f"  Loaded {len(selected)} channels from {os.path.basename(sel_path)}")
+    return selected
+
+
 def run_migration():
     """Calls migrate_to_sqlite.py to sync JSON data to the SQLite database."""
     print("\n[Sync] Running database migration...")
@@ -4399,7 +4429,7 @@ def main():
     print("       Download pending video files for both YTP and Sources.")
     print()
     print("  3  Scrape channels (Discover New)")
-    print("       Scan channels registered in the database for new content.")
+    print("       Scan registered or selected channels for new content.")
     print()
     print("  4  Language-Specific Download")
     print("       Batch download videos for a specific language (e.g. Italian).")
@@ -4491,11 +4521,24 @@ def main():
             "5": "fr", "6": "ru", "7": "br"
         }
         target_lang = lang_map.get(lang_sub) # None if "0"
+
+        print("\nSelect Channel Filter:")
+        print("1. All Indexed Channels")
+        print("2. Selected Channels (from selected_channels.txt)")
+        chan_sub = ask("Choice [1-2]: ", {"1", "2"})
+        
+        selected_chans = None
+        if chan_sub == "2":
+            selected_chans = get_selected_channels()
+            if not selected_chans:
+                print("  [!] Selected channels list is empty or file not found. Aborting.")
+                print()
+                return
         
         if sub in ("1", "2"):
-            do_update_index(index, language=target_lang)
+            do_update_index(index, language=target_lang, custom_channels=selected_chans)
         if sub in ("1", "3"):
-            do_scrape_sources_metadata(index, language=target_lang)
+            do_scrape_sources_metadata(index, language=target_lang, custom_channels=selected_chans)
         print()
     if choice == "2":
         print("\nSelect what to download:")
@@ -4509,7 +4552,17 @@ def main():
             do_download_risorse(index, args.video_dir, args.format, args.rate_limit, args.retry_failed)
         print()
     if choice == "3":
-        do_scrape_channels(index)
+        print("\nSelect Scraping Mode:")
+        print("1. All Registered Channels (Discover New)")
+        print("2. Selected Channels (from selected_channels.txt)")
+        scrape_sub = ask("Choice [1-2]: ", {"1", "2"})
+        
+        if scrape_sub == "1":
+            do_scrape_channels(index)
+        else:
+            selected = get_selected_channels()
+            if selected:
+                do_scrape_channels(index, custom_channels=selected)
         print()
     if choice == "4":
         print("\nSelect Language:")
@@ -4553,7 +4606,20 @@ def main():
         do_find_mirrors(index)
 
     if choice == "6":
-        do_scrape_comments(index, args.public_dir)
+        print("\nSelect Channel Filter for Comments:")
+        print("1. All Indexed Channels")
+        print("2. Selected Channels (from selected_channels.txt)")
+        chan_sub = ask("Choice [1-2]: ", {"1", "2"})
+        
+        selected_chans = None
+        if chan_sub == "2":
+            selected_chans = get_selected_channels()
+            if not selected_chans:
+                print("  [!] Selected channels list is empty or file not found. Aborting.")
+                print()
+                return
+            
+        do_scrape_comments(index, args.public_dir, custom_channels=selected_chans)
 
     if choice == "7":
         do_scrape_profiles(index, args.public_dir)
