@@ -9,19 +9,8 @@ function buildYearData() {
   const dbs = getStatsDBs();
   const yearsMap = {};
 
-  const sql = `
-    SELECT 
-      substr(publish_date, 1, 4) as year, 
-      COUNT(*) as videoCount, 
-      SUM(view_count) as totalViews, 
-      SUM(like_count) as totalLikes
-    FROM videos 
-    WHERE publish_date IS NOT NULL AND CAST(substr(publish_date, 1, 4) AS INTEGER) <= ?
-    GROUP BY year 
-  `;
-
   dbs.forEach(db => {
-    const res = queryDB(sql, [globalMaxYear], db);
+    const res = getYearStats(globalMaxYear, db);
     res.forEach(r => {
       if (!yearsMap[r.year]) {
         yearsMap[r.year] = { year: r.year, videoCount: 0, totalViews: 0, totalLikes: 0 };
@@ -71,29 +60,22 @@ function selectYear(year) {
 
   dbs.forEach(db => {
     // Creators
-    queryDB("SELECT channel_name, COUNT(*) as c FROM videos WHERE substr(publish_date, 1, 4) = ? GROUP BY channel_name", [year], db)
+    getCreatorsByYear(year, db)
       .forEach(r => { creatorsMap[r.channel_name] = (creatorsMap[r.channel_name] || 0) + r.c; });
 
     // Tags
-    queryDB(`
-      SELECT t.name, COUNT(*) as c 
-      FROM tags t 
-      JOIN video_tags vt ON t.id = vt.tag_id 
-      JOIN videos v ON vt.video_id = v.id 
-      WHERE substr(v.publish_date, 1, 4) = ? 
-      GROUP BY t.name
-    `, [year], db).forEach(r => { tagsMap[r.name] = (tagsMap[r.name] || 0) + r.c; });
+    getTagsByYear(year, db).forEach(r => { tagsMap[r.name] = (tagsMap[r.name] || 0) + r.c; });
 
     // Monthly
-    queryDB("SELECT substr(publish_date, 6, 2) as m, COUNT(*) as c FROM videos WHERE substr(publish_date, 1, 4) = ? GROUP BY m", [year], db)
+    getVideosByMonthInYear(year, db)
       .forEach(r => {
         const m = parseInt(r.m, 10);
         if (m >= 1 && m <= 12) byMonth[m - 1] += r.c;
       });
 
     // Top Lists
-    allByViews = allByViews.concat(queryDB("SELECT * FROM videos WHERE substr(publish_date, 1, 4) = ? AND view_count IS NOT NULL ORDER BY view_count DESC LIMIT 20", [year], db));
-    allByLikes = allByLikes.concat(queryDB("SELECT * FROM videos WHERE substr(publish_date, 1, 4) = ? AND like_count IS NOT NULL ORDER BY like_count DESC LIMIT 20", [year], db));
+    allByViews = allByViews.concat(getTopVideosByViewsInYear(year, 20, db));
+    allByLikes = allByLikes.concat(getTopVideosByLikesInYear(year, 20, db));
   });
 
   const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
