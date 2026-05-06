@@ -489,14 +489,16 @@ function updateVideoLayoutForTheme() {
   const actions = document.getElementById('watch-actions');
   const date = document.getElementById('watch-date');
 
-  if (!mainCol || !sideCol || !title || !video || !channel || !desc) return;
+  if (!mainCol || !sideCol || !title || !video || !channel || !desc || !stats || !actions) return;
 
   let channelRow = document.getElementById('modern-channel-row');
 
   if (isOld) {
     // Restore Old Mode
     mainCol.insertBefore(title, video);
-    sideCol.insertBefore(stats, sideCol.firstChild);
+    if (sideCol.firstChild !== stats) {
+        sideCol.insertBefore(stats, sideCol.firstChild);
+    }
 
     // Put date back into channel info if it was moved
     const channelTextWrap = channel.querySelector('div');
