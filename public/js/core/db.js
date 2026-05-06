@@ -210,6 +210,7 @@ async function initSQLite() {
   if (window.enabledSources.other && !window.dbSources) {
     loadDB('other.db', SQL).then(db => {
       window.dbSources = db;
+      if (db) applyLanguageFilters(db);
       console.log("Other database loaded in background.");
       const sources = queryDB("SELECT DISTINCT channel_name FROM videos", [], window.dbSources);
       window.sourceChannels = new Set(sources.map(s => s.channel_name));
@@ -220,6 +221,7 @@ async function initSQLite() {
   if (window.enabledSources.ytpmv && !window.dbYTPMV) {
     loadDB('ytpmv.db', SQL).then(db => {
       window.dbYTPMV = db;
+      if (db) applyLanguageFilters(db);
       console.log("YTPMV database loaded in background.");
       if (window.updateBadges) window.updateBadges();
     });
@@ -228,12 +230,19 @@ async function initSQLite() {
   if (window.enabledSources.collabs && !window.dbCollabs) {
     loadDB('collabs.db', SQL).then(db => {
       window.dbCollabs = db;
+      if (db) applyLanguageFilters(db);
       console.log("Collabs database loaded in background.");
       if (window.updateBadges) window.updateBadges();
     });
   }
 
   console.log("SQLite initialization completed (respecting source filters).");
+
+  // Apply global filters to all initial databases
+  [window.dbYTP, window.dbPoopers, window.dbComments].forEach(db => {
+    if (db) applyLanguageFilters(db);
+  });
+
   return window.sqlDB;
 }
 
@@ -303,6 +312,48 @@ function applySources() {
   location.reload();
 }
 
+function applyLanguageFilters(db) {
+  if (!db || !window.enabledLanguages || window.enabledLanguages.length === 0) return;
+
+  const langList = window.enabledLanguages.filter(l => l !== 'none');
+  const includeUnknown = window.enabledLanguages.includes('none');
+
+  let langClause = "";
+  if (langList.length > 0) {
+    langClause = `language IN (${langList.map(l => `'${l}'`).join(',')})`;
+  }
+  if (includeUnknown) {
+    if (langClause) langClause = `(${langClause} OR language IS NULL OR language = '')`;
+    else langClause = `(language IS NULL OR language = '')`;
+  }
+
+  if (!langClause) return;
+
+  const applyView = (tableName) => {
+    try {
+      // Check if table exists and hasn't been renamed yet
+      const tableCheck = db.exec(`SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}'`);
+      if (tableCheck.length === 0) return;
+
+      // Check if it has a 'language' column
+      const tableInfo = db.exec(`PRAGMA table_info(${tableName})`);
+      if (tableInfo.length > 0) {
+        const columns = tableInfo[0].values.map(v => v[1]);
+        if (columns.includes('language')) {
+          db.run(`ALTER TABLE ${tableName} RENAME TO _${tableName}_raw`);
+          db.run(`CREATE VIEW ${tableName} AS SELECT * FROM _${tableName}_raw WHERE ${langClause}`);
+          console.log(`Applied global language filter to ${tableName} table via VIEW.`);
+        }
+      }
+    } catch (e) {
+      console.warn(`Could not apply language filter to ${tableName}:`, e);
+    }
+  };
+
+  applyView('videos');
+  applyView('channels');
+}
+
 function queryDB(sql, params = [], targetDB = null) {
   let db = targetDB;
 
@@ -324,32 +375,6 @@ function queryDB(sql, params = [], targetDB = null) {
     } else {
       db = window.dbYTP;
     }
-  }
-
-  // GLOBAL LANGUAGE FILTERING
-  // We apply this to any query that selects from "videos" or "channels" (except for specific lookups by ID)
-  const lowerSql = sql.toLowerCase();
-  if ((lowerSql.includes('from videos') || lowerSql.includes('from channels')) && 
-      !lowerSql.includes('where id =') && !lowerSql.includes('where channel_url =') &&
-      window.enabledLanguages && window.enabledLanguages.length > 0) {
-      
-      const langList = window.enabledLanguages.filter(l => l !== 'none');
-      const includeUnknown = window.enabledLanguages.includes('none');
-      
-      let langClause = "";
-      if (langList.length > 0) {
-          langClause = `language IN (${langList.map(l => `'${l}'`).join(',')})`;
-      }
-      
-      if (includeUnknown) {
-          if (langClause) langClause = `(${langClause} OR language IS NULL OR language = '')`;
-          else langClause = `(language IS NULL OR language = '')`;
-      }
-      
-      if (langClause) {
-          // Wrap the original query as a subquery to apply the filter globally without breaking complex joins
-          sql = `SELECT * FROM (${sql}) WHERE ${langClause}`;
-      }
   }
 
   if (!db) return [];

@@ -6,8 +6,8 @@ let bulkPlaylistMode = false;
 
 async function getLocalPlaylists() {
   return new Promise((resolve) => {
-    if (!db) return resolve([]);
-    const transaction = db.transaction([playlistStoreName], 'readonly');
+    if (!window.idb) return resolve([]);
+    const transaction = window.idb.transaction([playlistStoreName], 'readonly');
     const store = transaction.objectStore(playlistStoreName);
     const request = store.getAll();
     request.onsuccess = () => resolve(request.result);
@@ -153,7 +153,7 @@ async function submitCreatePlaylist() {
     const id = 'local_' + Date.now();
     const playlist = { id, name, videoIds: [], created_at: new Date().toISOString() };
     try {
-      const transaction = db.transaction([playlistStoreName], 'readwrite');
+      const transaction = window.idb.transaction([playlistStoreName], 'readwrite');
       transaction.objectStore(playlistStoreName).add(playlist);
       transaction.oncomplete = async () => {
         const local = await getLocalPlaylists();
@@ -243,7 +243,7 @@ async function confirmAddToPlaylist(playlistId, type) {
   if (videoIds.length === 0) return alert("No videos selected.");
 
   if (type === 'local') {
-    const transaction = db.transaction([playlistStoreName], 'readwrite');
+    const transaction = window.idb.transaction([playlistStoreName], 'readwrite');
     const store = transaction.objectStore(playlistStoreName);
     const request = store.get(playlistId);
     request.onsuccess = () => {

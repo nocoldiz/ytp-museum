@@ -369,11 +369,14 @@ function onRequest(req, res) {
     return;
   }
 
-  // SPA Fallback: if not a file, serve index.html
-  const indexFile = path.join(PUBLIC_DIR, 'index.html');
-  if (fs.existsSync(indexFile)) {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return fs.createReadStream(indexFile).pipe(res);
+  // SPA Fallback: if not a file, serve index.html (only for page routes, not assets/DBs)
+  const isAsset = pathname.includes('.') || pathname.startsWith('/db/') || pathname.startsWith('/local/') || pathname.startsWith('/sources/');
+  if (!isAsset) {
+    const indexFile = path.join(PUBLIC_DIR, 'index.html');
+    if (fs.existsSync(indexFile)) {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return fs.createReadStream(indexFile).pipe(res);
+    }
   }
 
   res.writeHead(404);
