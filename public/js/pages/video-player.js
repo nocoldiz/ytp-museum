@@ -180,9 +180,7 @@ async function loadComments(vidId) {
   container.innerHTML = '<p class="empty" style="padding:10px;">Loading comments...</p>';
 
   try {
-    const r = await fetch(`comments/${vidId}.json`);
-    if (!r.ok) throw new Error("Not found");
-    const comments = await r.json();
+    const comments = queryDB("SELECT * FROM comments WHERE video_id = ?", [vidId]);
     if (!comments || comments.length === 0) {
       container.innerHTML = '<p class="empty" style="padding:10px;">No comments available.</p>';
       title.textContent = "Comments";
@@ -192,6 +190,7 @@ async function loadComments(vidId) {
     title.textContent = `${fmtNum(comments.length)} Comments`;
     renderCommentTree(comments);
   } catch (e) {
+    console.error("Error loading comments:", e);
     container.innerHTML = '<p class="empty" style="padding:10px;">No comments available for this video.</p>';
     title.textContent = "Comments";
   }
@@ -544,6 +543,7 @@ function setGlobalMaxYear(year) {
     if (user) openProfile(decodeURIComponent(user), false);
   }
   clearQueryCache();
+  window.homeTabCache = {};
 }
 
 function getActiveVideos(forHome = false, limit = null) {
@@ -575,6 +575,35 @@ function getActiveVideos(forHome = false, limit = null) {
   });
 }
 
+function renderLatestVideos() {
+  const isOld = document.body.classList.contains('theme-old');
+  const dbs = [dbYTP, dbYTPMV, dbCollabs, dbSources];
+  let allLatest = [];
+
+  for (const db of dbs) {
+    if (!db) continue;
+    // Requirement: list latest videos, ignore videos with no date
+    const res = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') AND (publish_date IS NOT NULL AND publish_date != '') AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ?) ORDER BY publish_date DESC LIMIT 12", [globalMaxYear], db);
+    allLatest.push(...res);
+  }
+
+  // Combine and sort by date descending
+  allLatest.sort((a, b) => b.publish_date.localeCompare(a.publish_date));
+  const latest = allLatest.slice(0, isOld ? 8 : 12);
+
+  if (isOld) {
+    const container = document.getElementById('latest-videos-old');
+    if (container) {
+      container.innerHTML = latest.map(v => renderVideoItem(v, 'list')).join('');
+    }
+  } else {
+    const container = document.getElementById('latest-videos-modern');
+    if (container) {
+      container.innerHTML = latest.map(v => renderModernHomeCard(v)).join('');
+    }
+  }
+}
+
 function renderHomePage() {
   const isOld = document.body.classList.contains('theme-old');
   const classicLayout = document.getElementById('youtube-old-layout');
@@ -591,6 +620,7 @@ function renderHomePage() {
     const allChip = document.querySelector('#home-chips .chip[onclick*="all"]');
     setModernHomeTab('all', allChip);
   }
+  renderLatestVideos();
 }
 
 function setModernHomeTab(tab, btn) {
@@ -614,66 +644,83 @@ function renderModernGrid() {
   if (validVideos.length === 0) return;
 
   let videos;
-  if (currentModernTab === 'all') {
-    const dbs = [dbYTP, dbSources, dbYTPMV, dbCollabs];
-    let allVids = [];
-    for (const db of dbs) {
-      if (!db) continue;
-      const res = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL) ORDER BY RANDOM() LIMIT 12", [globalMaxYear], db);
-      allVids.push(...res);
-    }
-    videos = shuffleArray(allVids).slice(0, 24);
-  } else if (currentModernTab === 'ytp') {
-    videos = shuffleArray(validVideos).slice(0, 24);
-  } else if (currentModernTab === 'subscribed') {
-    const subs = new Set(getSubscriptions());
-    videos = shuffleArray(validVideos.filter(v => subs.has(v.channel_name))).slice(0, 24);
-    if (videos.length === 0) {
-      modernContainer.innerHTML = '<div class="empty-subs" style="padding:40px; text-align:center; color:var(--text-muted);">Non sei iscritto a nessun canale o i canali a cui sei iscritto non hanno video.</div>';
-      return;
-    }
-  } else if (currentModernTab === 'views') {
-    videos = [...validVideos].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 24);
-  } else if (currentModernTab === 'discussed') {
-    videos = [...validVideos].sort((a, b) => (b.comment_count || b.view_count || 0) - (a.comment_count || a.view_count || 0)).slice(0, 24);
-  } else if (currentModernTab === 'favorited') {
-    videos = [...validVideos].sort((a, b) => (b.like_count || 0) - (a.like_count || 0)).slice(0, 24);
-  } else if (currentModernTab === 'ytpmv') {
-    if (dbYTPMV) {
-      const sql = "SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 24";
-      videos = queryDB(sql, [], dbYTPMV);
-    } else {
-      // Fallback to keyword search in main DB if specialized DB not yet loaded
-      const kw = ['YTPMV', 'MAD'];
+  if (currentModernTab !== 'random' && homeTabCache['modern_' + currentModernTab]) {
+    videos = homeTabCache['modern_' + currentModernTab];
+  } else {
+    if (currentModernTab === 'all') {
+      const dbs = [dbYTP, dbSources, dbYTPMV, dbCollabs];
+      let allVids = [];
+      for (const db of dbs) {
+        if (!db) continue;
+        const res = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL) ORDER BY RANDOM() LIMIT 12", [globalMaxYear], db);
+        allVids.push(...res);
+      }
+      videos = shuffleArray(allVids).slice(0, 24);
+    } else if (currentModernTab === 'random') {
+      const dbs = [dbYTP, dbSources, dbYTPMV, dbCollabs];
+      let allVids = [];
+      for (const db of dbs) {
+        if (!db) continue;
+        const res = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL) ORDER BY RANDOM() LIMIT 12", [globalMaxYear], db);
+        allVids.push(...res);
+      }
+      videos = shuffleArray(allVids).slice(0, 24);
+    } else if (currentModernTab === 'ytp') {
+      videos = shuffleArray(validVideos).slice(0, 24);
+    } else if (currentModernTab === 'subscribed') {
+      const subs = new Set(getSubscriptions());
+      videos = shuffleArray(validVideos.filter(v => subs.has(v.channel_name))).slice(0, 24);
+      if (videos.length === 0) {
+        modernContainer.innerHTML = '<div class="empty-subs" style="padding:40px; text-align:center; color:var(--text-muted);">Non sei iscritto a nessun canale o i canali a cui sei iscritto non hanno video.</div>';
+        return;
+      }
+    } else if (currentModernTab === 'views') {
+      videos = [...validVideos].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 24);
+    } else if (currentModernTab === 'discussed') {
+      videos = [...validVideos].sort((a, b) => (b.comment_count || b.view_count || 0) - (a.comment_count || a.view_count || 0)).slice(0, 24);
+    } else if (currentModernTab === 'favorited') {
+      videos = [...validVideos].sort((a, b) => (b.like_count || 0) - (a.like_count || 0)).slice(0, 24);
+    } else if (currentModernTab === 'ytpmv') {
+      if (dbYTPMV) {
+        const sql = "SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 24";
+        videos = queryDB(sql, [], dbYTPMV);
+      } else {
+        // Fallback to keyword search in main DB if specialized DB not yet loaded
+        const kw = ['YTPMV', 'MAD'];
+        videos = shuffleArray(validVideos.filter(v => {
+          const t = (v.title || '').toUpperCase();
+          const d = (v.description || '').toUpperCase();
+          return kw.some(k => t.includes(k) || d.includes(k));
+        })).slice(0, 24);
+      }
+      if (videos.length === 0) {
+        modernContainer.innerHTML = '<div class="empty-subs" style="padding:40px; text-align:center; color:var(--text-muted);">Nessun video YTPMV/MAD trovato.</div>';
+        return;
+      }
+    } else if (currentModernTab === 'collabs') {
+      if (dbCollabs) {
+        const sql = "SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 24";
+        videos = queryDB(sql, [], dbCollabs);
+      }
+      if (!videos || videos.length === 0) {
+        modernContainer.innerHTML = '<div class="empty-subs" style="padding:40px; text-align:center; color:var(--text-muted);">Nessun video Collab trovato.</div>';
+        return;
+      }
+    } else if (currentModernTab === 'acid') {
+      const kw = ['ACID', 'ACID POOP', 'LSD'];
       videos = shuffleArray(validVideos.filter(v => {
         const t = (v.title || '').toUpperCase();
         const d = (v.description || '').toUpperCase();
         return kw.some(k => t.includes(k) || d.includes(k));
       })).slice(0, 24);
+      if (videos.length === 0) {
+        modernContainer.innerHTML = '<div class="empty-subs" style="padding:40px; text-align:center; color:var(--text-muted);">Nessun video Acid Poop trovato.</div>';
+        return;
+      }
     }
-    if (videos.length === 0) {
-      modernContainer.innerHTML = '<div class="empty-subs" style="padding:40px; text-align:center; color:var(--text-muted);">Nessun video YTPMV/MAD trovato.</div>';
-      return;
-    }
-  } else if (currentModernTab === 'collabs') {
-    if (dbCollabs) {
-      const sql = "SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 24";
-      videos = queryDB(sql, [], dbCollabs);
-    }
-    if (!videos || videos.length === 0) {
-      modernContainer.innerHTML = '<div class="empty-subs" style="padding:40px; text-align:center; color:var(--text-muted);">Nessun video Collab trovato.</div>';
-      return;
-    }
-  } else if (currentModernTab === 'acid') {
-    const kw = ['ACID', 'ACID POOP', 'LSD'];
-    videos = shuffleArray(validVideos.filter(v => {
-      const t = (v.title || '').toUpperCase();
-      const d = (v.description || '').toUpperCase();
-      return kw.some(k => t.includes(k) || d.includes(k));
-    })).slice(0, 24);
-    if (videos.length === 0) {
-      modernContainer.innerHTML = '<div class="empty-subs" style="padding:40px; text-align:center; color:var(--text-muted);">Nessun video Acid Poop trovato.</div>';
-      return;
+
+    if (currentModernTab !== 'random') {
+      homeTabCache['modern_' + currentModernTab] = videos;
     }
   }
 
@@ -696,68 +743,86 @@ function setFeaturedTab(tab) {
   const validVideos = ytData;
   const featuredContainer = document.getElementById("featured-videos");
   if (!featuredContainer) return;
-  if (tab !== "all" && validVideos.length === 0) return;
+  if (tab !== "all" && tab !== "random" && validVideos.length === 0) return;
   let videos;
-  if (tab === 'all') {
-    const dbs = [dbYTP, dbSources, dbYTPMV, dbCollabs];
-    let allVids = [];
-    for (const db of dbs) {
-      if (!db) continue;
-      const res = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL) ORDER BY RANDOM() LIMIT 8", [globalMaxYear], db);
-      allVids.push(...res);
-    }
-    videos = shuffleArray(allVids).slice(0, 8);
-  } else if (tab === 'ytp') {
-    videos = shuffleArray(validVideos).slice(0, 8);
-  } else if (tab === 'views') {
-    videos = [...validVideos].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 8);
-  } else if (tab === 'discussed') {
-    // Use comment count if available, else fall back to views
-    videos = [...validVideos].sort((a, b) => (b.comment_count || b.view_count || 0) - (a.comment_count || a.view_count || 0)).slice(0, 8);
-  } else if (tab === 'favorited') {
-    videos = [...validVideos].sort((a, b) => (b.like_count || 0) - (a.like_count || 0)).slice(0, 8);
-  } else if (tab === 'subscribed') {
-    const subs = new Set(getSubscriptions());
-    videos = shuffleArray(validVideos.filter(v => subs.has(v.channel_name))).slice(0, 12);
-    if (videos.length === 0) {
-      featuredContainer.innerHTML = '<div class="empty-subs" style="padding:20px; color:var(--text-muted);">Nessun video dai canali seguiti.</div>';
-      return;
-    }
-  } else if (tab === 'ytpmv') {
-    if (dbYTPMV) {
-      const sql = "SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 8";
-      videos = queryDB(sql, [], dbYTPMV);
-    } else {
-      const kw = ['YTPMV', 'MAD'];
+
+  if (tab !== 'random' && homeTabCache['old_' + tab]) {
+    videos = homeTabCache['old_' + tab];
+  } else {
+    if (tab === 'all') {
+      const dbs = [dbYTP, dbSources, dbYTPMV, dbCollabs];
+      let allVids = [];
+      for (const db of dbs) {
+        if (!db) continue;
+        const res = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL) ORDER BY RANDOM() LIMIT 8", [globalMaxYear], db);
+        allVids.push(...res);
+      }
+      videos = shuffleArray(allVids).slice(0, 8);
+    } else if (tab === 'random') {
+      const dbs = [dbYTP, dbSources, dbYTPMV, dbCollabs];
+      let allVids = [];
+      for (const db of dbs) {
+        if (!db) continue;
+        const res = queryDB("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL) ORDER BY RANDOM() LIMIT 8", [globalMaxYear], db);
+        allVids.push(...res);
+      }
+      videos = shuffleArray(allVids).slice(0, 8);
+    } else if (tab === 'ytp') {
+      videos = shuffleArray(validVideos).slice(0, 8);
+    } else if (tab === 'views') {
+      videos = [...validVideos].sort((a, b) => (b.view_count || 0) - (a.view_count || 0)).slice(0, 8);
+    } else if (tab === 'discussed') {
+      // Use comment count if available, else fall back to views
+      videos = [...validVideos].sort((a, b) => (b.comment_count || b.view_count || 0) - (a.comment_count || a.view_count || 0)).slice(0, 8);
+    } else if (tab === 'favorited') {
+      videos = [...validVideos].sort((a, b) => (b.like_count || 0) - (a.like_count || 0)).slice(0, 8);
+    } else if (tab === 'subscribed') {
+      const subs = new Set(getSubscriptions());
+      videos = shuffleArray(validVideos.filter(v => subs.has(v.channel_name))).slice(0, 12);
+      if (videos.length === 0) {
+        featuredContainer.innerHTML = '<div class="empty-subs" style="padding:20px; color:var(--text-muted);">Nessun video dai canali seguiti.</div>';
+        return;
+      }
+    } else if (tab === 'ytpmv') {
+      if (dbYTPMV) {
+        const sql = "SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 8";
+        videos = queryDB(sql, [], dbYTPMV);
+      } else {
+        const kw = ['YTPMV', 'MAD'];
+        videos = shuffleArray(validVideos.filter(v => {
+          const t = (v.title || '').toUpperCase();
+          const d = (v.description || '').toUpperCase();
+          return kw.some(k => t.includes(k) || d.includes(k));
+        })).slice(0, 8);
+      }
+      if (videos.length === 0) {
+        featuredContainer.innerHTML = '<div class="empty-subs" style="padding:20px; color:var(--text-muted);">Nessun video YTPMV/MAD trovato.</div>';
+        return;
+      }
+    } else if (tab === 'collabs') {
+      if (dbCollabs) {
+        const sql = "SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 8";
+        videos = queryDB(sql, [], dbCollabs);
+      }
+      if (!videos || videos.length === 0) {
+        featuredContainer.innerHTML = '<div class="empty-subs" style="padding:20px; color:var(--text-muted);">Nessun video Collab trovato.</div>';
+        return;
+      }
+    } else if (tab === 'acid') {
+      const kw = ['ACID', 'ACID POOP'];
       videos = shuffleArray(validVideos.filter(v => {
         const t = (v.title || '').toUpperCase();
         const d = (v.description || '').toUpperCase();
         return kw.some(k => t.includes(k) || d.includes(k));
       })).slice(0, 8);
+      if (videos.length === 0) {
+        featuredContainer.innerHTML = '<div class="empty-subs" style="padding:20px; color:var(--text-muted);">Nessun video Acid Poop trovato.</div>';
+        return;
+      }
     }
-    if (videos.length === 0) {
-      featuredContainer.innerHTML = '<div class="empty-subs" style="padding:20px; color:var(--text-muted);">Nessun video YTPMV/MAD trovato.</div>';
-      return;
-    }
-  } else if (tab === 'collabs') {
-    if (dbCollabs) {
-      const sql = "SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 8";
-      videos = queryDB(sql, [], dbCollabs);
-    }
-    if (!videos || videos.length === 0) {
-      featuredContainer.innerHTML = '<div class="empty-subs" style="padding:20px; color:var(--text-muted);">Nessun video Collab trovato.</div>';
-      return;
-    }
-  } else if (tab === 'acid') {
-    const kw = ['ACID', 'ACID POOP'];
-    videos = shuffleArray(validVideos.filter(v => {
-      const t = (v.title || '').toUpperCase();
-      const d = (v.description || '').toUpperCase();
-      return kw.some(k => t.includes(k) || d.includes(k));
-    })).slice(0, 8);
-    if (videos.length === 0) {
-      featuredContainer.innerHTML = '<div class="empty-subs" style="padding:20px; color:var(--text-muted);">Nessun video Acid Poop trovato.</div>';
-      return;
+
+    if (tab !== 'random') {
+      homeTabCache['old_' + tab] = videos;
     }
   }
 
@@ -861,4 +926,5 @@ window.renderModernGrid = renderModernGrid;
 window.setFeaturedTab = setFeaturedTab;
 window.loadMoreHomeVideos = loadMoreHomeVideos;
 window.renderModernHomeCard = renderModernHomeCard;
+window.renderLatestVideos = renderLatestVideos;
 window.renderStars = renderStars;

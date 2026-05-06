@@ -16,6 +16,7 @@ window.globalMaxYear = new Date().getFullYear();
 window.renderedHomeVideoIds = new Set();
 window.isFetchingMoreHome = false;
 window.currentModernTab = 'all';
+window.homeTabCache = {};
 window.enabledSources = JSON.parse(localStorage.getItem('ytp-enabled-sources')) || {
   ytp: true,
   ytpmv: true,

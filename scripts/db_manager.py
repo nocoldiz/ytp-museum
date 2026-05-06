@@ -8,6 +8,7 @@ SOURCES_DB = 'public/db/other.db'
 POOPERS_DB = 'public/db/ytpoopers.db'
 YTPMV_DB = 'public/db/ytpmv.db'
 COLLABS_DB = 'public/db/collabs.db'
+COMMENTS_DB = 'public/db/comments.db'
 EXCLUDED_JSON = 'scripts/db/excluded_videos.json'
 
 def get_conn(db_type='ytp'):
@@ -16,7 +17,48 @@ def get_conn(db_type='ytp'):
     elif db_type == 'poopers': path = POOPERS_DB
     elif db_type == 'ytpmv': path = YTPMV_DB
     elif db_type == 'collabs': path = COLLABS_DB
+    elif db_type == 'comments': path = COMMENTS_DB
+    
+    if not os.path.exists(path):
+        # Check for shards
+        part_num = 1
+        parts = []
+        while True:
+            part_name = f"{path}.part{part_num}"
+            if not os.path.exists(part_name): break
+            parts.append(part_name)
+            part_num += 1
+        
+        if parts:
+            print(f"Reconstructing {path} from {len(parts)} shards...", file=sys.stderr)
+            with open(path, 'wb') as output_file:
+                for part_name in parts:
+                    with open(part_name, 'rb') as part_file:
+                        output_file.write(part_file.read())
+    
     return sqlite3.connect(path)
+
+def shard_db(db_type, chunk_size_mb=50):
+    path = YTP_DB
+    if db_type == 'sources': path = SOURCES_DB
+    elif db_type == 'poopers': path = POOPERS_DB
+    elif db_type == 'ytpmv': path = YTPMV_DB
+    elif db_type == 'collabs': path = COLLABS_DB
+    elif db_type == 'comments': path = COMMENTS_DB
+    
+    if not os.path.exists(path): return False
+    
+    chunk_size = chunk_size_mb * 1024 * 1024
+    with open(path, 'rb') as f:
+        part_num = 1
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk: break
+            part_name = f"{path}.part{part_num}"
+            with open(part_name, 'wb') as part_file:
+                part_file.write(chunk)
+            part_num += 1
+    return True
 
 def find_video_db(vid_id):
     """Checks which DB contains the video and returns (conn, db_type)."""
@@ -53,6 +95,16 @@ def ban_videos(video_ids):
                     print(f"Error removing {abs_path}: {e}", file=sys.stderr)
                     
         cursor.execute("UPDATE videos SET local_file = NULL WHERE id = ?", (vid_id,))
+        
+        # Also remove comments for this video
+        try:
+            c_conn = get_conn('comments')
+            c_cursor = c_conn.cursor()
+            c_cursor.execute("DELETE FROM comments WHERE video_id = ?", (vid_id,))
+            c_conn.commit()
+            c_conn.close()
+        except: pass
+        
         deleted.append(vid_id)
         conn.commit()
         conn.close()
@@ -218,6 +270,16 @@ def remove_channel(channel_url):
             # Delete from sources DB
             cursor.execute("DELETE FROM videos WHERE id = ?", (vid_id,))
             cursor.execute("DELETE FROM video_tags WHERE video_id = ?", (vid_id,))
+            
+            # Delete from comments DB
+            try:
+                c_conn = get_conn('comments')
+                c_cursor = c_conn.cursor()
+                c_cursor.execute("DELETE FROM comments WHERE video_id = ?", (vid_id,))
+                c_conn.commit()
+                c_conn.close()
+            except: pass
+            
             deleted_videos_count += 1
             
         # Save JSON

@@ -24,6 +24,8 @@ import urllib.request
 import sqlite3
 from pathlib import Path
 
+from split_db import split_file, join_files
+
 from bs4 import BeautifulSoup
 
 # ── Sections to scan ──────────────────────────────────────────────────────────
@@ -970,6 +972,7 @@ class VideoIndex:
         self.poopers_db_path = os.path.join(PROJECT_ROOT, "public", "db", "ytpoopers.db")
         self.ytpmv_db_path = os.path.join(PROJECT_ROOT, "public", "db", "ytpmv.db")
         self.collabs_db_path = os.path.join(PROJECT_ROOT, "public", "db", "collabs.db")
+        self.comments_db_path = os.path.join(PROJECT_ROOT, "public", "db", "comments.db")
         self.filepath = self.ytp_db_path # Backward compatibility for code expecting a single filepath
         
         self.data = {}
@@ -994,7 +997,7 @@ class VideoIndex:
         print("\n  [Backup] Creating backups of SQLite databases...", flush=True)
         paths = [
             self.ytp_db_path, self.sources_db_path, self.poopers_db_path,
-            self.ytpmv_db_path, self.collabs_db_path
+            self.ytpmv_db_path, self.collabs_db_path, self.comments_db_path
         ]
         for path in paths:
             if os.path.exists(path):
@@ -1007,6 +1010,13 @@ class VideoIndex:
         elif db_type == 'poopers': path = self.poopers_db_path
         elif db_type == 'ytpmv': path = self.ytpmv_db_path
         elif db_type == 'collabs': path = self.collabs_db_path
+        elif db_type == 'comments': path = self.comments_db_path
+
+        if not os.path.exists(path):
+            # Check for shards and join them if found
+            if join_files(path):
+                print(f"  [DB] Reconstructed {db_type} database from shards.")
+        
         return sqlite3.connect(path)
 
     def load_excluded(self):
@@ -3965,10 +3975,33 @@ def do_scrape_sources_metadata(index, language=None):
 
 def do_scrape_comments(index, video_dir):
     """Scrape comments for every non-unavailable video in sources."""
-    comments_dir = os.path.join(video_dir, "comments")
-    os.makedirs(comments_dir, exist_ok=True)
+    conn = index.get_conn('comments')
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS comments (
+            video_id TEXT,
+            id TEXT PRIMARY KEY,
+            parent TEXT,
+            text TEXT,
+            like_count INTEGER,
+            author_id TEXT,
+            author TEXT,
+            author_thumbnail TEXT,
+            author_is_uploader BOOLEAN,
+            author_url TEXT,
+            is_favorited BOOLEAN,
+            timestamp INTEGER,
+            is_pinned BOOLEAN
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_comments_video_id ON comments(video_id)")
+    conn.commit()
 
     sources_data = index.sources_data
+
+    # Check which videos already have comments in the DB
+    cursor.execute("SELECT DISTINCT video_id FROM comments")
+    already_scraped = {row[0] for row in cursor.fetchall()}
 
     videos = [(vid, e) for vid, e in sources_data.items()
               if e.get("status") != "unavailable"]
@@ -3976,6 +4009,7 @@ def do_scrape_comments(index, video_dir):
 
     if not videos:
         print("  No videos to scrape comments for.")
+        conn.close()
         return
 
     print(f"  Scraping comments for {total} video(s)...")
@@ -3990,8 +4024,7 @@ def do_scrape_comments(index, video_dir):
         print(f"\r  {pb}  {i}/{total}  done={done} skip={skipped} fail={failed}  ",
               end="", flush=True)
 
-        comment_file = os.path.join(comments_dir, f"{vid}.json")
-        if os.path.exists(comment_file):
+        if vid in already_scraped:
             skipped += 1
             continue
 
@@ -4010,8 +4043,29 @@ def do_scrape_comments(index, video_dir):
                 if raw:
                     d = json.loads(raw)
                     comments = d.get("comments") or []
-                    with open(comment_file, "w", encoding="utf-8") as f:
-                        json.dump(comments, f, separators=(',', ':'), ensure_ascii=False)
+                    for c in comments:
+                        cursor.execute("""
+                            INSERT OR REPLACE INTO comments (
+                                video_id, id, parent, text, like_count, author_id, author, 
+                                author_thumbnail, author_is_uploader, author_url, 
+                                is_favorited, timestamp, is_pinned
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            vid, 
+                            c.get('id'), 
+                            c.get('parent'), 
+                            c.get('text'), 
+                            c.get('like_count', 0), 
+                            c.get('author_id'), 
+                            c.get('author'), 
+                            c.get('author_thumbnail'), 
+                            1 if c.get('author_is_uploader') else 0, 
+                            c.get('author_url'), 
+                            1 if c.get('is_favorited') else 0, 
+                            c.get('timestamp'), 
+                            1 if c.get('is_pinned') else 0
+                        ))
+                    conn.commit()
                     done += 1
                 else:
                     failed += 1
@@ -4023,8 +4077,14 @@ def do_scrape_comments(index, video_dir):
         time.sleep(0.3)
 
     clear_line()
+    conn.close()
+    
+    # Shard the database after updates
+    print(f"  [DB] Sharding comments database...")
+    split_file(index.comments_db_path, 50)
+    
     print(f"  Done. Scraped: {done}  Skipped (already done): {skipped}  Failed: {failed}")
-    print(f"  Comments saved to: {os.path.abspath(comments_dir)}")
+    print(f"  Comments saved to SQLite database: {os.path.abspath(index.comments_db_path)}")
 
 
 def create_progressive_backup(index, step_name):

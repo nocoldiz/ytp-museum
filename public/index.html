@@ -227,6 +227,8 @@
                   <a href="#" class="yt-tab" onclick="setFeaturedTab('ytpmv');return false;">YTPMV</a>
                   <span class="yt-tab-sep">|</span>
                   <a href="#" class="yt-tab" onclick="setFeaturedTab('acid');return false;">Acid Poop</a>
+                  <span class="yt-tab-sep">|</span>
+                  <a href="#" class="yt-tab" onclick="setFeaturedTab('random');return false;">Random</a>
                 </div>
                 <span class="yt-tab-sep yt-tab-group-sep">|</span>
                 <div class="yt-tab-group">
@@ -241,6 +243,10 @@
               </div>
             </div>
             <div id="featured-videos"></div>
+            <div class="latest-videos-section" id="latest-videos-old-section" style="margin-top: 30px; margin-bottom: 20px;">
+              <h2 class="yt-featured-title">Latest Videos</h2>
+              <div id="latest-videos-old"></div>
+            </div>
           </div>
         </div>
 
@@ -255,6 +261,11 @@
             <button class="chip" onclick="setModernHomeTab('favorited', this)">Top Favorited</button>
             <button class="chip" onclick="setModernHomeTab('ytpmv', this)">YTPMV</button>
             <button class="chip" onclick="setModernHomeTab('acid', this)">Acid Poop</button>
+            <button class="chip" onclick="setModernHomeTab('random', this)">Random</button>
+          </div>
+          <div class="modern-section" id="latest-videos-modern-section" style="margin-bottom: 30px; padding: 0 16px;">
+            <h2 class="modern-section-title">Latest Videos</h2>
+            <div id="latest-videos-modern" class="modern-carousel-container"></div>
           </div>
           <div id="modern-videos-grid"></div>
         </div>

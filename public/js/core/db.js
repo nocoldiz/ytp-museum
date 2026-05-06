@@ -79,16 +79,52 @@ async function clearIndexedDBCache() {
 
 async function fetchAndCache(name) {
   const root = getAppRoot();
-  const url = name.startsWith('db/') ? `${root}${name}` : (['profile_thumbnails', 'comments', 'playlists.json'].some(x => name.startsWith(x)) ? `${root}${name}` : `${root}db/${name}`);
+  const getUrl = (n) => n.startsWith('db/') ? `${root}${n}` : (['profile_thumbnails', 'playlists.json'].some(x => n.startsWith(x)) ? `${root}${n}` : `${root}db/${n}`);
+  
+  const mainUrl = getUrl(name);
   try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      if (response.status === 404) {
-        console.warn(`Critical 404 error fetching ${url}. Clearing local cache...`);
-        await clearIndexedDBCache();
+    let response = await fetch(mainUrl);
+    
+    // If main file not found, try sharded parts
+    if (!response.ok && response.status === 404) {
+      console.log(`Main file ${name} not found, checking for shards...`);
+      let parts = [];
+      let partNum = 1;
+      while (true) {
+        const partName = `${name}.part${partNum}`;
+        const partUrl = getUrl(partName);
+        const partRes = await fetch(partUrl);
+        if (!partRes.ok) break;
+        
+        console.log(`Fetching shard: ${partName}`);
+        parts.push(await partRes.arrayBuffer());
+        partNum++;
       }
-      throw new Error(`Failed to fetch ${url}: ${response.status}`);
+      
+      if (parts.length > 0) {
+        const totalLength = parts.reduce((acc, p) => acc + p.byteLength, 0);
+        const combined = new Uint8Array(totalLength);
+        let offset = 0;
+        for (const p of parts) {
+          combined.set(new Uint8Array(p), offset);
+          offset += p.byteLength;
+        }
+        
+        if (shouldCache()) {
+          await saveStoredDB(name, combined.buffer);
+          console.log(`Successfully cached sharded ${name} (${parts.length} parts)`);
+        }
+        return combined.buffer;
+      }
+      
+      // If no parts found either, trigger the 404 cache clear
+      console.warn(`Critical 404 error fetching ${mainUrl}. Clearing local cache...`);
+      await clearIndexedDBCache();
+      throw new Error(`Failed to fetch ${mainUrl} or shards: ${response.status}`);
     }
+
+    if (!response.ok) throw new Error(`Failed to fetch ${mainUrl}: ${response.status}`);
+    
     const buffer = await response.arrayBuffer();
     
     // Validate before saving
@@ -96,16 +132,14 @@ async function fetchAndCache(name) {
     if (header === "SQLite format 3") {
       if (shouldCache()) {
         await saveStoredDB(name, buffer);
-        console.log(`Successfully cached ${name} from ${url}`);
-      } else {
-        console.log(`Bypassing cache for ${name} (Running locally)`);
+        console.log(`Successfully cached ${name} from ${mainUrl}`);
       }
     } else {
-      console.error(`Fetched ${url} is not a valid SQLite database (Header: "${header.substring(0, 20)}"), skipping cache.`);
+      console.error(`Fetched ${mainUrl} is not a valid SQLite database (Header: "${header.substring(0, 20)}"), skipping cache.`);
     }
     return buffer;
   } catch (e) {
-    console.error(`Fetch/Cache failed for ${url}:`, e);
+    console.error(`Fetch/Cache failed for ${name}:`, e);
     throw e;
   }
 }
@@ -155,8 +189,9 @@ async function initSQLite() {
 
   console.log("Loading databases...");
   
-  // Always load Poopers (channels) if possible
+  // Always load Poopers (channels) and Comments if possible
   const poopersPromise = loadDB('ytpoopers.db', SQL);
+  const commentsPromise = loadDB('comments.db', SQL);
   
   // Conditionally load YTP (main)
   let ytpPromise = Promise.resolve(null);
@@ -164,10 +199,11 @@ async function initSQLite() {
     ytpPromise = loadDB('ytp.db', SQL);
   }
 
-  const [db1, db3] = await Promise.all([ytpPromise, poopersPromise]);
+  const [db1, db3, db4] = await Promise.all([ytpPromise, poopersPromise, commentsPromise]);
 
   window.dbYTP = db1;
   window.dbPoopers = db3;
+  window.dbComments = db4;
   window.sqlDB = window.dbYTP;
 
   // Lazy load extra databases in background based on enabled state
@@ -277,6 +313,8 @@ function queryDB(sql, params = [], targetDB = null) {
       db = window.dbPoopers;
     } else if (lowerSql.includes('from source_pages') || lowerSql.includes('from video_sources')) {
       db = window.dbSources;
+    } else if (lowerSql.includes('from comments')) {
+      db = window.dbComments;
     } else if (window.appMode === 'sources' && (lowerSql.includes('from videos') || lowerSql.includes('from tags') || lowerSql.includes('from sections'))) {
       db = window.dbSources;
     } else if (window.appMode === 'ytpmv' && (lowerSql.includes('from videos') || lowerSql.includes('from tags') || lowerSql.includes('from sections'))) {

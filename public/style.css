@@ -1182,6 +1182,24 @@
     order: 1;
   }
 
+  .latest-videos-section {
+    border-top: 1px solid var(--border);
+    padding-top: 20px;
+  }
+
+  .latest-videos-section .yt-featured-title {
+    margin-bottom: 15px;
+    text-transform: uppercase;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  #latest-videos-old {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
   body.theme-old .home-side {
     width: 400px;
     flex-shrink: 0;
