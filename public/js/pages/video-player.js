@@ -180,10 +180,27 @@ async function loadComments(vidId) {
   const container = document.getElementById('watch-comments');
   const title = document.getElementById('comments-count-title');
   if (!container) return;
+
+  if (!window.enabledSources.comments) {
+    container.innerHTML = `
+      <p class="empty" style="padding:10px; color: var(--text-muted); font-size: 13px;">
+        Comments are disabled by default to improve performance.<br>
+        <a href="#" onclick="openSourcesModal(); return false;" style="color: var(--accent); text-decoration: underline;">Enable Comments in the Sources menu</a> to see them.
+      </p>
+    `;
+    if (title) title.textContent = "Comments (Disabled)";
+    return;
+  }
+
   container.innerHTML = '<p class="empty" style="padding:10px;">Loading comments...</p>';
 
   try {
-    const comments = queryDB("SELECT * FROM comments WHERE video_id = ? ORDER BY published_at ASC", [vidId], window.dbComments);
+    const db = await ensureCommentsDB();
+    if (!db) {
+      container.innerHTML = '<p class="empty" style="padding:10px;">Could not load comments database.</p>';
+      return;
+    }
+    const comments = queryDB("SELECT * FROM comments WHERE video_id = ? ORDER BY published_at ASC", [vidId], db);
     if (!comments || comments.length === 0) {
       console.log(`No comments found for video ${vidId}`);
       container.innerHTML = '<p class="empty" style="padding:10px;">No comments available.</p>';
@@ -552,6 +569,9 @@ function setGlobalMaxYear(year) {
 }
 
 function getActiveVideos(forHome = false, limit = null) {
+  if (forHome && (!window.dbYTP) && window.homeLiteVideos) {
+    return window.homeLiteVideos;
+  }
   const cacheKey = `activeVideos_${appMode}_${globalMaxYear}_${forHome}_${limit}`;
   return getCachedQuery(cacheKey, () => {
     let whereClauses = [];
@@ -576,7 +596,11 @@ function getActiveVideos(forHome = false, limit = null) {
       sql += ` LIMIT ${limit}`;
     }
 
-    return queryDB(sql, params);
+    const res = queryDB(sql, params);
+    if (forHome && res.length === 0 && window.homeLiteVideos) {
+      return window.homeLiteVideos;
+    }
+    return res;
   });
 }
 
@@ -646,6 +670,14 @@ function renderModernGrid() {
   // Modern grid usually shows a limited set per tab
   const ytData = getActiveVideos(true, 200);
   const validVideos = ytData; // Status filter removed, all indexed videos are considered available
+  
+  // If we have lite videos and the main DB is not yet ready, use them as fallback
+  if (validVideos.length === 0 && window.homeLiteVideos) {
+    const mHtml = window.homeLiteVideos.map(v => renderModernHomeCard(v)).join('');
+    modernContainer.innerHTML = mHtml;
+    return;
+  }
+
   if (validVideos.length === 0) return;
 
   let videos;
@@ -748,6 +780,13 @@ function setFeaturedTab(tab) {
   const validVideos = ytData;
   const featuredContainer = document.getElementById("featured-videos");
   if (!featuredContainer) return;
+
+  // Fallback to lite videos if DB not loaded
+  if (validVideos.length === 0 && window.homeLiteVideos) {
+    featuredContainer.innerHTML = window.homeLiteVideos.slice(0, 8).map(v => renderVideoItem(v, 'list')).join('');
+    return;
+  }
+
   if (tab !== "all" && tab !== "random" && validVideos.length === 0) return;
   let videos;
 

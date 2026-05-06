@@ -129,6 +129,15 @@ function applyFilters() {
   if (queryCache.has(filterKey)) {
     filteredVideos = queryCache.get(filterKey);
   } else {
+    if (!window.dbYTP && appMode === 'videos') {
+      document.getElementById('videos-count-label').textContent = "Loading database... please wait";
+      const tbody = document.getElementById('video-tbody');
+      const grid = document.getElementById('video-grid');
+      if (tbody) tbody.innerHTML = '<tr><td colspan="7" class="empty">Database downloading...</td></tr>';
+      if (grid) grid.innerHTML = '<div class="empty" style="grid-column:1/-1">Database downloading...</div>';
+      return;
+    }
+
     let sql = "SELECT * FROM videos WHERE " + whereClauses.join(" AND ");
     console.log("[Manager Search] SQL:", sql, "Params:", params);
 

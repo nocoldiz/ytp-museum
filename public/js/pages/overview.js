@@ -37,6 +37,11 @@ function updateBadges() {
 
 function buildOverview() {
   const dbs = getStatsDBs();
+  const statsContainer = document.getElementById('overview-stats');
+  if (dbs.length === 0 && statsContainer) {
+    statsContainer.innerHTML = '<div style="padding:40px; text-align:center; width:100%; color:var(--text-muted);">Calcolo statistiche in corso... attendi il caricamento del database (69MB).</div>';
+    return;
+  }
   
   let combinedStats = {
     total: 0,

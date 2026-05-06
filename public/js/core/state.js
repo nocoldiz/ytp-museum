@@ -21,7 +21,8 @@ window.enabledSources = JSON.parse(localStorage.getItem('ytp-enabled-sources')) 
   ytp: true,
   ytpmv: true,
   collabs: true,
-  other: true
+  other: false,
+  comments: false
 };
 window.enabledLanguages = JSON.parse(localStorage.getItem('ytp-enabled-languages')) || ['it', 'en', 'es', 'de', 'fr', 'ru', 'pt', 'br', 'none'];
 window.playbackMode = localStorage.getItem('ytp-playback-mode') || 'youtube';

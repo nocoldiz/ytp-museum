@@ -187,30 +187,45 @@ async function forceRefreshDBs() {
   location.reload();
 }
 
+let SQL_INSTANCE = null;
+
 async function initSQLite() {
   const config = {
     locateFile: file => `https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/${file}`
   };
   const SQL = await initSqlJs(config);
+  SQL_INSTANCE = SQL;
 
   console.log("Loading databases...");
   
-  // Always load Poopers (channels) and Comments if possible
-  const poopersPromise = loadDB('ytpoopers.db', SQL);
-  const commentsPromise = loadDB('comments.db', SQL);
-  
-  // Conditionally load YTP (main)
-  let ytpPromise = Promise.resolve(null);
-  if (window.enabledSources.ytp) {
-    ytpPromise = loadDB('ytp.db', SQL);
-  }
+  // Load Poopers (channels) - relatively small (3.5MB)
+  const poopersPromise = loadDB('ytpoopers.db', SQL).then(db => {
+    window.dbPoopers = db;
+    if (db) applyLanguageFilters(db);
+    return db;
+  });
 
-  const [db1, db3, db4] = await Promise.all([ytpPromise, poopersPromise, commentsPromise]);
+  // Background load for heavy databases
+  const ytpPromise = window.enabledSources.ytp ? loadDB('ytp.db', SQL) : Promise.resolve(null);
 
-  window.dbYTP = db1;
-  window.dbPoopers = db3;
-  window.dbComments = db4;
-  window.sqlDB = window.dbYTP;
+  ytpPromise.then(db => {
+    window.dbYTP = db;
+    window.sqlDB = db;
+    if (db) applyLanguageFilters(db);
+    console.log("Main YTP database loaded.");
+    if (window.updateBadges) window.updateBadges();
+    
+    // If we are in a section that needs the full DB, refresh it
+    if (window.handleRouting) {
+      console.log("Refreshing view after DB load...");
+      handleRouting();
+    }
+  });
+
+  // We wait for Poopers because it's essential for channel info/avatars
+  await poopersPromise;
+
+  // Lazy load extra databases in background based on enabled state
 
   // Lazy load extra databases in background based on enabled state
   if (window.enabledSources.other && !window.dbSources) {
@@ -258,7 +273,7 @@ function openSourcesModal() {
   modal.style.display = 'flex';
   
   // Sync checkboxes with state
-  const ids = ['ytp', 'ytpmv', 'collabs', 'other'];
+  const ids = ['ytp', 'ytpmv', 'collabs', 'other', 'comments'];
   ids.forEach(id => {
     const cb = document.getElementById(`source-${id}`);
     if (cb) cb.checked = window.enabledSources[id];
@@ -300,7 +315,7 @@ function toggleLanguageState(id) {
 }
 
 function applySources() {
-  const ids = ['ytp', 'ytpmv', 'collabs', 'other'];
+  const ids = ['ytp', 'ytpmv', 'collabs', 'other', 'comments'];
   ids.forEach(id => {
     const cb = document.getElementById(`source-${id}`);
     if (cb) window.enabledSources[id] = cb.checked;
@@ -419,6 +434,20 @@ function queryDBRow(sql, params = [], targetDB = null) {
 }
 
 
+async function ensureCommentsDB() {
+  if (window.dbComments) return window.dbComments;
+  if (!SQL_INSTANCE) {
+    console.error("SQL.js not initialized yet.");
+    return null;
+  }
+  
+  console.log("On-demand loading comments.db...");
+  const db = await loadDB('comments.db', SQL_INSTANCE);
+  window.dbComments = db;
+  if (db) applyLanguageFilters(db);
+  return db;
+}
+
 // Expose functions to global scope
 window.queryCache = queryCache;
 window.getCachedQuery = getCachedQuery;
@@ -439,3 +468,4 @@ window.applySources = applySources;
 window.queryDB = queryDB;
 window.findVideoAcrossDBs = findVideoAcrossDBs;
 window.queryDBRow = queryDBRow;
+window.ensureCommentsDB = ensureCommentsDB;

@@ -203,6 +203,11 @@ function performSearch(query) {
   const suggestionsBox = document.getElementById('search-suggestions');
   if (suggestionsBox) suggestionsBox.style.display = 'none';
 
+  const container = document.getElementById('search-videos-results');
+  if (!window.dbYTP && container) {
+    container.innerHTML = '<p class="empty" style="padding:40px; text-align:center;">Il database è in fase di caricamento... la ricerca sarà disponibile tra pochi secondi.</p>';
+  }
+
   const searchPage = document.getElementById('page-search');
   if (searchPage && !searchPage.classList.contains('active')) {
     window.showPage('search');

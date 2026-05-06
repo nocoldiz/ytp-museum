@@ -400,6 +400,37 @@ def get_playlists():
     conn.close()
     return {"success": True, "playlists": playlists}
 
+def get_home_lite():
+    dbs = ['ytp', 'sources', 'ytpmv', 'collabs']
+    all_vids = []
+    for db_type in dbs:
+        try:
+            conn = get_conn(db_type)
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            # Randomly select a few videos for the home page
+            cursor.execute("SELECT * FROM videos WHERE (title IS NOT NULL AND title != '') ORDER BY RANDOM() LIMIT 24")
+            vids = [dict(r) for r in cursor.fetchall()]
+            for v in vids:
+                v['db_source'] = db_type # Add source info for intelligent routing
+            all_vids.extend(vids)
+            conn.close()
+        except Exception as e:
+            print(f"Error in get_home_lite for {db_type}: {e}", file=sys.stderr)
+            
+    # Also fetch some channels for the pooper map
+    channels = []
+    try:
+        p_conn = get_conn('poopers')
+        p_conn.row_factory = sqlite3.Row
+        p_cursor = p_conn.cursor()
+        p_cursor.execute("SELECT * FROM channels LIMIT 500")
+        channels = [dict(r) for r in p_cursor.fetchall()]
+        p_conn.close()
+    except: pass
+    
+    return {"success": True, "videos": all_vids, "channels": channels}
+
 if __name__ == "__main__":
     try:
         command = sys.argv[1]
@@ -425,6 +456,8 @@ if __name__ == "__main__":
             print(json.dumps(add_videos_to_playlist(args['playlistId'], args['videoIds'])))
         elif command == "get-playlists":
             print(json.dumps(get_playlists()))
+        elif command == "get-home-lite":
+            print(json.dumps(get_home_lite()))
         elif command == "remove-channel":
             print(json.dumps(remove_channel(args['channelUrl'])))
         else:
