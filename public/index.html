@@ -30,6 +30,13 @@
       <div id="masthead-utility">
         <div id="masthead-utility-right" style="float: right;">
           <div id="theme-toggles" style="display:inline-block; margin-right: 15px; font-size: 12px; color: inherit;">
+            <select id="lang-selector-old" onchange="setLanguage(this.value)"
+              style="color: inherit; border: none; background: transparent; padding: 0; font-size: 12px; cursor: pointer; outline: none; appearance: auto; font-weight: bold;"
+              title="Select Language">
+              <option value="en">English</option>
+              <option value="it">Italiano</option>
+            </select>
+            <span class="theme-sep">|</span>
             <select id="global-year-selector" onchange="setGlobalMaxYear(this.value)"
               style="color: inherit; border: none; background: transparent; padding: 0; font-size: 12px; cursor: pointer; outline: none; appearance: auto; font-weight: bold;"
               title="Limit videos up to this year"></select>
@@ -42,21 +49,23 @@
             </select>
             <span id="playback-source-container">
               <a href="#" id="playback-source-toggle" onclick="openSourcesModal(); return false;"
-                style="color: inherit; border: none; padding: 0; font-weight: bold;">Sources</a>
+                style="color: inherit; border: none; padding: 0; font-weight: bold;" data-i18n="sources">Sources</a>
               <span class="theme-sep">|</span>
             </span>
             <a href="http://localhost:3001" target="_blank"
-              style="color: inherit; border: none; padding: 0; font-weight: bold;">YTP Italian Forum</a> <span
-              class="theme-sep">|</span>
+              style="color: inherit; border: none; padding: 0; font-weight: bold;" data-i18n="ytp_forum">YTP Italian
+              Forum</a> <span class="theme-sep">|</span>
             <a href="#" id="toggle-modern-old" onclick="toggleThemeMode(); return false;"
-              style="color: inherit; border: none; padding: 0;">Switch to Modern Mode</a> <span
-              class="theme-sep">|</span>
+              style="color: inherit; border: none; padding: 0;" data-i18n="switch_modern_mode">Switch to Modern Mode</a>
+            <span class="theme-sep">|</span>
             <a href="#" id="toggle-night-day" onclick="toggleNightDay(); return false;"
-              style="color: inherit; border: none; padding: 0;">Switch to Night Mode</a>
+              style="color: inherit; border: none; padding: 0;" data-i18n="night_mode">Switch to Night Mode</a>
           </div>
           <a href="#" id="btn-import" onclick="openImportModal(); return false;"
-            style="display:none; color: inherit; border: none; padding: 0; font-size: 12px; margin-right: 15px;">Import</a>
-          <a href="#" id="btn-help" style="color: inherit; border: none; padding: 0; font-size: 12px;">Help</a>
+            style="display:none; color: inherit; border: none; padding: 0; font-size: 12px; margin-right: 15px;"
+            data-i18n="import">Import</a>
+          <a href="#" id="btn-help" style="color: inherit; border: none; padding: 0; font-size: 12px;"
+            data-i18n="help">Help</a>
         </div>
         <div style="clear:both;"></div>
       </div>
@@ -68,9 +77,9 @@
           <div id="masthead-search">
             <div class="search-form" style="position: relative;">
               <input type="text" class="search-term" id="global-search-input" placeholder="Search"
-                oninput="onGlobalSearchInput()" onkeypress="if(event.key==='Enter')performSearch(this.value)"
-                autocomplete="off">
-              <button class="search-button"
+                data-i18n="search_placeholder" oninput="onGlobalSearchInput()"
+                onkeypress="if(event.key==='Enter')performSearch(this.value)" autocomplete="off">
+              <button class="search-button" data-i18n="search"
                 onclick="performSearch(document.getElementById('global-search-input').value)">Search</button>
               <div id="search-suggestions" class="search-suggestions"></div>
             </div>
@@ -83,56 +92,70 @@
             <svg class="nav-icon" viewBox="0 0 24 24">
               <path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z" />
             </svg>
-            <span>Home</span>
+            <span data-i18n="home">Home</span>
           </a>
           <a href="#" class="nav-tab" onclick="showPage('channels'); return false;">
             <svg class="nav-icon" viewBox="0 0 24 24">
               <path
                 d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08s5.97 1.09 6 3.08c-1.29 1.94-3.5 3.22-6 3.22z" />
             </svg>
-            <span>Channels</span>
+            <span data-i18n="channels">Channels</span>
           </a>
           <a href="#" class="nav-tab" onclick="showPage('saved'); return false;">
             <svg class="nav-icon" viewBox="0 0 24 24">
               <path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z" />
             </svg>
-            <span>Saved</span>
+            <span data-i18n="saved">Saved</span>
           </a>
           <a href="#" class="nav-tab" onclick="showPage('playlists'); return false;">
             <svg class="nav-icon" viewBox="0 0 24 24">
               <path d="M4 10h12v2H4zm0-4h12v2H4zm0 8h8v2H4zm10 0v6l5-3-5-3z" />
             </svg>
-            <span>Playlists</span>
+            <span data-i18n="playlists">Playlists</span>
           </a>
         </div>
 
         <div class="sidebar-section">
-          <div class="sidebar-header">Explore</div>
+          <div class="sidebar-header" data-i18n="explore">Explore</div>
           <a href="#" class="nav-tab" onclick="showPage('videos'); return false;">
             <svg class="nav-icon" viewBox="0 0 24 24">
               <path
                 d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-8 12.5v-9l6 4.5-6 4.5z" />
             </svg>
-            <span>Manager</span>
+            <span data-i18n="manager">Manager</span>
           </a>
           <a href="#" class="nav-tab" onclick="showPage('timeline'); return false;">
             <svg class="nav-icon" viewBox="0 0 24 24">
               <path
                 d="M21 3H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z" />
             </svg>
-            <span>Timeline</span>
+            <span data-i18n="timeline">Timeline</span>
           </a>
           <a href="#" class="nav-tab" onclick="showPage('overview'); return false;">
             <svg class="nav-icon" viewBox="0 0 24 24">
               <path d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z" />
             </svg>
-            <span>Stats</span>
+            <span data-i18n="stats">Stats</span>
           </a>
         </div>
         <!-- Modern Mode Settings (Sidebar bottom) -->
         <div id="theme-toggles-modern" class="sidebar-section theme-modern-only" style="margin-top: auto;">
           <div class="sidebar-divider"></div>
-          <div class="sidebar-header">Settings</div>
+          <div class="sidebar-header" data-i18n="settings">Settings</div>
+
+          <div class="nav-tab setting-tab">
+            <svg class="nav-icon" viewBox="0 0 24 24">
+              <path
+                d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm6.93 6h-2.95c-.32-1.25-.78-2.45-1.38-3.56 1.84.63 3.37 1.91 4.33 3.56zM12 4.04c.83 1.2 1.48 2.53 1.91 3.96h-3.82c.43-1.43 1.08-2.76 1.91-3.96zM4.26 14C4.1 13.36 4 12.69 4 12s.1-1.36.26-2h3.38c-.08.66-.14 1.32-.14 2 0 .68.06 1.34.14 2H4.26zm.82 2h2.95c.32 1.25.78 2.45 1.38 3.56-1.84-.63-3.37-1.9-4.33-3.56zm2.95-8H5.08c.96-1.66 2.49-2.93 4.33-3.56C8.81 5.55 8.35 6.75 8.03 8zM12 19.96c-.83-1.2-1.48-2.53-1.91-3.96h3.82c-.43 1.43-1.08 2.76-1.91 3.96zM14.34 14H9.66c-.09-.66-.16-1.32-.16-2 0-.68.07-1.34.16-2h4.68c.09.66.16 1.32.16 2 0 .68-.07 1.34-.16 2zm.25 5.56c.6-1.11 1.06-2.31 1.38-3.56h2.95c-.96 1.65-2.49 2.93-4.33 3.56zM16.36 14c.08-.66.14-1.32.14-2 0-.68-.06-1.34-.14-2h3.38c.16.64.26 1.31.26 2s-.1 1.36-.26 2h-3.38z" />
+            </svg>
+            <div class="setting-content">
+              <label data-i18n="language">Language</label>
+              <select id="lang-selector-modern" onchange="setLanguage(this.value)">
+                <option value="en">English</option>
+                <option value="it">Italiano</option>
+              </select>
+            </div>
+          </div>
 
           <div class="nav-tab setting-tab">
             <svg class="nav-icon" viewBox="0 0 24 24">
@@ -140,7 +163,7 @@
                 d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-1.99.9-1.99 2L3 20c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 16H5V10h14v10zm0-12H5V6h14v2z" />
             </svg>
             <div class="setting-content">
-              <label>Year Limit</label>
+              <label data-i18n="year_limit">Year Limit</label>
               <select id="modern-global-year-selector" onchange="setGlobalMaxYear(this.value)"></select>
             </div>
           </div>
@@ -151,7 +174,7 @@
                 d="M19 12h-2v3h-3v2h5v-5zM7 9h3V7H5v5h2V9zm14-6H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z" />
             </svg>
             <div class="setting-content">
-              <label>Aspect Ratio</label>
+              <label data-i18n="aspect_ratio">Aspect Ratio</label>
               <select class="aspect-ratio-selector" onchange="setAspectRatio(this.value)">
                 <option value="4-3">4:3</option>
                 <option value="16-9">16:9</option>
@@ -164,7 +187,7 @@
               <path
                 d="M21 6h-2v9H6v2c0 .55.45 1 1 1h11l4 4V7c0-.55-.45-1-1-1zm-4 6V3c0-.55-.45-1-1-1H3c-.55 0-1 .45-1 1v14l4-4h10c.55 0 1-.45 1-1z" />
             </svg>
-            <span>YTP Forum</span>
+            <span data-i18n="ytp_forum">YTP Forum</span>
           </a>
 
           <a href="#" class="nav-tab" onclick="toggleThemeMode(); return false;">
@@ -172,7 +195,7 @@
               <path
                 d="M13 3c-4.97 0-9 4.03-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42C8.27 19.99 10.51 21 13 21c4.97 0 9-4.03 9-9s-4.03-9-9-9zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z" />
             </svg>
-            <span>Switch to Old Mode</span>
+            <span data-i18n="switch_old_mode">Switch to Old Mode</span>
           </a>
 
           <a href="#" class="nav-tab" onclick="toggleNightDay(); return false;">
@@ -180,7 +203,7 @@
               <path
                 d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9 9-4.03 9-9c0-.46-.04-.92-.1-1.36-.98 1.37-2.58 2.26-4.4 2.26-3.03 0-5.5-2.47-5.5-5.5 0-1.82.89-3.42 2.26-4.4-.44-.06-.9-.1-1.36-.1z" />
             </svg>
-            <span>Night Mode</span>
+            <span data-i18n="night_mode">Night Mode</span>
           </a>
         </div>
       </div>
@@ -204,6 +227,8 @@
                   <a href="#" class="yt-tab" onclick="setFeaturedTab('ytpmv');return false;">YTPMV</a>
                   <span class="yt-tab-sep">|</span>
                   <a href="#" class="yt-tab" onclick="setFeaturedTab('acid');return false;">Acid Poop</a>
+                  <span class="yt-tab-sep">|</span>
+                  <a href="#" class="yt-tab" onclick="setFeaturedTab('random');return false;">Random</a>
                 </div>
                 <span class="yt-tab-sep yt-tab-group-sep">|</span>
                 <div class="yt-tab-group">
@@ -218,6 +243,10 @@
               </div>
             </div>
             <div id="featured-videos"></div>
+            <div class="latest-videos-section" id="latest-videos-old-section" style="margin-top: 30px; margin-bottom: 20px;">
+              <h2 class="yt-featured-title">Latest Videos</h2>
+              <div id="latest-videos-old"></div>
+            </div>
           </div>
         </div>
 
@@ -232,6 +261,11 @@
             <button class="chip" onclick="setModernHomeTab('favorited', this)">Top Favorited</button>
             <button class="chip" onclick="setModernHomeTab('ytpmv', this)">YTPMV</button>
             <button class="chip" onclick="setModernHomeTab('acid', this)">Acid Poop</button>
+            <button class="chip" onclick="setModernHomeTab('random', this)">Random</button>
+          </div>
+          <div class="modern-section" id="latest-videos-modern-section" style="margin-bottom: 30px; padding: 0 16px;">
+            <h2 class="modern-section-title">Latest Videos</h2>
+            <div id="latest-videos-modern" class="modern-carousel-container"></div>
           </div>
           <div id="modern-videos-grid"></div>
         </div>
@@ -376,12 +410,12 @@
               <select id="search-filter-language"
                 onchange="performSearch(document.getElementById('global-search-input').value)">
                 <option value="any">Any language</option>
-                <option value="english">🇬🇧 English</option>
-                <option value="italian">🇮🇹 Italian</option>
-                <option value="spanish">🇪🇸 Spanish</option>
-                <option value="russian">🇷🇺 Russian</option>
-                <option value="french">🇫🇷 French</option>
-                <option value="german">🇩🇪 German</option>
+                <option value="en">🇬🇧 English</option>
+                <option value="it">🇮🇹 Italian</option>
+                <option value="es">🇪🇸 Spanish</option>
+                <option value="ru">🇷🇺 Russian</option>
+                <option value="fr">🇫🇷 French</option>
+                <option value="de">🇩🇪 German</option>
               </select>
             </div>
             <div class="filter-group-modern" style="margin-left: auto;">
@@ -430,59 +464,52 @@
           <div class="spinner"></div>Loading stats...
         </div>
         <div class="stats-grid" id="overview-stats"></div>
-        <div class="charts-row cols2">
+        <div class="charts-row">
           <div class="chart-card box">
             <div class="box-header">Videos by Year</div>
             <div class="box-content">
               <canvas id="chart-year"></canvas>
             </div>
           </div>
-          <div class="chart-card box">
-            <div class="box-header">Status Breakdown</div>
-            <div class="box-content">
-              <canvas id="chart-status"></canvas>
+        </div>
+        <div id="top-views-table-container" class="box" style="margin-top: 20px; display: none;">
+          <div class="box-header">Global Top Videos by Views</div>
+          <div class="box-content">
+            <div class="table-wrap">
+              <table id="top-views-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Title</th>
+                    <th>Channel</th>
+                    <th>Views</th>
+                    <th>Likes</th>
+                  </tr>
+                </thead>
+                <tbody id="top-views-tbody"></tbody>
+              </table>
             </div>
           </div>
         </div>
-        <div class="charts-row cols2">
-          <div class="chart-card box">
-            <div class="box-header">Top 15 Channels by Video Count</div>
-            <div class="box-content">
-              <canvas id="chart-top-channels"></canvas>
-            </div>
-          </div>
-          <div class="chart-card box">
-            <div class="box-header">Videos per Section</div>
-            <div class="box-content">
-              <canvas id="chart-sections"></canvas>
-            </div>
-          </div>
-        </div>
-        <div class="charts-row cols3">
+        <div class="charts-row cols1">
           <div class="chart-card box">
             <div class="box-header">View Count Distribution</div>
             <div class="box-content">
               <canvas id="chart-views-dist"></canvas>
             </div>
           </div>
-          <div class="chart-card box">
-            <div class="box-header">Top 10 by Views</div>
-            <div class="box-content">
-              <canvas id="chart-top-views"></canvas>
-            </div>
-          </div>
-          <div class="chart-card box">
-            <div class="box-header">Top 10 by Likes</div>
-            <div class="box-content">
-              <canvas id="chart-top-likes"></canvas>
-            </div>
-          </div>
         </div>
         <div class="box" style="margin-top: 20px;">
           <div class="box-header">Archive by Year <span class="count-badge" id="years-count-label"></span></div>
           <div class="box-content">
-            <div id="year-detail-panel" style="display:none"></div>
             <div class="year-grid" id="year-grid"></div>
+          </div>
+        </div>
+
+        <!-- Year Detail Modal -->
+        <div id="year-modal" class="modal-overlay" style="display:none;">
+          <div class="modal-content" style="width: 90%; max-width: 1000px; max-height: 90vh; overflow-y: auto;">
+            <div id="year-modal-body"></div>
           </div>
         </div>
       </div>
@@ -502,22 +529,32 @@
           <span class="yt-tab-sep">|</span>
           <a href="#" class="yt-tab" id="manager-tab-sources" onclick="showPage('sources'); return false;">Other
             videos</a>
+          <span class="yt-tab-sep">|</span>
+          <a href="#" class="yt-tab" id="manager-tab-poopers" onclick="showPage('poopers'); return false;">Poopers</a>
         </div>
         <div class="section-header">
           <h2>Video Search</h2>
           <span class="count-badge" id="videos-count-label"></span>
           <div id="management-actions" style="display:none; margin-left: 15px; gap: 8px; align-items: center;">
-            <button class="btn-mgmt" onclick="bulkAction('flag-source')">Flag as Source</button>
+            <select id="mgmt-move-select"
+              style="font-size:12px; padding:5px; border-radius:6px; border:1px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer;">
+              <option value="">Move to...</option>
+              <option value="ytp">ytp.db</option>
+              <option value="other">other.db</option>
+              <option value="ytpmv">ytpmv.db</option>
+              <option value="collabs">collabs.db</option>
+            </select>
+            <button class="btn-mgmt" onclick="bulkAction('move-db')">Apply Move</button>
             <div style="height: 20px; width: 1px; background: var(--border); margin: 0 5px;"></div>
             <select id="mgmt-lang-select"
               style="font-size:12px; padding:5px; border-radius:6px; border:1px solid var(--border); background:var(--surface2); color:var(--text); cursor:pointer;">
               <option value="">Set Language...</option>
-              <option value="english">🇬🇧 English</option>
-              <option value="italian">🇮🇹 Italian</option>
-              <option value="spanish">🇪🇸 Spanish</option>
-              <option value="russian">🇷🇺 Russian</option>
-              <option value="french">🇫🇷 French</option>
-              <option value="german">🇩🇪 German</option>
+              <option value="en">🇬🇧 English</option>
+              <option value="it">🇮🇹 Italian</option>
+              <option value="es">🇪🇸 Spanish</option>
+              <option value="ru">🇷🇺 Russian</option>
+              <option value="fr">🇫🇷 French</option>
+              <option value="de">🇩🇪 German</option>
             </select>
             <button class="btn-mgmt" onclick="bulkAction('set-lang')">Apply Lang</button>
             <button class="btn-mgmt" onclick="openAddToPlaylistModal(true)">Add to Playlist</button>
@@ -539,23 +576,23 @@
           </select>
           <select id="filter-language" class="tag-list" onchange="applyFilters()">
             <option value="any">Any language</option>
-            <option value="english">🇬🇧 English</option>
-            <option value="italian">🇮🇹 Italian</option>
-            <option value="spanish">🇪🇸 Spanish</option>
-            <option value="russian">🇷🇺 Russian</option>
-            <option value="french">🇫🇷 French</option>
-            <option value="german">🇩🇪 German</option>
+            <option value="en">🇬🇧 English</option>
+            <option value="it">🇮🇹 Italian</option>
+            <option value="es">🇪🇸 Spanish</option>
+            <option value="ru">🇷🇺 Russian</option>
+            <option value="fr">🇫🇷 French</option>
+            <option value="de">🇩🇪 German</option>
           </select>
           <input type="text" id="filter-channel" list="channel-datalist" placeholder="All channels"
-            oninput="applyFilters()">
+            onkeypress="if(event.key==='Enter')applyFilters()">
           <datalist id="channel-datalist"></datalist>
         </div>
         <div class="search-bar">
           <label>Views ≥</label>
-          <div class="range-group"><input type="number" id="filter-views-min" placeholder="0" oninput="applyFilters()">
+          <div class="range-group"><input type="number" id="filter-views-min" placeholder="0" onchange="applyFilters()">
           </div>
           <label>Likes ≥</label>
-          <div class="range-group"><input type="number" id="filter-likes-min" placeholder="0" oninput="applyFilters()">
+          <div class="range-group"><input type="number" id="filter-likes-min" placeholder="0" onchange="applyFilters()">
           </div>
           <label>Years:</label>
           <div class="range-group">
@@ -618,13 +655,14 @@
           <span class="count-badge" id="channels-count-label"></span>
         </div>
         <div class="search-bar">
-          <input type="text" id="channel-search" placeholder="Search channels..." oninput="renderChannelGrid()">
+          <input type="text" id="channel-search" placeholder="Search channels..."
+            onkeypress="if(event.key==='Enter')renderChannelGrid()">
           <label>First Video ≥</label>
           <div class="range-group"><input type="number" id="channel-year-min" placeholder="YYYY"
-              oninput="renderChannelGrid()"></div>
+              onchange="renderChannelGrid()"></div>
           <label>First Video ≤</label>
           <div class="range-group"><input type="number" id="channel-year-max" placeholder="YYYY"
-              oninput="renderChannelGrid()"></div>
+              onchange="renderChannelGrid()"></div>
         </div>
         <div id="channel-detail-panel" style="display:none"></div>
         <div class="channel-grid" id="channel-grid"></div>
@@ -688,6 +726,43 @@
 
       <!-- OTHER VIDEOS -->
       <div class="page" id="page-sources"></div>
+
+      <!-- POOPERS -->
+      <div class="page is-loading" id="page-poopers">
+        <div class="page-loader">
+          <div class="spinner"></div>Loading poopers...
+        </div>
+        <div class="section-header">
+          <h2>Poopers Management</h2>
+          <span class="count-badge" id="poopers-count-label"></span>
+          <div style="margin-left: auto; display: flex; gap: 8px;">
+            <button class="btn-mgmt" onclick="openScrapeModal()" id="btn-scrape-channel"
+              style="background:var(--accent); color:white; border:none;">Add & Scrape Channel</button>
+            <button class="btn-mgmt" onclick="filterOrphanPoopers()" id="btn-filter-orphans">Filter Sources
+              Only</button>
+            <button class="btn-mgmt" onclick="location.reload()"
+              style="background:var(--surface); opacity:0.8;">Refresh</button>
+          </div>
+        </div>
+        <div class="search-bar">
+          <input type="text" id="pooper-search-input" placeholder="Search pooper name or URL..."
+            onkeypress="if(event.key==='Enter')renderPoopersTable()">
+        </div>
+        <div class="table-wrap">
+          <table id="poopers-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>URL</th>
+                <th>Videos</th>
+                <th>Types</th>
+                <th>Actions</th>
+              </tr>
+            <tbody id="poopers-tbody"></tbody>
+          </table>
+        </div>
+        <div id="poopers-scroll-sentinel" style="height: 10px;"></div>
+      </div>
 
       <!-- SECTIONS REMOVED -->
 
@@ -810,8 +885,8 @@
               <select id="upload-lang"
                 style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-top: 0;">
                 <option value="">Unknown</option>
-                <option value="italian">Italian</option>
-                <option value="english">English</option>
+                <option value="it">Italian</option>
+                <option value="en">English</option>
                 <option value="other">Other</option>
               </select>
             </div>
@@ -913,18 +988,59 @@
             <span>Other Videos (other.db)</span>
           </label>
         </div>
+        m
+        <hr style="margin: 15px 0; border: 0; border-top: 1px solid var(--border);">
+        <h4 style="margin-bottom: 10px; font-size: 15px;">Language Filter</h4>
+        <p style="margin-bottom: 12px; font-size: 12px; color: var(--text-muted);">Toggle languages to show or hide
+          videos globally.</p>
+        <div id="languages-list"
+          style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-height: 200px; overflow-y: auto; padding-right: 5px;">
+          <!-- Language checkboxes injected via JS -->
+        </div>
       </div>
       <div class="modal-footer">
-        <button class="btn-cancel" style="margin-right: auto; background: var(--unavailable); color: white;" onclick="forceRefreshDBs()">Force Refresh DBs</button>
+        <button class="btn-cancel" style="margin-right: auto; background: var(--unavailable); color: white;"
+          onclick="forceRefreshDBs()">Force Refresh DBs</button>
         <button class="btn-cancel" onclick="closeSourcesModal()">Cancel</button>
         <button class="btn-submit" onclick="applySources()">Apply & Reload</button>
       </div>
     </div>
   </div>
 
+  <!-- SCRAPE CHANNEL MODAL -->
+  <div id="scrape-modal" class="modal-overlay" style="display:none;">
+    <div class="modal-content" style="width: 500px;">
+      <div class="modal-header">
+        <h3>Add & Scrape Channel</h3>
+        <button onclick="closeScrapeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <label>YouTube Channel URL:</label>
+        <input type="text" id="scrape-channel-url" placeholder="https://youtube.com/@..."
+          style="width: 100%; padding: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; color: var(--text); margin-bottom: 10px;">
+
+        <div id="scrape-progress-container" style="display:none; margin-top: 15px;">
+          <div style="font-size: 13px; font-weight: bold; margin-bottom: 5px;" id="scrape-status-text">Starting
+            scrape...</div>
+          <div
+            style="width: 100%; height: 8px; background: var(--surface2); border-radius: 4px; overflow: hidden; margin-bottom: 10px;">
+            <div id="scrape-progress-bar"
+              style="width: 0%; height: 100%; background: var(--accent); transition: width 0.2s;"></div>
+          </div>
+          <textarea id="scrape-log" readonly
+            style="width: 100%; height: 150px; background: var(--background); border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); font-size: 11px; padding: 8px; font-family: monospace; resize: none;"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" onclick="closeScrapeModal()">Cancel</button>
+        <button class="btn-submit" id="btn-start-scrape" onclick="startScrapeChannel()">Start Scraping</button>
+      </div>
+    </div>
+  </div>
+
   <div id="timeline-tooltip" class="tl-tooltip" style="display:none;"></div>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
-  <script src="script.js"></script>
+  <script type="module" src="script.js"></script>
 </body>
 
 </html>

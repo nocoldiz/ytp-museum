@@ -20,12 +20,13 @@ function run(filename) {
 
 const mode = process.argv[2];
 
-if (mode === 'dashboard') {
-    run('server.js');
-} else if (mode === 'forum') {
+if (mode === 'forum') {
     run('server_forum.js');
-} else {
+} else if (mode === 'full') {
     // Start both
     run('server.js');
     run('server_forum.js');
+} else {
+    // Default: just dashboard
+    run('server.js');
 }

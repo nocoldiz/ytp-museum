@@ -36,7 +36,7 @@ const DB_MANAGER = path.join(__dirname, 'scripts', 'db_manager.py');
 function runDbCommand(command, args) {
   try {
     const argsJson = JSON.stringify(args);
-    const output = execSync(`python "${DB_MANAGER}" "${command}" '${argsJson.replace(/'/g, "'\\''")}'`, { encoding: 'utf8' });
+    const output = execSync(`python3 "${DB_MANAGER}" "${command}" '${argsJson.replace(/'/g, "'\\''")}'`, { encoding: 'utf8' });
     return JSON.parse(output);
   } catch (err) {
     console.error(`DB Command Error (${command}):`, err);
@@ -78,14 +78,14 @@ function onRequest(req, res) {
     return;
   }
 
-  // ── API: Flag as Source ──────────────────────────────────────────────────
-  if (pathname === '/api/flag-source' && req.method === 'POST') {
+  // ── API: Move DB ─────────────────────────────────────────────────────────
+  if (pathname === '/api/move-db' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', () => {
       try {
-        const { videoIds } = JSON.parse(body);
-        const result = runDbCommand('flag-source', { videoIds });
+        const { videoIds, targetDb } = JSON.parse(body);
+        const result = runDbCommand('move-db', { videoIds, targetDb });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(result));
       } catch (err) {
@@ -238,6 +238,67 @@ function onRequest(req, res) {
     });
     return;
   }
+  
+  if (pathname === '/api/remove-channel' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const { channelUrl } = JSON.parse(body);
+        const result = runDbCommand('remove-channel', { channelUrl });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // ── API: Scrape Single Channel ───────────────────────────────────────────
+  if (pathname === '/api/scrape-channel' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const { channelUrl } = JSON.parse(body);
+        if (!channelUrl) throw new Error("channelUrl is required");
+        
+        res.writeHead(200, {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Transfer-Encoding': 'chunked',
+          'Connection': 'keep-alive'
+        });
+        
+        const { spawn } = require('child_process');
+        const scraperPath = path.join(__dirname, 'scripts', 'ytp_scraper.py');
+        const scraper = spawn('python3', [
+          scraperPath,
+          '--scrape-single-channel', channelUrl
+        ]);
+        
+        scraper.stdout.on('data', data => {
+          res.write(data);
+        });
+        
+        scraper.stderr.on('data', data => {
+          res.write(data);
+        });
+        
+        scraper.on('close', code => {
+          res.write(`\n[SCRAPE_END] Process exited with code ${code}\n`);
+          res.end();
+        });
+      } catch (err) {
+        if (!res.headersSent) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      }
+    });
+    return;
+  }
 
   // ── Local video files ─────────────────────────────────────────────────────
   if (pathname.startsWith('/local/')) {
@@ -283,7 +344,7 @@ function onRequest(req, res) {
     // Cache headers for DB files and static assets
     let headers = {
       'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
-      'Cache-Control': 'public, max-age=3600', // 1 hour
+      'Cache-Control': ext === '.js' || ext === '.css' || ext === '.html' ? 'no-cache' : 'public, max-age=3600',
       'Accept-Ranges': 'bytes'
     };
 
@@ -295,7 +356,7 @@ function onRequest(req, res) {
     const acceptEncoding = req.headers['accept-encoding'] || '';
 
     // Compress text and DB files
-    const shouldCompress = ['.html', '.js', '.css', '.json', '.db'].includes(ext);
+    const shouldCompress = ['.html', '.js', '.css', '.json'].includes(ext);
 
     if (shouldCompress && acceptEncoding.includes('gzip')) {
       res.writeHead(200, { ...headers, 'Content-Encoding': 'gzip' });
@@ -308,11 +369,14 @@ function onRequest(req, res) {
     return;
   }
 
-  // SPA Fallback: if not a file, serve index.html
-  const indexFile = path.join(PUBLIC_DIR, 'index.html');
-  if (fs.existsSync(indexFile)) {
-    res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-    return fs.createReadStream(indexFile).pipe(res);
+  // SPA Fallback: if not a file, serve index.html (only for page routes, not assets/DBs)
+  const isAsset = pathname.includes('.') || pathname.startsWith('/db/') || pathname.startsWith('/local/') || pathname.startsWith('/sources/');
+  if (!isAsset) {
+    const indexFile = path.join(PUBLIC_DIR, 'index.html');
+    if (fs.existsSync(indexFile)) {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return fs.createReadStream(indexFile).pipe(res);
+    }
   }
 
   res.writeHead(404);

@@ -8,6 +8,8 @@ SOURCES_DB = 'public/db/other.db'
 POOPERS_DB = 'public/db/ytpoopers.db'
 YTPMV_DB = 'public/db/ytpmv.db'
 COLLABS_DB = 'public/db/collabs.db'
+COMMENTS_DB = 'public/db/comments.db'
+EXCLUDED_JSON = 'scripts/db/excluded_videos.json'
 
 def get_conn(db_type='ytp'):
     path = YTP_DB
@@ -15,7 +17,48 @@ def get_conn(db_type='ytp'):
     elif db_type == 'poopers': path = POOPERS_DB
     elif db_type == 'ytpmv': path = YTPMV_DB
     elif db_type == 'collabs': path = COLLABS_DB
+    elif db_type == 'comments': path = COMMENTS_DB
+    
+    if not os.path.exists(path):
+        # Check for shards
+        part_num = 1
+        parts = []
+        while True:
+            part_name = f"{path}.part{part_num}"
+            if not os.path.exists(part_name): break
+            parts.append(part_name)
+            part_num += 1
+        
+        if parts:
+            print(f"Reconstructing {path} from {len(parts)} shards...", file=sys.stderr)
+            with open(path, 'wb') as output_file:
+                for part_name in parts:
+                    with open(part_name, 'rb') as part_file:
+                        output_file.write(part_file.read())
+    
     return sqlite3.connect(path)
+
+def shard_db(db_type, chunk_size_mb=50):
+    path = YTP_DB
+    if db_type == 'sources': path = SOURCES_DB
+    elif db_type == 'poopers': path = POOPERS_DB
+    elif db_type == 'ytpmv': path = YTPMV_DB
+    elif db_type == 'collabs': path = COLLABS_DB
+    elif db_type == 'comments': path = COMMENTS_DB
+    
+    if not os.path.exists(path): return False
+    
+    chunk_size = chunk_size_mb * 1024 * 1024
+    with open(path, 'rb') as f:
+        part_num = 1
+        while True:
+            chunk = f.read(chunk_size)
+            if not chunk: break
+            part_name = f"{path}.part{part_num}"
+            with open(part_name, 'wb') as part_file:
+                part_file.write(chunk)
+            part_num += 1
+    return True
 
 def find_video_db(vid_id):
     """Checks which DB contains the video and returns (conn, db_type)."""
@@ -52,75 +95,70 @@ def ban_videos(video_ids):
                     print(f"Error removing {abs_path}: {e}", file=sys.stderr)
                     
         cursor.execute("UPDATE videos SET local_file = NULL WHERE id = ?", (vid_id,))
+        
+        # Also remove comments for this video
+        try:
+            c_conn = get_conn('comments')
+            c_cursor = c_conn.cursor()
+            c_cursor.execute("DELETE FROM comments WHERE video_id = ?", (vid_id,))
+            c_conn.commit()
+            c_conn.close()
+        except: pass
+        
         deleted.append(vid_id)
         conn.commit()
         conn.close()
         
     return {"success": True, "results": {"deleted": deleted, "skipped": skipped}}
 
-def flag_as_source(video_ids):
+def move_db(video_ids, target_db):
     moved = []
     skipped = []
     
-    sources_dir = 'sources'
-    if not os.path.exists(sources_dir):
-        os.makedirs(sources_dir)
-        
     for vid_id in video_ids:
-        conn_ytp, db_type = find_video_db(vid_id)
-        if not conn_ytp or db_type == 'sources':
-            if conn_ytp: conn_ytp.close()
+        conn_old, db_old = find_video_db(vid_id)
+        # Handle 'other' mapping to 'sources' in backend context if needed, but the UI might send 'other'
+        t_db = target_db
+        if t_db == 'other': t_db = 'sources'
+        
+        if not conn_old or db_old == t_db:
+            if conn_old: conn_old.close()
             skipped.append(vid_id)
             continue
             
-        # 1. Get data from YTP DB
-        conn_ytp.row_factory = sqlite3.Row
-        cursor_ytp = conn_ytp.cursor()
-        cursor_ytp.execute("SELECT * FROM videos WHERE id = ?", (vid_id,))
-        v_data = dict(cursor_ytp.fetchone())
+        # 1. Get data from old DB
+        conn_old.row_factory = sqlite3.Row
+        cursor_old = conn_old.cursor()
+        cursor_old.execute("SELECT * FROM videos WHERE id = ?", (vid_id,))
+        v_data = dict(cursor_old.fetchone())
         
         # Get tags
-        cursor_ytp.execute("SELECT t.name FROM tags t JOIN video_tags vt ON t.id = vt.tag_id WHERE vt.video_id = ?", (vid_id,))
-        tags = [r[0] for r in cursor_ytp.fetchall()]
+        cursor_old.execute("SELECT t.name FROM tags t JOIN video_tags vt ON t.id = vt.tag_id WHERE vt.video_id = ?", (vid_id,))
+        tags = [r[0] for r in cursor_old.fetchall()]
         
-        # 2. Move local file if needed
-        local_file = v_data['local_file']
-        new_rel_path = local_file
-        if local_file and not local_file.startswith('sources/'):
-            old_path = os.path.join(os.getcwd(), local_file)
-            file_name = os.path.basename(local_file)
-            new_rel_path = f"sources/{file_name}"
-            new_path = os.path.join(os.getcwd(), new_rel_path)
-            if os.path.exists(old_path):
-                try:
-                    os.rename(old_path, new_path)
-                except Exception as e:
-                    print(f"Error moving {old_path}: {e}", file=sys.stderr)
-
-        # 3. Insert into Sources DB
-        conn_sources = get_conn('sources')
-        cursor_sources = conn_sources.cursor()
-        v_data['local_file'] = new_rel_path
+        # 2. Insert into new DB
+        conn_new = get_conn(t_db)
+        cursor_new = conn_new.cursor()
         
         cols = ", ".join(v_data.keys())
         placeholders = ", ".join(["?"] * len(v_data))
-        cursor_sources.execute(f"INSERT OR REPLACE INTO videos ({cols}) VALUES ({placeholders})", tuple(v_data.values()))
+        cursor_new.execute(f"INSERT OR REPLACE INTO videos ({cols}) VALUES ({placeholders})", tuple(v_data.values()))
         
-        # Re-insert tags in other.db
+        # Re-insert tags
         for tag_name in tags:
-            cursor_sources.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag_name,))
-            cursor_sources.execute("SELECT id FROM tags WHERE name = ?", (tag_name,))
-            tag_id = cursor_sources.fetchone()[0]
-            cursor_sources.execute("INSERT OR IGNORE INTO video_tags (video_id, tag_id) VALUES (?, ?)", (vid_id, tag_id))
+            cursor_new.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (tag_name,))
+            cursor_new.execute("SELECT id FROM tags WHERE name = ?", (tag_name,))
+            tag_id = cursor_new.fetchone()[0]
+            cursor_new.execute("INSERT OR IGNORE INTO video_tags (video_id, tag_id) VALUES (?, ?)", (vid_id, tag_id))
             
-        conn_sources.commit()
-        conn_sources.close()
+        conn_new.commit()
+        conn_new.close()
         
-        # 4. Remove from YTP DB
-        cursor_ytp.execute("DELETE FROM videos WHERE id = ?", (vid_id,))
-        cursor_ytp.execute("DELETE FROM video_tags WHERE video_id = ?", (vid_id,))
-        conn_ytp.commit()
-        conn_ytp.close()
+        # 3. Remove from old DB
+        cursor_old.execute("DELETE FROM videos WHERE id = ?", (vid_id,))
+        cursor_old.execute("DELETE FROM video_tags WHERE video_id = ?", (vid_id,))
+        conn_old.commit()
+        conn_old.close()
         
         moved.append(vid_id)
         
@@ -161,6 +199,129 @@ def import_videos(urls, target):
     conn.commit()
     conn.close()
     return {"success": True, "results": {"added": added, "skipped": skipped}}
+
+def remove_channel(channel_url):
+    deleted_videos_count = 0
+    channel_removed = False
+    
+    # Get channel name for matching if needed
+    channel_name = None
+    p_conn = get_conn('poopers')
+    p_cursor = p_conn.cursor()
+    p_cursor.execute("SELECT channel_name FROM channels WHERE channel_url = ?", (channel_url,))
+    row = p_cursor.fetchone()
+    p_conn.close()
+    if row:
+        channel_name = row[0]
+
+    # 1. Handle videos in sources (other.db) ONLY
+    conn = get_conn('sources')
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    
+    cursor.execute("SELECT * FROM videos WHERE channel_url = ?", (channel_url,))
+    videos = [dict(r) for r in cursor.fetchall()]
+    
+    if not videos and channel_name:
+        cursor.execute("SELECT * FROM videos WHERE channel_name = ?", (channel_name,))
+        videos = [dict(r) for r in cursor.fetchall()]
+    
+    if videos:
+        # Load existing excluded videos
+        excluded_data = {}
+        if os.path.exists(EXCLUDED_JSON):
+            try:
+                with open(EXCLUDED_JSON, 'r', encoding='utf-8') as f:
+                    excluded_data = json.load(f)
+            except: pass
+            
+        ytp_conn = get_conn('ytp')
+        ytp_cursor = ytp_conn.cursor()
+        
+        for v in videos:
+            vid_id = v['id']
+            local_file = v.get('local_file')
+            
+            # Add to JSON
+            excluded_data[vid_id] = {
+                "url": v.get('url'),
+                "title": v.get('title'),
+                "description": v.get('description'),
+                "channel_name": v.get('channel_name'),
+                "channel_url": v.get('channel_url'),
+                "publish_date": v.get('publish_date'),
+                "view_count": v.get('view_count'),
+                "like_count": v.get('like_count'),
+                "language": v.get('language'),
+                "status": "excluded",
+                "local_file": None # We are deleting it
+            }
+            
+            # Add to ytp.db excluded_videos table
+            ytp_cursor.execute("INSERT OR IGNORE INTO excluded_videos (id, reason) VALUES (?, ?)", (vid_id, "Channel removed from Poopers"))
+            
+            # Delete local file
+            if local_file:
+                abs_path = os.path.join(os.getcwd(), local_file)
+                if os.path.exists(abs_path):
+                    try: os.remove(abs_path)
+                    except: pass
+            
+            # Delete from sources DB
+            cursor.execute("DELETE FROM videos WHERE id = ?", (vid_id,))
+            cursor.execute("DELETE FROM video_tags WHERE video_id = ?", (vid_id,))
+            
+            # Delete from comments DB
+            try:
+                c_conn = get_conn('comments')
+                c_cursor = c_conn.cursor()
+                c_cursor.execute("DELETE FROM comments WHERE video_id = ?", (vid_id,))
+                c_conn.commit()
+                c_conn.close()
+            except: pass
+            
+            deleted_videos_count += 1
+            
+        # Save JSON
+        try:
+            with open(EXCLUDED_JSON, 'w', encoding='utf-8') as f:
+                json.dump(excluded_data, f, indent=2, ensure_ascii=False)
+        except: pass
+        
+        ytp_conn.commit()
+        ytp_conn.close()
+        conn.commit()
+        
+    conn.close()
+    
+    # 2. Check if channel should be removed from ytpoopers.db
+    # It should be removed ONLY if it has NO videos in ytp.db, ytpmv.db, collabs.db
+    total_remaining = 0
+    for db_type in ['ytp', 'ytpmv', 'collabs']:
+        c = get_conn(db_type)
+        cur = c.cursor()
+        cur.execute("SELECT COUNT(*) FROM videos WHERE channel_url = ?", (channel_url,))
+        count = cur.fetchone()[0]
+        if count == 0 and channel_name:
+            cur.execute("SELECT COUNT(*) FROM videos WHERE channel_name = ?", (channel_name,))
+            count = cur.fetchone()[0]
+        total_remaining += count
+        c.close()
+        
+    if total_remaining == 0:
+        p_conn = get_conn('poopers')
+        p_cursor = p_conn.cursor()
+        p_cursor.execute("DELETE FROM channels WHERE channel_url = ?", (channel_url,))
+        p_conn.commit()
+        p_conn.close()
+        channel_removed = True
+    
+    return {
+        "success": True, 
+        "deletedVideosCount": deleted_videos_count,
+        "channelRemovedFromPoopers": channel_removed,
+        "remainingVideosInCollections": total_remaining
+    }
 
 def set_language(video_ids, language):
     updated = []
@@ -246,8 +407,8 @@ if __name__ == "__main__":
         
         if command == "ban":
             print(json.dumps(ban_videos(args['videoIds'])))
-        elif command == "flag-source":
-            print(json.dumps(flag_as_source(args['videoIds'])))
+        elif command == "move-db":
+            print(json.dumps(move_db(args['videoIds'], args['targetDb'])))
         elif command == "import":
             print(json.dumps(import_videos(args['urls'], args['target'])))
         elif command == "set-lang":
@@ -264,6 +425,8 @@ if __name__ == "__main__":
             print(json.dumps(add_videos_to_playlist(args['playlistId'], args['videoIds'])))
         elif command == "get-playlists":
             print(json.dumps(get_playlists()))
+        elif command == "remove-channel":
+            print(json.dumps(remove_channel(args['channelUrl'])))
         else:
             print(json.dumps({"success": False, "error": f"Unknown command: {command}"}))
     except Exception as e:

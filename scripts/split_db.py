@@ -25,5 +25,28 @@ def split_file(file_path, chunk_size_mb=50):
 
     print("Done.")
 
+def join_files(file_path):
+    part_num = 1
+    parts = []
+    while True:
+        part_name = f"{file_path}.part{part_num}"
+        if not os.path.exists(part_name):
+            break
+        parts.append(part_name)
+        part_num += 1
+    
+    if not parts:
+        return False
+        
+    print(f"Joining {len(parts)} parts into {file_path}...")
+    with open(file_path, 'wb') as output_file:
+        for part_name in parts:
+            with open(part_name, 'rb') as part_file:
+                output_file.write(part_file.read())
+            print(f"  Added {part_name}")
+    
+    print("Done.")
+    return True
+
 if __name__ == "__main__":
     split_file("public/db/ytp.db")
