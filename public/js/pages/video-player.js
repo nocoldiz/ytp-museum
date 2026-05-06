@@ -98,9 +98,10 @@ async function openVideo(vidId, pushToHistory = true) {
     moreContainer.innerHTML = moreVids.map(x => renderVideoItem(x, 'grid')).join('');
   }
   updateSaveButton(vidId);
-  loadVideoResponses(v);
-  loadRelatedVideos(v);
+  loadVideoResponses(video);
+  loadRelatedVideos(video);
   loadComments(vidId);
+  saveToWatched(video);
   return false;
 }
 
@@ -182,19 +183,21 @@ async function loadComments(vidId) {
   container.innerHTML = '<p class="empty" style="padding:10px;">Loading comments...</p>';
 
   try {
-    const comments = queryDB("SELECT * FROM comments WHERE video_id = ?", [vidId]);
+    const comments = queryDB("SELECT * FROM comments WHERE video_id = ? ORDER BY published_at ASC", [vidId], window.dbComments);
     if (!comments || comments.length === 0) {
+      console.log(`No comments found for video ${vidId}`);
       container.innerHTML = '<p class="empty" style="padding:10px;">No comments available.</p>';
-      title.textContent = "Comments";
+      if (title) title.textContent = "Comments";
       return;
     }
 
-    title.textContent = `${fmtNum(comments.length)} Comments`;
+    console.log(`Loaded ${comments.length} comments for video ${vidId}`);
+    if (title) title.textContent = `${fmtNum(comments.length)} Comments`;
     renderCommentTree(comments);
   } catch (e) {
     console.error("Error loading comments:", e);
-    container.innerHTML = '<p class="empty" style="padding:10px;">No comments available for this video.</p>';
-    title.textContent = "Comments";
+    container.innerHTML = '<p class="empty" style="padding:10px;">Error loading comments.</p>';
+    if (title) title.textContent = "Comments";
   }
 }
 

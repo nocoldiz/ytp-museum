@@ -36,6 +36,7 @@ window.getAppRoot = getAppRoot;
 window.dbName = 'YTPArchiveDB';
 window.storeName = 'savedVideos';
 window.playlistStoreName = 'playlists';
+window.watchedStoreName = 'watchedVideos';
 window.idb = undefined; // IndexedDB
 window.dbYTP = undefined;
 window.dbSources = undefined;

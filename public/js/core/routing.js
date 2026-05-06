@@ -189,6 +189,9 @@ function showPage(name, pushToHistory = true) {
   if (name === 'playlists') {
     renderPlaylistsPage();
   }
+  if (name === 'watched') {
+    renderWatchedPage();
+  }
 }
 
 

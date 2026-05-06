@@ -2,7 +2,7 @@
 
 function initIndexedDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(dbName, 2);
+    const request = indexedDB.open(dbName, 3);
     request.onupgradeneeded = (e) => {
       window.idb = e.target.result;
       if (!window.idb.objectStoreNames.contains(storeName)) {
@@ -10,6 +10,9 @@ function initIndexedDB() {
       }
       if (!window.idb.objectStoreNames.contains(playlistStoreName)) {
         window.idb.createObjectStore(playlistStoreName, { keyPath: 'id' });
+      }
+      if (!window.idb.objectStoreNames.contains(watchedStoreName)) {
+        window.idb.createObjectStore(watchedStoreName, { keyPath: 'id' });
       }
     };
     request.onsuccess = (e) => {
@@ -35,6 +38,25 @@ function saveVideoToDB(video) {
   };
 }
 
+function saveToWatched(video) {
+  if (!window.idb) return;
+  const transaction = window.idb.transaction([watchedStoreName], 'readwrite');
+  const store = transaction.objectStore(watchedStoreName);
+  // Add timestamp to preserve order
+  store.put({ ...video, watchedAt: Date.now() });
+}
+
+function clearWatched() {
+  if (!window.idb) return;
+  if (!confirm(t('clear_watched_confirm') || "Are you sure you want to clear your watch history?")) return;
+  const transaction = window.idb.transaction([watchedStoreName], 'readwrite');
+  const store = transaction.objectStore(watchedStoreName);
+  store.clear();
+  transaction.oncomplete = () => {
+    renderWatchedPage();
+  };
+}
+
 function removeVideoFromDB(id) {
   if (!window.idb) return;
   const transaction = window.idb.transaction([storeName], 'readwrite');
@@ -56,6 +78,21 @@ function getSavedVideos() {
     const store = transaction.objectStore(storeName);
     const request = store.getAll();
     request.onsuccess = () => resolve(request.result);
+    request.onerror = () => resolve([]);
+  });
+}
+
+function getWatchedVideos() {
+  return new Promise((resolve) => {
+    if (!window.idb) return resolve([]);
+    const transaction = window.idb.transaction([watchedStoreName], 'readonly');
+    const store = transaction.objectStore(watchedStoreName);
+    const request = store.getAll();
+    request.onsuccess = () => {
+      // Sort by watchedAt descending
+      const res = request.result.sort((a, b) => (b.watchedAt || 0) - (a.watchedAt || 0));
+      resolve(res);
+    };
     request.onerror = () => resolve([]);
   });
 }
@@ -91,9 +128,9 @@ async function updateSaveButton(vidId) {
     if (saved) {
       removeVideoFromDB(vidId);
     } else {
-      const ytData = [...allVideos, ...allSources];
-      const v = ytData.find(x => x.id === vidId);
-      if (v) saveVideoToDB(v);
+      const { video } = findVideoAcrossDBs(vidId);
+      if (video) saveVideoToDB(video);
+      else console.error("Could not find video data to save:", vidId);
     }
   };
 }
@@ -113,13 +150,32 @@ async function renderSavedPage() {
   }
 }
 
+async function renderWatchedPage() {
+  const grid = document.getElementById('watched-videos-grid');
+  const label = document.getElementById('watched-count-label');
+  if (!grid) return;
+
+  const watched = await getWatchedVideos();
+  if (label) label.textContent = `${watched.length} videos in your watch history`;
+
+  if (watched.length === 0) {
+    grid.innerHTML = '<div class="empty" style="grid-column: 1/-1; padding: 40px; text-align: center; color: var(--text-muted);">Your watch history is empty.</div>';
+  } else {
+    grid.innerHTML = watched.map(v => renderVideoItem(v, 'grid')).join('');
+  }
+}
+
 
 // Expose functions to global scope
 window.initIndexedDB = initIndexedDB;
 window.saveVideoToDB = saveVideoToDB;
+window.saveToWatched = saveToWatched;
+window.clearWatched = clearWatched;
 window.removeVideoFromDB = removeVideoFromDB;
 window.getSavedVideos = getSavedVideos;
+window.getWatchedVideos = getWatchedVideos;
 window.isVideoSaved = isVideoSaved;
 window.updateSavedBadge = updateSavedBadge;
 window.updateSaveButton = updateSaveButton;
 window.renderSavedPage = renderSavedPage;
+window.renderWatchedPage = renderWatchedPage;

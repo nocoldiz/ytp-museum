@@ -153,6 +153,11 @@
     display: block;
   }
 
+  body.is-loading #masthead-search,
+  body.is-loading #masthead-utility {
+    visibility: hidden;
+  }
+
   /* MASTHEAD & YOUTUBE LAYOUT */
   #baseDiv {
     max-width: 1400px;

@@ -85,18 +85,22 @@ async function fetchAndCache(name) {
   try {
     let response = await fetch(mainUrl);
     
-    // If main file not found, try sharded parts
-    if (!response.ok && response.status === 404) {
-      console.log(`Main file ${name} not found, checking for shards...`);
+    if (!response.ok) {
+      console.log(`Main file ${name} not found or error (${response.status}), checking for shards...`);
       let parts = [];
       let partNum = 1;
       while (true) {
-        const partName = `${name}.part${partNum}`;
-        const partUrl = getUrl(partName);
-        const partRes = await fetch(partUrl);
+        // Try both conventions: .db.part1 and .part1.db
+        let partRes = await fetch(getUrl(`${name}.part${partNum}`));
+        if (!partRes.ok) {
+          // Fallback to name.part1.db if name was comments.db
+          const altName = name.replace('.db', '') + `.part${partNum}.db`;
+          partRes = await fetch(getUrl(altName));
+        }
+
         if (!partRes.ok) break;
         
-        console.log(`Fetching shard: ${partName}`);
+        console.log(`Fetching shard: ${name} part ${partNum}`);
         parts.push(await partRes.arrayBuffer());
         partNum++;
       }
@@ -110,6 +114,12 @@ async function fetchAndCache(name) {
           offset += p.byteLength;
         }
         
+        // Validate combined buffer
+        const header = new TextDecoder().decode(combined.slice(0, 15));
+        if (header !== "SQLite format 3") {
+          throw new Error(`Combined shards for ${name} do not form a valid SQLite database.`);
+        }
+
         if (shouldCache()) {
           await saveStoredDB(name, combined.buffer);
           console.log(`Successfully cached sharded ${name} (${parts.length} parts)`);
@@ -117,27 +127,23 @@ async function fetchAndCache(name) {
         return combined.buffer;
       }
       
-      // If no parts found either, trigger the 404 cache clear
-      console.warn(`Critical 404 error fetching ${mainUrl}. Clearing local cache...`);
-      await clearIndexedDBCache();
-      throw new Error(`Failed to fetch ${mainUrl} or shards: ${response.status}`);
+      throw new Error(`Failed to fetch ${mainUrl} or shards. Status: ${response.status}`);
     }
-
-    if (!response.ok) throw new Error(`Failed to fetch ${mainUrl}: ${response.status}`);
     
     const buffer = await response.arrayBuffer();
     
-    // Validate before saving
+    // Validate before saving/returning
     const header = new TextDecoder().decode(new Uint8Array(buffer).slice(0, 15));
     if (header === "SQLite format 3") {
       if (shouldCache()) {
         await saveStoredDB(name, buffer);
         console.log(`Successfully cached ${name} from ${mainUrl}`);
       }
+      return buffer;
     } else {
-      console.error(`Fetched ${mainUrl} is not a valid SQLite database (Header: "${header.substring(0, 20)}"), skipping cache.`);
+      console.error(`Fetched ${mainUrl} is not a valid SQLite database (Header: "${header.substring(0, 20)}")`);
+      throw new Error(`Invalid SQLite database header for ${name}`);
     }
-    return buffer;
   } catch (e) {
     console.error(`Fetch/Cache failed for ${name}:`, e);
     throw e;

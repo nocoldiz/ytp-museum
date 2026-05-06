@@ -39,6 +39,10 @@ function initApp() {
   syncSearchLayout();
   initI18n();
 
+  const searchInput = document.getElementById('global-search-input');
+  if (searchInput) searchInput.disabled = false;
+
+  document.body.classList.remove('is-loading');
   document.getElementById('app').style.display = 'block';
 
   // Hide all loaders
