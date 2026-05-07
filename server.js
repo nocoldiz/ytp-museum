@@ -199,6 +199,27 @@ function onRequest(req, res) {
     return;
   }
 
+  if (pathname === '/api/databases' && req.method === 'GET') {
+    const dbDir = fs.existsSync(DB_DIR) ? DB_DIR : path.join(PUBLIC_DIR, 'db');
+    try {
+      const files = fs.readdirSync(dbDir);
+      const databases = new Set();
+      files.forEach(f => {
+        if (f.endsWith('.db')) {
+          databases.add(f);
+        } else if (f.includes('.db.part')) {
+          databases.add(f.split('.db.part')[0] + '.db');
+        }
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(Array.from(databases)));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: err.message }));
+    }
+    return;
+  }
+
   if (pathname === '/api/home-lite' && req.method === 'GET') {
     const result = runDbCommand('get-home-lite', {});
     res.writeHead(200, { 'Content-Type': 'application/json' });

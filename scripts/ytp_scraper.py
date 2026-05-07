@@ -1063,6 +1063,41 @@ class VideoIndex:
                 shutil.copy2(path, path + ".bak")
                 print(f"    - {os.path.basename(path)} -> .bak", flush=True)
 
+    def split_large_databases(self):
+        print("\n  [Split] Checking for large databases to split (>90MB)...", flush=True)
+        paths = [
+            self.ytp_db_path, self.other_db_path, self.poopers_db_path,
+            self.ytpmv_db_path, self.collabs_db_path, self.comments_db_path
+        ]
+        # Also check for any other .db files in the public/db directory
+        db_dir = os.path.join(PROJECT_ROOT, "public", "db")
+        if os.path.exists(db_dir):
+            for f in os.listdir(db_dir):
+                if f.endswith(".db"):
+                    p = os.path.join(db_dir, f)
+                    if p not in paths:
+                        paths.append(p)
+
+        for path in paths:
+            if os.path.exists(path):
+                size_mb = os.path.getsize(path) / (1024 * 1024)
+                if size_mb > 90:
+                    print(f"    - {os.path.basename(path)} is {size_mb:.1f}MB, splitting...", flush=True)
+                    split_file(path, chunk_size_mb=90)
+                else:
+                    # Clean up old parts if they exist and the file is now under the limit
+                    part1 = path + ".part1"
+                    if os.path.exists(part1):
+                        print(f"    - {os.path.basename(path)} is small ({size_mb:.1f}MB), removing old shards...", flush=True)
+                        part_num = 1
+                        while True:
+                            p_name = f"{path}.part{part_num}"
+                            if os.path.exists(p_name):
+                                os.remove(p_name)
+                                part_num += 1
+                            else:
+                                break
+
     def get_conn(self, db_type='ytp'):
         path = self.ytp_db_path
         if db_type == 'other': path = self.other_db_path
@@ -5038,6 +5073,7 @@ def main():
         do_update_ytdlp()
         return
 
+    index.split_large_databases()
     print()
 
 

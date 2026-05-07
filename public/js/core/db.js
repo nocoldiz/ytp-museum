@@ -188,6 +188,7 @@ async function forceRefreshDBs() {
 }
 
 let SQL_INSTANCE = null;
+window.loadedDatabases = {}; // Map of filename -> SQL.Database
 
 async function initSQLite() {
   const config = {
@@ -196,74 +197,92 @@ async function initSQLite() {
   const SQL = await initSqlJs(config);
   SQL_INSTANCE = SQL;
 
-  console.log("Loading databases...");
-  
-  // Load Poopers (channels) - relatively small (3.5MB)
-  const poopersPromise = loadDB('ytpoopers.db', SQL).then(db => {
-    window.dbPoopers = db;
-    if (db) applyLanguageFilters(db);
-    return db;
-  });
-
-  // Background load for heavy databases
-  const ytpPromise = window.enabledSources.ytp ? loadDB('ytp.db', SQL) : Promise.resolve(null);
-
-  ytpPromise.then(db => {
-    window.dbYTP = db;
-    window.sqlDB = db;
-    if (db) applyLanguageFilters(db);
-    console.log("Main YTP database loaded.");
-    if (window.updateBadges) window.updateBadges();
-    
-    // If we are in a section that needs the full DB, refresh it
-    if (window.handleRouting) {
-      console.log("Refreshing view after DB load...");
-      handleRouting();
+  console.log("Discovering databases...");
+  try {
+    const res = await fetch('/api/databases');
+    if (res.ok) {
+      const dbList = await res.json();
+      window.availableDatabases = dbList;
+      
+      // Update enabledSources with any newly discovered databases
+      let changed = false;
+      dbList.forEach(dbFile => {
+        if (window.enabledSources[dbFile] === undefined) {
+          // Default to true for new databases except maybe "other" or "comments"
+          window.enabledSources[dbFile] = !['other.db', 'comments.db'].includes(dbFile);
+          changed = true;
+        }
+      });
+      if (changed) {
+        localStorage.setItem('ytp-enabled-sources', JSON.stringify(window.enabledSources));
+      }
     }
-  });
-
-  // We wait for Poopers because it's essential for channel info/avatars
-  await poopersPromise;
-
-  // Lazy load extra databases in background based on enabled state
-
-  // Lazy load extra databases in background based on enabled state
-  if (window.enabledSources.other && !window.dbSources) {
-    loadDB('other.db', SQL).then(db => {
-      window.dbSources = db;
-      if (db) applyLanguageFilters(db);
-      console.log("Other database loaded in background.");
-      const sources = queryDB("SELECT DISTINCT channel_name FROM videos", [], window.dbSources);
-      window.sourceChannels = new Set(sources.map(s => s.channel_name));
-      window.updateBadges();
-    });
+  } catch (e) {
+    console.warn("Failed to fetch database list, using defaults.", e);
+    window.availableDatabases = Object.keys(window.enabledSources);
   }
+
+  console.log("Loading databases...", window.enabledSources);
   
-  if (window.enabledSources.ytpmv && !window.dbYTPMV) {
-    loadDB('ytpmv.db', SQL).then(db => {
-      window.dbYTPMV = db;
+  const DB_VAR_MAP = {
+    'ytp.db': 'dbYTP',
+    'other.db': 'dbSources',
+    'ytpmv.db': 'dbYTPMV',
+    'collabs.db': 'dbCollabs',
+    'comments.db': 'dbComments',
+    'ytpoopers.db': 'dbPoopers'
+  };
+
+  const loadPromises = [];
+
+  // Always load ytpoopers.db if it exists, as it's essential
+  if (window.availableDatabases.includes('ytpoopers.db')) {
+    const p = loadDB('ytpoopers.db', SQL).then(db => {
+      window.dbPoopers = db;
+      window.loadedDatabases['ytpoopers.db'] = db;
       if (db) applyLanguageFilters(db);
-      console.log("YTPMV database loaded in background.");
-      if (window.updateBadges) window.updateBadges();
+      return db;
     });
-  }
-  
-  if (window.enabledSources.collabs && !window.dbCollabs) {
-    loadDB('collabs.db', SQL).then(db => {
-      window.dbCollabs = db;
-      if (db) applyLanguageFilters(db);
-      console.log("Collabs database loaded in background.");
-      if (window.updateBadges) window.updateBadges();
-    });
+    loadPromises.push(p);
+    // Wait for poopers because it's essential
+    await p;
   }
 
-  console.log("SQLite initialization completed (respecting source filters).");
+  // Load other enabled databases
+  for (const dbFile of window.availableDatabases) {
+    if (dbFile === 'ytpoopers.db') continue;
+    if (window.enabledSources[dbFile]) {
+      const p = loadDB(dbFile, SQL).then(db => {
+        window.loadedDatabases[dbFile] = db;
+        const varName = DB_VAR_MAP[dbFile];
+        if (varName) window[varName] = db;
+        
+        if (dbFile === 'ytp.db') {
+          window.sqlDB = db;
+          console.log("Main YTP database loaded.");
+        }
+        
+        if (db) applyLanguageFilters(db);
+        
+        if (window.updateBadges) window.updateBadges();
+        
+        if (dbFile === 'other.db') {
+          const sources = queryDB("SELECT DISTINCT channel_name FROM videos", [], db);
+          window.sourceChannels = new Set(sources.map(s => s.channel_name));
+        }
 
-  // Apply global filters to all initial databases
-  [window.dbYTP, window.dbPoopers, window.dbComments].forEach(db => {
-    if (db) applyLanguageFilters(db);
-  });
+        // Refresh routing if essential DBs are loaded
+        if (['ytp.db', 'other.db', 'ytpmv.db', 'collabs.db'].includes(dbFile)) {
+           if (window.handleRouting) window.handleRouting();
+        }
 
+        return db;
+      }).catch(err => console.error(`Failed to load ${dbFile}:`, err));
+      loadPromises.push(p);
+    }
+  }
+
+  console.log("SQLite initialization completed.");
   return window.sqlDB;
 }
 
@@ -272,12 +291,29 @@ function openSourcesModal() {
   if (!modal) return;
   modal.style.display = 'flex';
   
-  // Sync checkboxes with state
-  const ids = ['ytp', 'ytpmv', 'collabs', 'other', 'comments'];
-  ids.forEach(id => {
-    const cb = document.getElementById(`source-${id}`);
-    if (cb) cb.checked = window.enabledSources[id];
-  });
+  // Dynamic sources list
+  const sourcesList = document.getElementById('sources-list');
+  if (sourcesList) {
+    const dbs = window.availableDatabases || Object.keys(window.enabledSources);
+    // Sort so ytp.db is first
+    const sortedDbs = [...dbs].sort((a, b) => {
+      if (a === 'ytp.db') return -1;
+      if (b === 'ytp.db') return 1;
+      return a.localeCompare(b);
+    });
+
+    sourcesList.innerHTML = sortedDbs.map(dbFile => {
+      if (dbFile === 'ytpoopers.db') return ''; // Essential, don't show toggle
+      const isEnabled = window.enabledSources[dbFile];
+      const displayName = dbFile.replace('.db', '').toUpperCase();
+      return `
+        <label style="display: flex; align-items: center; gap: 10px; cursor: pointer; font-size: 14px; font-weight: bold;">
+          <input type="checkbox" class="source-check" data-file="${dbFile}" ${isEnabled ? 'checked' : ''} onchange="toggleSourceState('${dbFile}')">
+          <span>${displayName} (${dbFile})</span>
+        </label>
+      `;
+    }).join('');
+  }
 
   // Populate and sync languages
   const langList = document.getElementById('languages-list');
@@ -296,39 +332,31 @@ function closeSourcesModal() {
   if (modal) modal.style.display = 'none';
 }
 
-function toggleSourceState(key) {
-  const cb = document.getElementById(`source-${key}`);
-  if (cb) {
-    window.enabledSources[key] = cb.checked;
-    localStorage.setItem('ytp-enabled-sources', JSON.stringify(window.enabledSources));
-  }
-}
-
-function toggleLanguageState(id) {
-  const checks = document.querySelectorAll('.lang-check');
-  const enabled = [];
+function toggleSourceState(dbFile) {
+  const checks = document.querySelectorAll('.source-check');
   checks.forEach(c => {
-    if (c.checked) enabled.push(c.getAttribute('data-id'));
+    if (c.getAttribute('data-file') === dbFile) {
+      window.enabledSources[dbFile] = c.checked;
+    }
   });
-  window.enabledLanguages = enabled;
-  localStorage.setItem('ytp-enabled-languages', JSON.stringify(enabled));
+  localStorage.setItem('ytp-enabled-sources', JSON.stringify(window.enabledSources));
 }
 
 function applySources() {
-  const ids = ['ytp', 'ytpmv', 'collabs', 'other', 'comments'];
-  ids.forEach(id => {
-    const cb = document.getElementById(`source-${id}`);
-    if (cb) window.enabledSources[id] = cb.checked;
+  const checks = document.querySelectorAll('.source-check');
+  checks.forEach(c => {
+    const dbFile = c.getAttribute('data-file');
+    window.enabledSources[dbFile] = c.checked;
   });
   localStorage.setItem('ytp-enabled-sources', JSON.stringify(window.enabledSources));
 
-  const checks = document.querySelectorAll('.lang-check');
-  const enabled = [];
-  checks.forEach(c => {
-    if (c.checked) enabled.push(c.getAttribute('data-id'));
+  const langChecks = document.querySelectorAll('.lang-check');
+  const enabledLangs = [];
+  langChecks.forEach(c => {
+    if (c.checked) enabledLangs.push(c.getAttribute('data-id'));
   });
-  window.enabledLanguages = enabled;
-  localStorage.setItem('ytp-enabled-languages', JSON.stringify(enabled));
+  window.enabledLanguages = enabledLangs;
+  localStorage.setItem('ytp-enabled-languages', JSON.stringify(enabledLangs));
   
   location.reload();
 }
@@ -375,6 +403,16 @@ function applyLanguageFilters(db) {
   applyView('channels');
 }
 
+function toggleLanguageState(id) {
+  const checks = document.querySelectorAll('.lang-check');
+  const enabled = [];
+  checks.forEach(c => {
+    if (c.checked) enabled.push(c.getAttribute('data-id'));
+  });
+  window.enabledLanguages = enabled;
+  localStorage.setItem('ytp-enabled-languages', JSON.stringify(enabled));
+}
+
 function queryDB(sql, params = [], targetDB = null) {
   let db = targetDB;
 
@@ -415,12 +453,23 @@ function queryDB(sql, params = [], targetDB = null) {
 }
 
 function findVideoAcrossDBs(vidId) {
-  const dbs = [window.dbYTP, window.dbSources, window.dbYTPMV, window.dbCollabs];
-  for (const db of dbs) {
+  // Check standard ones first for speed
+  const priorityOrder = ['ytp.db', 'other.db', 'ytpmv.db', 'collabs.db'];
+  for (const dbFile of priorityOrder) {
+    const db = window.loadedDatabases[dbFile];
     if (!db) continue;
     const res = queryDB("SELECT * FROM videos WHERE id = ?", [vidId], db);
     if (res.length > 0) return { video: res[0], db };
   }
+
+  // Check others
+  for (const dbFile in window.loadedDatabases) {
+    if (priorityOrder.includes(dbFile)) continue;
+    const db = window.loadedDatabases[dbFile];
+    const res = queryDB("SELECT * FROM videos WHERE id = ?", [vidId], db);
+    if (res.length > 0) return { video: res[0], db };
+  }
+
   return { video: null, db: null };
 }
 

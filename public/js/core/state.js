@@ -18,11 +18,11 @@ window.isFetchingMoreHome = false;
 window.currentModernTab = 'all';
 window.homeTabCache = {};
 window.enabledSources = JSON.parse(localStorage.getItem('ytp-enabled-sources')) || {
-  ytp: true,
-  ytpmv: true,
-  collabs: true,
-  other: false,
-  comments: false
+  'ytp.db': true,
+  'ytpmv.db': true,
+  'collabs.db': true,
+  'other.db': false,
+  'comments.db': false
 };
 window.enabledLanguages = JSON.parse(localStorage.getItem('ytp-enabled-languages')) || ['it', 'en', 'es', 'de', 'fr', 'ru', 'pt', 'br', 'none'];
 window.playbackMode = localStorage.getItem('ytp-playback-mode') || 'youtube';
