@@ -1045,6 +1045,7 @@ class VideoIndex:
         
         # ── Backup Databases ──────────────────────────────────────────────────
         self.backup_databases()
+        self.split_large_databases()
         
         # Load excluded channels and download cache before other operations
         self.excluded_channels = load_excluded_channels()
@@ -1064,7 +1065,7 @@ class VideoIndex:
                 print(f"    - {os.path.basename(path)} -> .bak", flush=True)
 
     def split_large_databases(self):
-        print("\n  [Split] Checking for large databases to split (>90MB)...", flush=True)
+        print("\n  [Split] Checking for large databases to split (>50MB)...", flush=True)
         paths = [
             self.ytp_db_path, self.other_db_path, self.poopers_db_path,
             self.ytpmv_db_path, self.collabs_db_path, self.comments_db_path
@@ -1081,9 +1082,9 @@ class VideoIndex:
         for path in paths:
             if os.path.exists(path):
                 size_mb = os.path.getsize(path) / (1024 * 1024)
-                if size_mb > 90:
+                if size_mb > 50:
                     print(f"    - {os.path.basename(path)} is {size_mb:.1f}MB, splitting...", flush=True)
-                    split_file(path, chunk_size_mb=90)
+                    split_file(path, chunk_size_mb=50)
                 else:
                     # Clean up old parts if they exist and the file is now under the limit
                     part1 = path + ".part1"
@@ -2841,12 +2842,23 @@ def do_scrape_channels(index, ignore_other=False, custom_channels=None):
 def do_scrape_single_channel(index, ch_url, docs_dir, video_dir):
     print(f"\n--- Scraping Single Channel: {ch_url} ---")
     
+    norm_ch_url = normalize_channel_url(ch_url)
+    if not norm_ch_url:
+        print(f"  [!] Invalid channel URL: {ch_url}")
+        return
+
     # Check ytpoopers.db
     conn = index.get_conn('poopers')
     c = conn.cursor()
-    c.execute("SELECT channel_url FROM channels WHERE channel_url = ?", (ch_url,))
-    row = c.fetchone()
-    if not row:
+    c.execute("SELECT channel_url FROM channels")
+    rows = c.fetchall()
+    matched = False
+    for row in rows:
+        if normalize_channel_url(row[0]) == norm_ch_url:
+            matched = True
+            break
+            
+    if not matched:
         print(f"  Adding {ch_url} to ytpoopers.db...")
         c.execute("INSERT INTO channels (channel_url) VALUES (?)", (ch_url,))
         conn.commit()
@@ -2868,6 +2880,8 @@ def do_scrape_single_channel(index, ch_url, docs_dir, video_dir):
         del index.data['temp_vid_for_channel']
 
     print("\n  [3/3] Fetching latest metadata...")
+    do_update_index(index, custom_channels=[ch_url])
+    do_scrape_sources_metadata(index, custom_channels=[ch_url])
     print("  (Comments scraping omitted to save time; run global comment scrape if needed)")
 
     print("\n--- Single Channel Scraping Complete ---")
@@ -3996,6 +4010,7 @@ def do_scrape_profiles(index, docs_dir, specific_channels=None):
 
     thumb_dir = os.path.join(docs_dir, "profile_thumbnails")
     os.makedirs(thumb_dir, exist_ok=True)
+    output_path = os.path.join(docs_dir, "ytpoopers_index.json")
 
     total = len(channel_map)
     print(f"  Found {total} unique channel(s) to scrape.")
@@ -4866,7 +4881,8 @@ def main():
         print("\nSelect Channel Filter:")
         print("1. All Indexed Channels")
         print("2. Selected Channels (from selected_channels.txt)")
-        chan_sub = ask("Choice [1-2]: ", {"1", "2"})
+        print("3. Single Channel URL (Scrape & Download)")
+        chan_sub = ask("Choice [1-3]: ", {"1", "2", "3"})
         
         selected_chans = None
         if chan_sub == "2":
@@ -4875,6 +4891,23 @@ def main():
                 print("  [!] Selected channels list is empty or file not found. Aborting.")
                 print()
                 return
+        elif chan_sub == "3":
+            ch_url = input("  Paste Channel URL: ").strip()
+            if not ch_url:
+                print("  [!] Invalid URL.")
+                print()
+                return
+            
+            norm_ch_url = normalize_channel_url(ch_url)
+            if not norm_ch_url:
+                print("  [!] Invalid URL format.")
+                print()
+                return
+            
+            do_scrape_single_channel(index, norm_ch_url, args.public_dir, args.video_dir)
+            selected_chans = [norm_ch_url]
+            # Force full download (YTP + Sources) for single channel mode
+            sub = "1"
 
         should_convert = ask_conversion()
         if sub in ("1", "2"):

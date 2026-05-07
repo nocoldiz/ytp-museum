@@ -8,3 +8,4 @@ __pycache__
 quickstart.md
 db (un'altra copia)/
 docs
+/node_modules
