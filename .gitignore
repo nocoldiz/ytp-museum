@@ -9,3 +9,6 @@ quickstart.md
 db (un'altra copia)/
 docs
 /node_modules
+public/db/other.db
+public/db/ytp.db
+ìpublic/db/comments.db
