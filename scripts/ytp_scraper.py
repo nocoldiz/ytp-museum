@@ -1080,6 +1080,11 @@ class VideoIndex:
                         paths.append(p)
 
         for path in paths:
+            # Reconstruct if missing but shards exist
+            if not os.path.exists(path):
+                if join_files(path):
+                    print(f"    - {os.path.basename(path)} reconstructed from shards.", flush=True)
+
             if os.path.exists(path):
                 size_mb = os.path.getsize(path) / (1024 * 1024)
                 if size_mb > 50:
@@ -4694,420 +4699,424 @@ def main():
         print(f"[!] site_dir not found: {args.site_dir}")
         sys.exit(1)
 
-    if args.stats or args.chronology or args.dump_poopers or args.find_mirrors or args.scrape_comments or args.scrape_profiles or args.download_italian or args.forum_scrape or args.resort or args.cleanup_other_db or args.scrape_single_channel:
+    index = VideoIndex(args.video_dir, args.docs_dir)
+    
+    try:
+        if args.stats or args.chronology or args.dump_poopers or args.find_mirrors or args.scrape_comments or args.scrape_profiles or args.download_italian or args.forum_scrape or args.resort or args.cleanup_other_db or args.scrape_single_channel:
+            index.load()
+            if args.stats:
+                do_stats(index)
+                index.cleanup_index()
+            if args.chronology:
+                do_chronology(index)
+            if args.find_mirrors:
+                do_find_mirrors(index)
+            if args.scrape_comments:
+                do_scrape_comments(index, args.public_dir)
+            if args.scrape_profiles:
+                do_scrape_profiles(index, args.public_dir)
+            if args.download_italian:
+                selected_list = get_channels_by_language(index, "it")
+                do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, selected_list, "it", year_limit=args.year_limit, skip_scan=False)
+            if args.forum_scrape:
+                do_forum_scrape(index, args.site_dir)
+            if args.resort:
+                print("\n>>> Launching Resort Videos (CLI)...")
+                index.resort_videos()
+            if args.cleanup_other_db:
+                do_cleanup_other_db(index)
+            if args.scrape_single_channel:
+                do_scrape_single_channel(index, args.scrape_single_channel, args.public_dir, args.video_dir)
+            
+            # No migration needed for SQL version
+            pass
+                
+            return
+
+        print_header()
+        print(f"  Site dir:  {os.path.abspath(args.site_dir)}")
+        print(f"  Video dir: {os.path.abspath(args.video_dir)}")
+        print(f"  Docs dir:  {os.path.abspath(args.docs_dir)}")
+        print(f"  Sections:  {', '.join(SCAN_SECTIONS)}")
+        print(f"  yt-dlp:    {YTDLP_BIN}")
+        
+        # Check yt-dlp version
+        try:
+            r = subprocess.run([YTDLP_BIN, "--version"], capture_output=True, text=True)
+            if r.returncode == 0:
+                v_str = r.stdout.strip()
+                print(f"  Version:   {v_str}")
+                if any(y in v_str for y in ["2023", "2024", "2025"]):
+                     print(f"\n  [!] WARNING: Your yt-dlp version is likely outdated for 2026.")
+                     print("      If downloads fail, use option 'u' to update it locally.")
+        except:
+            pass
+        print()
+        print("  What do you want to do?")
+        print()
+        print("  1  Fetch missing metadata")
+        print("       Update titles, descriptions, and channel info for indexed videos.")
+        print()
+        print("  2  Download indexed videos")
+        print("       Download pending video files for both YTP and Sources.")
+        print()
+        print("  3  Scrape channels (Discover New)")
+        print("       Scan registered or selected channels for new content.")
+        print()
+        print("  4  Language-Specific Download")
+        print("       Batch download videos for a specific language (e.g. Italian).")
+        print()
+        print("  5  Find Mirror Videos")
+        print("       Search for reuploads of unavailable or deleted videos.")
+        print()
+        print("  6  Scrape Comments")
+        print("       Archival: Fetch and save YouTube comments for indexed sources.")
+        print()
+        print("  7  Scrape Profiles & Thumbnails")
+        print("       Download channel avatars and update the Pooper registry.")
+        print()
+        print("  8  Auto Language Tagger")
+        print("       Automatically assign languages (ITA, ENG, etc.) to videos.")
+        print()
+        print("  9  Generate Stats  →  stats.md")
+        print("       Collection breakdown: total videos, channels, and active creators.")
+        print()
+        print("  10 Custom YouTube Search")
+        print("       Search for specific terms or YTP acronyms to expand the collection.")
+        print()
+        print("  11 Deep Keyword Discovery (Combinations)")
+        print("       Exhaustive scan: Search every combination of YTP + Meme keywords.")
+        print()
+        print("  12 Cleanup Orphaned Channels")
+        print("       Remove channels from other.db and ytpoopers.db that have no videos in main databases.")
+        print()
+        print("  13 Random Video Search")
+        print("       Pick random videos from the collection and search for similar content.")
+        print()
+        print("  14 Channel Video Report")
+        print("       Generate a full report of videos per channel (alphabetical).")
+        print()
+        print("  15 Download YTP/Collabs/YTPMV (Selected Channels Only)")
+        print("       Targeted download: Only fetch videos from your selected_channels.txt.")
+        print()
+        print("  f  Forum Scrape (Site Mirror)")
+        print("       Crawl archived forum folders to extract legacy YouTube links.")
+        print()
+        print("  r  Resort Videos")
+        print("       Re-scan all indices and sort videos by keywords.")
+        print()
+        print("  s  Full Scrape Run (Standard Cycle)")
+        print("       Discovery: Scrape channels -> Metadata -> Profiles -> Comments.")
+        print()
+        print("  x  Full Scrape Run (Ignore Sources)")
+        print("       Discovery: Scrape channels (ignore sources) -> Metadata (YTP only) -> Profiles.")
+        print()
+        print("  d  Full Download (Parallel Processing)")
+        print("       Parallel: Italian YTPs, comments, and video compression.")
+        print()
+        print("  p  Internal Parallel Download & Compression")
+        print("       Use ThreadPoolExecutor for fast downloads + automatic compression.")
+        print()
+        print("  a  Full Automation (Scrape + Download)")
+        print("       The works: Run Full Scrape Cycle followed by Full Download.")
+        print()
+        print("  u  Update yt-dlp")
+        print("       Download the latest version of yt-dlp to scripts/ folder.")
+        print()
+        print("  q  Quit")
+        print()
+        choice = ask("  Choice [1-15/u/f/r/s/x/d/p/a/q]: ",
+                     {"1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","u","f","r","s","x","d","p","a","q"})
+    
+        if choice == "q":
+            sys.exit(0)
+    
+        print()
+    
         index = VideoIndex(args.video_dir, args.docs_dir)
         index.load()
-        if args.stats:
+    
+        if choice == "1":
+            print("\nSelect what metadata to fetch:")
+            print("1. All (YTP & Sources)")
+            print("2. Only YTP metadata")
+            print("3. Only sources metadata")
+            sub = ask("Choice [1-3]: ", {"1", "2", "3"})
+            
+            print("\nSelect Language Filter:")
+            print("0. All Languages")
+            print("1. Italian")
+            print("2. English")
+            print("3. Spanish")
+            print("4. German")
+            print("5. French")
+            print("6. Russian")
+            print("7. Portuguese (BR)")
+            lang_sub = ask("Language Choice [0-7]: ", {"0", "1", "2", "3", "4", "5", "6", "7"})
+            
+            lang_map = {
+                "1": "it", "2": "en", "3": "es", "4": "de", 
+                "5": "fr", "6": "ru", "7": "br"
+            }
+            target_lang = lang_map.get(lang_sub) # None if "0"
+    
+            print("\nSelect Channel Filter:")
+            print("1. All Indexed Channels")
+            print("2. Selected Channels (from selected_channels.txt)")
+            chan_sub = ask("Choice [1-2]: ", {"1", "2"})
+            
+            selected_chans = None
+            if chan_sub == "2":
+                selected_chans = get_selected_channels()
+                if not selected_chans:
+                    print("  [!] Selected channels list is empty or file not found. Aborting.")
+                    print()
+                    return
+            
+            if sub in ("1", "2"):
+                do_update_index(index, language=target_lang, custom_channels=selected_chans)
+            if sub in ("1", "3"):
+                do_scrape_sources_metadata(index, language=target_lang, custom_channels=selected_chans)
+            print()
+        if choice == "2":
+            print("\nSelect what to download:")
+            print("1. All (YTP & Sources)")
+            print("2. Only YTP videos")
+            print("3. Only sources videos")
+            sub = ask("Choice [1-3]: ", {"1", "2", "3"})
+    
+            print("\nSelect Channel Filter:")
+            print("1. All Indexed Channels")
+            print("2. Selected Channels (from selected_channels.txt)")
+            print("3. Single Channel URL (Scrape & Download)")
+            chan_sub = ask("Choice [1-3]: ", {"1", "2", "3"})
+            
+            selected_chans = None
+            if chan_sub == "2":
+                selected_chans = get_selected_channels()
+                if not selected_chans:
+                    print("  [!] Selected channels list is empty or file not found. Aborting.")
+                    print()
+                    return
+            elif chan_sub == "3":
+                ch_url = input("  Paste Channel URL: ").strip()
+                if not ch_url:
+                    print("  [!] Invalid URL.")
+                    print()
+                    return
+                
+                norm_ch_url = normalize_channel_url(ch_url)
+                if not norm_ch_url:
+                    print("  [!] Invalid URL format.")
+                    print()
+                    return
+                
+                do_scrape_single_channel(index, norm_ch_url, args.public_dir, args.video_dir)
+                selected_chans = [norm_ch_url]
+                # Force full download (YTP + Sources) for single channel mode
+                sub = "1"
+    
+            should_convert = ask_conversion()
+            if sub in ("1", "2"):
+                do_download(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, custom_channels=selected_chans, should_convert=should_convert)
+            if sub in ("1", "3"):
+                do_download_other(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, custom_channels=selected_chans, should_convert=should_convert)
+            print()
+        if choice == "3":
+            print("\nSelect Scraping Mode:")
+            print("1. All Registered Channels (Discover New)")
+            print("2. Selected Channels (from selected_channels.txt)")
+            scrape_sub = ask("Choice [1-2]: ", {"1", "2"})
+            
+            if scrape_sub == "1":
+                do_scrape_channels(index)
+            else:
+                selected = get_selected_channels()
+                if selected:
+                    do_scrape_channels(index, custom_channels=selected)
+            print()
+        if choice == "4":
+            print("\nSelect Language:")
+            print("1. Italian")
+            print("2. English")
+            print("3. Spanish")
+            print("4. German")
+            print("5. French")
+            print("6. Russian")
+            print("7. Restricted Italian (Strict Keywords)")
+            lang_choice = input("Language Choice [1-7]: ").strip()
+            skip_input = input("Skip the scan? (y/n): ").strip().lower()
+            should_skip = skip_input == 'y'
+            
+            selected_list = []
+            lang_name = None
+            restricted = False
+            if lang_choice == "1": 
+                lang_name = "it"
+            elif lang_choice == "2": 
+                lang_name = "en"
+            elif lang_choice == "3": 
+                lang_name = "es"
+            elif lang_choice == "4": 
+                lang_name = "de"
+            elif lang_choice == "5": 
+                lang_name = "fr"
+            elif lang_choice == "6": 
+                lang_name = "ru"
+            elif lang_choice == "7":
+                lang_name = "it"
+                restricted = True
+            
+            if lang_name:
+                selected_list = get_channels_by_language(index, lang_name)
+                should_convert = ask_conversion()
+                do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, selected_list, lang_name, year_limit=args.year_limit, skip_scan=should_skip, restricted_mode=restricted, should_convert=should_convert)
+            else:
+                print("Invalid language selection.")
+    
+        if choice == "5":
+            do_find_mirrors(index)
+    
+        if choice == "6":
+            print("\nSelect Channel Filter for Comments:")
+            print("1. All Indexed Channels")
+            print("2. Selected Channels (from selected_channels.txt)")
+            chan_sub = ask("Choice [1-2]: ", {"1", "2"})
+            
+            selected_chans = None
+            if chan_sub == "2":
+                selected_chans = get_selected_channels()
+                if not selected_chans:
+                    print("  [!] Selected channels list is empty or file not found. Aborting.")
+                    print()
+                    return
+                
+            do_scrape_comments(index, args.public_dir, custom_channels=selected_chans)
+    
+        if choice == "7":
+            print("\nSelect Channel Filter for Profiles:")
+            print("1. All Indexed Channels")
+            print("2. Selected Channels (from selected_channels.txt)")
+            chan_sub = ask("Choice [1-2]: ", {"1", "2"})
+            
+            selected_chans = None
+            if chan_sub == "2":
+                selected_chans = get_selected_channels()
+                if not selected_chans:
+                    print("  [!] Selected channels list is empty or file not found. Aborting.")
+                    print()
+                    return
+                    
+            do_scrape_profiles(index, args.public_dir, specific_channels=selected_chans)
+    
+        if choice == "8":
+            do_auto_languages(index)
+    
+        if choice == "9":
             do_stats(index)
             index.cleanup_index()
-        if args.chronology:
-            do_chronology(index)
-        if args.find_mirrors:
-            do_find_mirrors(index)
-        if args.scrape_comments:
-            do_scrape_comments(index, args.public_dir)
-        if args.scrape_profiles:
-            do_scrape_profiles(index, args.public_dir)
-        if args.download_italian:
-            selected_list = get_channels_by_language(index, "it")
-            do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, selected_list, "it", year_limit=args.year_limit, skip_scan=False)
-        if args.forum_scrape:
-            do_forum_scrape(index, args.site_dir)
-        if args.resort:
-            print("\n>>> Launching Resort Videos (CLI)...")
-            index.resort_videos()
-        if args.cleanup_other_db:
-            do_cleanup_other_db(index)
-        if args.scrape_single_channel:
-            do_scrape_single_channel(index, args.scrape_single_channel, args.public_dir, args.video_dir)
-        
-        # No migration needed for SQL version
-        pass
-            
-        return
-
-    print_header()
-    print(f"  Site dir:  {os.path.abspath(args.site_dir)}")
-    print(f"  Video dir: {os.path.abspath(args.video_dir)}")
-    print(f"  Docs dir:  {os.path.abspath(args.docs_dir)}")
-    print(f"  Sections:  {', '.join(SCAN_SECTIONS)}")
-    print(f"  yt-dlp:    {YTDLP_BIN}")
     
-    # Check yt-dlp version
-    try:
-        r = subprocess.run([YTDLP_BIN, "--version"], capture_output=True, text=True)
-        if r.returncode == 0:
-            v_str = r.stdout.strip()
-            print(f"  Version:   {v_str}")
-            if any(y in v_str for y in ["2023", "2024", "2025"]):
-                 print(f"\n  [!] WARNING: Your yt-dlp version is likely outdated for 2026.")
-                 print("      If downloads fail, use option 'u' to update it locally.")
-    except:
-        pass
-    print()
-    print("  What do you want to do?")
-    print()
-    print("  1  Fetch missing metadata")
-    print("       Update titles, descriptions, and channel info for indexed videos.")
-    print()
-    print("  2  Download indexed videos")
-    print("       Download pending video files for both YTP and Sources.")
-    print()
-    print("  3  Scrape channels (Discover New)")
-    print("       Scan registered or selected channels for new content.")
-    print()
-    print("  4  Language-Specific Download")
-    print("       Batch download videos for a specific language (e.g. Italian).")
-    print()
-    print("  5  Find Mirror Videos")
-    print("       Search for reuploads of unavailable or deleted videos.")
-    print()
-    print("  6  Scrape Comments")
-    print("       Archival: Fetch and save YouTube comments for indexed sources.")
-    print()
-    print("  7  Scrape Profiles & Thumbnails")
-    print("       Download channel avatars and update the Pooper registry.")
-    print()
-    print("  8  Auto Language Tagger")
-    print("       Automatically assign languages (ITA, ENG, etc.) to videos.")
-    print()
-    print("  9  Generate Stats  →  stats.md")
-    print("       Collection breakdown: total videos, channels, and active creators.")
-    print()
-    print("  10 Custom YouTube Search")
-    print("       Search for specific terms or YTP acronyms to expand the collection.")
-    print()
-    print("  11 Deep Keyword Discovery (Combinations)")
-    print("       Exhaustive scan: Search every combination of YTP + Meme keywords.")
-    print()
-    print("  12 Cleanup Orphaned Channels")
-    print("       Remove channels from other.db and ytpoopers.db that have no videos in main databases.")
-    print()
-    print("  13 Random Video Search")
-    print("       Pick random videos from the collection and search for similar content.")
-    print()
-    print("  14 Channel Video Report")
-    print("       Generate a full report of videos per channel (alphabetical).")
-    print()
-    print("  15 Download YTP/Collabs/YTPMV (Selected Channels Only)")
-    print("       Targeted download: Only fetch videos from your selected_channels.txt.")
-    print()
-    print("  f  Forum Scrape (Site Mirror)")
-    print("       Crawl archived forum folders to extract legacy YouTube links.")
-    print()
-    print("  r  Resort Videos")
-    print("       Re-scan all indices and sort videos by keywords.")
-    print()
-    print("  s  Full Scrape Run (Standard Cycle)")
-    print("       Discovery: Scrape channels -> Metadata -> Profiles -> Comments.")
-    print()
-    print("  x  Full Scrape Run (Ignore Sources)")
-    print("       Discovery: Scrape channels (ignore sources) -> Metadata (YTP only) -> Profiles.")
-    print()
-    print("  d  Full Download (Parallel Processing)")
-    print("       Parallel: Italian YTPs, comments, and video compression.")
-    print()
-    print("  p  Internal Parallel Download & Compression")
-    print("       Use ThreadPoolExecutor for fast downloads + automatic compression.")
-    print()
-    print("  a  Full Automation (Scrape + Download)")
-    print("       The works: Run Full Scrape Cycle followed by Full Download.")
-    print()
-    print("  u  Update yt-dlp")
-    print("       Download the latest version of yt-dlp to scripts/ folder.")
-    print()
-    print("  q  Quit")
-    print()
-    choice = ask("  Choice [1-15/u/f/r/s/x/d/p/a/q]: ",
-                 {"1","2","3","4","5","6","7","8","9","10","11","12","13","14","15","u","f","r","s","x","d","p","a","q"})
-
-    if choice == "q":
-        sys.exit(0)
-
-    print()
-
-    index = VideoIndex(args.video_dir, args.docs_dir)
-    index.load()
-
-    if choice == "1":
-        print("\nSelect what metadata to fetch:")
-        print("1. All (YTP & Sources)")
-        print("2. Only YTP metadata")
-        print("3. Only sources metadata")
-        sub = ask("Choice [1-3]: ", {"1", "2", "3"})
-        
-        print("\nSelect Language Filter:")
-        print("0. All Languages")
-        print("1. Italian")
-        print("2. English")
-        print("3. Spanish")
-        print("4. German")
-        print("5. French")
-        print("6. Russian")
-        print("7. Portuguese (BR)")
-        lang_sub = ask("Language Choice [0-7]: ", {"0", "1", "2", "3", "4", "5", "6", "7"})
-        
-        lang_map = {
-            "1": "it", "2": "en", "3": "es", "4": "de", 
-            "5": "fr", "6": "ru", "7": "br"
-        }
-        target_lang = lang_map.get(lang_sub) # None if "0"
-
-        print("\nSelect Channel Filter:")
-        print("1. All Indexed Channels")
-        print("2. Selected Channels (from selected_channels.txt)")
-        chan_sub = ask("Choice [1-2]: ", {"1", "2"})
-        
-        selected_chans = None
-        if chan_sub == "2":
+        if choice == "10":
+            do_scrape_search(index)
+    
+        if choice == "11":
+            do_keyword_search_scraping(index)
+    
+        if choice == "12":
+            do_cleanup_other_db(index)
+    
+        if choice == "13":
+            do_random_video_scrape(index)
+    
+        if choice == "14":
+            do_channel_report(index)
+    
+        if choice == "15":
             selected_chans = get_selected_channels()
             if not selected_chans:
                 print("  [!] Selected channels list is empty or file not found. Aborting.")
                 print()
                 return
-        
-        if sub in ("1", "2"):
-            do_update_index(index, language=target_lang, custom_channels=selected_chans)
-        if sub in ("1", "3"):
-            do_scrape_sources_metadata(index, language=target_lang, custom_channels=selected_chans)
-        print()
-    if choice == "2":
-        print("\nSelect what to download:")
-        print("1. All (YTP & Sources)")
-        print("2. Only YTP videos")
-        print("3. Only sources videos")
-        sub = ask("Choice [1-3]: ", {"1", "2", "3"})
-
-        print("\nSelect Channel Filter:")
-        print("1. All Indexed Channels")
-        print("2. Selected Channels (from selected_channels.txt)")
-        print("3. Single Channel URL (Scrape & Download)")
-        chan_sub = ask("Choice [1-3]: ", {"1", "2", "3"})
-        
-        selected_chans = None
-        if chan_sub == "2":
-            selected_chans = get_selected_channels()
-            if not selected_chans:
-                print("  [!] Selected channels list is empty or file not found. Aborting.")
-                print()
-                return
-        elif chan_sub == "3":
-            ch_url = input("  Paste Channel URL: ").strip()
-            if not ch_url:
-                print("  [!] Invalid URL.")
-                print()
-                return
             
-            norm_ch_url = normalize_channel_url(ch_url)
-            if not norm_ch_url:
-                print("  [!] Invalid URL format.")
-                print()
-                return
-            
-            do_scrape_single_channel(index, norm_ch_url, args.public_dir, args.video_dir)
-            selected_chans = [norm_ch_url]
-            # Force full download (YTP + Sources) for single channel mode
-            sub = "1"
-
-        should_convert = ask_conversion()
-        if sub in ("1", "2"):
-            do_download(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, custom_channels=selected_chans, should_convert=should_convert)
-        if sub in ("1", "3"):
-            do_download_other(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, custom_channels=selected_chans, should_convert=should_convert)
-        print()
-    if choice == "3":
-        print("\nSelect Scraping Mode:")
-        print("1. All Registered Channels (Discover New)")
-        print("2. Selected Channels (from selected_channels.txt)")
-        scrape_sub = ask("Choice [1-2]: ", {"1", "2"})
-        
-        if scrape_sub == "1":
-            do_scrape_channels(index)
-        else:
-            selected = get_selected_channels()
-            if selected:
-                do_scrape_channels(index, custom_channels=selected)
-        print()
-    if choice == "4":
-        print("\nSelect Language:")
-        print("1. Italian")
-        print("2. English")
-        print("3. Spanish")
-        print("4. German")
-        print("5. French")
-        print("6. Russian")
-        print("7. Restricted Italian (Strict Keywords)")
-        lang_choice = input("Language Choice [1-7]: ").strip()
-        skip_input = input("Skip the scan? (y/n): ").strip().lower()
-        should_skip = skip_input == 'y'
-        
-        selected_list = []
-        lang_name = None
-        restricted = False
-        if lang_choice == "1": 
-            lang_name = "it"
-        elif lang_choice == "2": 
-            lang_name = "en"
-        elif lang_choice == "3": 
-            lang_name = "es"
-        elif lang_choice == "4": 
-            lang_name = "de"
-        elif lang_choice == "5": 
-            lang_name = "fr"
-        elif lang_choice == "6": 
-            lang_name = "ru"
-        elif lang_choice == "7":
-            lang_name = "it"
-            restricted = True
-        
-        if lang_name:
-            selected_list = get_channels_by_language(index, lang_name)
             should_convert = ask_conversion()
-            do_download_language(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, selected_list, lang_name, year_limit=args.year_limit, skip_scan=should_skip, restricted_mode=restricted, should_convert=should_convert)
-        else:
-            print("Invalid language selection.")
-
-    if choice == "5":
-        do_find_mirrors(index)
-
-    if choice == "6":
-        print("\nSelect Channel Filter for Comments:")
-        print("1. All Indexed Channels")
-        print("2. Selected Channels (from selected_channels.txt)")
-        chan_sub = ask("Choice [1-2]: ", {"1", "2"})
-        
-        selected_chans = None
-        if chan_sub == "2":
-            selected_chans = get_selected_channels()
-            if not selected_chans:
-                print("  [!] Selected channels list is empty or file not found. Aborting.")
-                print()
-                return
+            do_download(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, custom_channels=selected_chans, should_convert=should_convert)
+    
+        if choice == "f":
+            do_forum_scrape(index, args.site_dir)
+    
+        if choice == "r":
+            print("\n>>> Launching Resort Videos (Menu)...")
+            index.resort_videos()
+    
+        if choice == "s":
+            print("\nSelect Channel Filter for Full Run:")
+            print("1. All Indexed Channels")
+            print("2. Selected Channels (from selected_channels.txt)")
+            chan_sub = ask("Choice [1-2]: ", {"1", "2"})
             
-        do_scrape_comments(index, args.public_dir, custom_channels=selected_chans)
-
-    if choice == "7":
-        print("\nSelect Channel Filter for Profiles:")
-        print("1. All Indexed Channels")
-        print("2. Selected Channels (from selected_channels.txt)")
-        chan_sub = ask("Choice [1-2]: ", {"1", "2"})
-        
-        selected_chans = None
-        if chan_sub == "2":
-            selected_chans = get_selected_channels()
-            if not selected_chans:
-                print("  [!] Selected channels list is empty or file not found. Aborting.")
-                print()
-                return
-                
-        do_scrape_profiles(index, args.public_dir, specific_channels=selected_chans)
-
-    if choice == "8":
-        do_auto_languages(index)
-
-    if choice == "9":
-        do_stats(index)
-        index.cleanup_index()
-
-    if choice == "10":
-        do_scrape_search(index)
-
-    if choice == "11":
-        do_keyword_search_scraping(index)
-
-    if choice == "12":
-        do_cleanup_other_db(index)
-
-    if choice == "13":
-        do_random_video_scrape(index)
-
-    if choice == "14":
-        do_channel_report(index)
-
-    if choice == "15":
-        selected_chans = get_selected_channels()
-        if not selected_chans:
-            print("  [!] Selected channels list is empty or file not found. Aborting.")
-            print()
+            selected_chans = None
+            if chan_sub == "2":
+                selected_chans = get_selected_channels()
+                if not selected_chans:
+                    print("  [!] Selected channels list is empty or file not found. Aborting.")
+                    print()
+                    return
+    
+            do_full_scrape_run(index, args, custom_channels=selected_chans)
+    
+        if choice == "d":
+            should_convert = ask_conversion()
+            do_full_download_parallel(should_convert=should_convert)
+    
+        if choice == "x":
+            print("\nSelect Channel Filter for Full Run (Ignore Sources):")
+            print("1. All Indexed Channels")
+            print("2. Selected Channels (from selected_channels.txt)")
+            chan_sub = ask("Choice [1-2]: ", {"1", "2"})
+            
+            selected_chans = None
+            if chan_sub == "2":
+                selected_chans = get_selected_channels()
+                if not selected_chans:
+                    print("  [!] Selected channels list is empty or file not found. Aborting.")
+                    print()
+                    return
+    
+            do_full_scrape_run_ignore_sources(index, args, custom_channels=selected_chans)
+    
+        if choice == "p":
+            print("\nSelect Channel Filter:")
+            print("1. All Indexed Channels")
+            print("2. Selected Channels (from selected_channels.txt)")
+            chan_sub = ask("Choice [1-2]: ", {"1", "2"})
+            
+            selected_chans = None
+            if chan_sub == "2":
+                selected_chans = get_selected_channels()
+                if not selected_chans:
+                    print("  [!] Selected channels list is empty or file not found. Aborting.")
+                    print()
+                    return
+    
+            should_convert = ask_conversion()
+            do_download_parallel_internal(index, args.video_dir, args.format, args.rate_limit, workers=args.workers, no_db_update=args.no_db_update, custom_channels=selected_chans, should_convert=should_convert)
+    
+        if choice == "a":
+            do_full_scrape_run(index, args)
+            should_convert = ask_conversion()
+            do_full_download_parallel(should_convert=should_convert)
+    
+        if choice == "u":
+            do_update_ytdlp()
             return
-        
-        should_convert = ask_conversion()
-        do_download(index, args.video_dir, args.format, args.rate_limit, args.retry_failed, custom_channels=selected_chans, should_convert=should_convert)
-
-    if choice == "f":
-        do_forum_scrape(index, args.site_dir)
-
-    if choice == "r":
-        print("\n>>> Launching Resort Videos (Menu)...")
-        index.resort_videos()
-
-    if choice == "s":
-        print("\nSelect Channel Filter for Full Run:")
-        print("1. All Indexed Channels")
-        print("2. Selected Channels (from selected_channels.txt)")
-        chan_sub = ask("Choice [1-2]: ", {"1", "2"})
-        
-        selected_chans = None
-        if chan_sub == "2":
-            selected_chans = get_selected_channels()
-            if not selected_chans:
-                print("  [!] Selected channels list is empty or file not found. Aborting.")
-                print()
-                return
-
-        do_full_scrape_run(index, args, custom_channels=selected_chans)
-
-    if choice == "d":
-        should_convert = ask_conversion()
-        do_full_download_parallel(should_convert=should_convert)
-
-    if choice == "x":
-        print("\nSelect Channel Filter for Full Run (Ignore Sources):")
-        print("1. All Indexed Channels")
-        print("2. Selected Channels (from selected_channels.txt)")
-        chan_sub = ask("Choice [1-2]: ", {"1", "2"})
-        
-        selected_chans = None
-        if chan_sub == "2":
-            selected_chans = get_selected_channels()
-            if not selected_chans:
-                print("  [!] Selected channels list is empty or file not found. Aborting.")
-                print()
-                return
-
-        do_full_scrape_run_ignore_sources(index, args, custom_channels=selected_chans)
-
-    if choice == "p":
-        print("\nSelect Channel Filter:")
-        print("1. All Indexed Channels")
-        print("2. Selected Channels (from selected_channels.txt)")
-        chan_sub = ask("Choice [1-2]: ", {"1", "2"})
-        
-        selected_chans = None
-        if chan_sub == "2":
-            selected_chans = get_selected_channels()
-            if not selected_chans:
-                print("  [!] Selected channels list is empty or file not found. Aborting.")
-                print()
-                return
-
-        should_convert = ask_conversion()
-        do_download_parallel_internal(index, args.video_dir, args.format, args.rate_limit, workers=args.workers, no_db_update=args.no_db_update, custom_channels=selected_chans, should_convert=should_convert)
-
-    if choice == "a":
-        do_full_scrape_run(index, args)
-        should_convert = ask_conversion()
-        do_full_download_parallel(should_convert=should_convert)
-
-    # No migration needed for SQL version
-    pass
-
-    if choice == "u":
-        do_update_ytdlp()
-        return
-
-    index.split_large_databases()
-    print()
+    
+    except KeyboardInterrupt:
+        print("\n  Interrupted. Ensuring shards are up to date...")
+        raise
+    finally:
+        if 'index' in locals():
+            index.split_large_databases()
+        print()
 
 
 if __name__ == "__main__":

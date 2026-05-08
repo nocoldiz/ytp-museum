@@ -94,8 +94,34 @@ async function openVideo(vidId, pushToHistory = true) {
 
   const moreContainer = document.getElementById('more-from-channel');
   if (moreContainer) {
-    const moreVids = queryDB("SELECT * FROM videos WHERE channel_name = ? AND id != ? AND (title IS NOT NULL AND title != '') AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL) LIMIT 5", [v.channel_name, v.id, globalMaxYear]);
-    moreContainer.innerHTML = moreVids.map(x => renderVideoItem(x, 'grid')).join('');
+    const isUnknownChannel = !v.channel_name || v.channel_name === 'Unknown Channel' || v.channel_name === 'Unknown';
+    const boxHeader = moreContainer.parentElement ? moreContainer.parentElement.querySelector('.box-header') : null;
+    
+    if (isUnknownChannel) {
+      if (boxHeader) boxHeader.textContent = 'Similar Videos';
+      
+      const words = (v.title || '').split(/\s+/).map(w => w.replace(/[^a-zA-Z0-9]/g, '')).filter(w => w.length > 2);
+      let moreVids = [];
+      
+      if (words.length > 0) {
+        const selectedWords = words.slice(0, 3);
+        const clauses = selectedWords.map(() => "title LIKE ?").join(" OR ");
+        const params = selectedWords.map(w => `%${w}%`);
+        const sql = `SELECT * FROM videos WHERE id != ? AND (${clauses}) AND (title IS NOT NULL AND title != '') AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL) LIMIT 5`;
+        moreVids = queryDB(sql, [v.id, ...params, globalMaxYear], db);
+      }
+      
+      if (moreVids.length === 0) {
+        const sql = `SELECT * FROM videos WHERE id != ? AND (title IS NOT NULL AND title != '') AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL) ORDER BY RANDOM() LIMIT 5`;
+        moreVids = queryDB(sql, [v.id, globalMaxYear], db);
+      }
+      
+      moreContainer.innerHTML = moreVids.map(x => renderVideoItem(x, 'grid')).join('');
+    } else {
+      if (boxHeader) boxHeader.textContent = 'More From This Channel';
+      const moreVids = queryDB("SELECT * FROM videos WHERE channel_name = ? AND id != ? AND (title IS NOT NULL AND title != '') AND (CAST(substr(publish_date, 1, 4) AS INTEGER) <= ? OR publish_date IS NULL) LIMIT 5", [v.channel_name, v.id, globalMaxYear], db);
+      moreContainer.innerHTML = moreVids.map(x => renderVideoItem(x, 'grid')).join('');
+    }
   }
   updateSaveButton(vidId);
   loadVideoResponses(video);

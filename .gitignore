@@ -11,4 +11,4 @@ docs
 /node_modules
 public/db/other.db
 public/db/ytp.db
-ìpublic/db/comments.db
+public/db/comments.db
