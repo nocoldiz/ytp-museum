@@ -1117,7 +1117,7 @@ class VideoIndex:
             if join_files(path):
                 print(f"  [DB] Reconstructed {db_type} database from shards.")
         
-        return sqlite3.connect(path)
+        return sqlite3.connect(path, timeout=30)
 
     def load_excluded(self):
         self.actually_excluded_ids = set()
@@ -1460,68 +1460,70 @@ class VideoIndex:
             return # Don't create empty DBs if not needed
             
         conn = self.get_conn(db_type)
-        cursor = conn.cursor()
-        
-        # Ensure schema exists (Basic table check)
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='videos'")
-        if not cursor.fetchone():
-            self._create_basic_schema(cursor)
-        
-        tag_cache = {}
-        section_cache = {}
-        source_cache = {}
+        try:
+            cursor = conn.cursor()
+            
+            # Ensure schema exists (Basic table check)
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='videos'")
+            if not cursor.fetchone():
+                self._create_basic_schema(cursor)
+            
+            tag_cache = {}
+            section_cache = {}
+            source_cache = {}
 
-        def get_or_create(table, column, value, cache):
-            if value in cache: return cache[value]
-            cursor.execute(f"INSERT OR IGNORE INTO {table} ({column}) VALUES (?)", (value,))
-            cursor.execute(f"SELECT id FROM {table} WHERE {column} = ?", (value,))
-            row = cursor.fetchone()
-            if row:
-                cache[value] = row[0]
-                return row[0]
-            return None
+            def get_or_create(table, column, value, cache):
+                if value in cache: return cache[value]
+                cursor.execute(f"INSERT OR IGNORE INTO {table} ({column}) VALUES (?)", (value,))
+                cursor.execute(f"SELECT id FROM {table} WHERE {column} = ?", (value,))
+                row = cursor.fetchone()
+                if row:
+                    cache[value] = row[0]
+                    return row[0]
+                return None
 
-        for vid_id, info in data_dict.items():
-            # 1. Insert Video
-            cursor.execute("""
-                INSERT OR REPLACE INTO videos 
-                (id, url, title, description, channel_url, publish_date, view_count, like_count, local_file, language, channel_name)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                vid_id,
-                info.get('url', f"https://www.youtube.com/watch?v={vid_id}"),
-                info.get('title'),
-                info.get('description'),
-                info.get('channel_url'),
-                info.get('publish_date'),
-                info.get('view_count', 0),
-                info.get('like_count', 0),
-                info.get('local_file'),
-                info.get('language'),
-                info.get('channel_name')
-            ))
+            for vid_id, info in data_dict.items():
+                # 1. Insert Video
+                cursor.execute("""
+                    INSERT OR REPLACE INTO videos 
+                    (id, url, title, description, channel_url, publish_date, view_count, like_count, local_file, language, channel_name)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    vid_id,
+                    info.get('url', f"https://www.youtube.com/watch?v={vid_id}"),
+                    info.get('title'),
+                    info.get('description'),
+                    info.get('channel_url'),
+                    info.get('publish_date'),
+                    info.get('view_count', 0),
+                    info.get('like_count', 0),
+                    info.get('local_file'),
+                    info.get('language'),
+                    info.get('channel_name')
+                ))
 
-            # 2. Tags
-            for tag_name in info.get('tags', []):
-                if tag_name:
-                    tid = get_or_create('tags', 'name', tag_name, tag_cache)
-                    if tid: cursor.execute("INSERT OR IGNORE INTO video_tags (video_id, tag_id) VALUES (?, ?)", (vid_id, tid))
+                # 2. Tags
+                for tag_name in info.get('tags', []):
+                    if tag_name:
+                        tid = get_or_create('tags', 'name', tag_name, tag_cache)
+                        if tid: cursor.execute("INSERT OR IGNORE INTO video_tags (video_id, tag_id) VALUES (?, ?)", (vid_id, tid))
 
-            # 3. Sections
-            for sec_name in info.get('sections', []):
-                if sec_name:
-                    sid = get_or_create('sections', 'name', sec_name, section_cache)
-                    if sid: cursor.execute("INSERT OR IGNORE INTO video_sections (video_id, section_id) VALUES (?, ?)", (vid_id, sid))
+                # 3. Sections
+                for sec_name in info.get('sections', []):
+                    if sec_name:
+                        sid = get_or_create('sections', 'name', sec_name, section_cache)
+                        if sid: cursor.execute("INSERT OR IGNORE INTO video_sections (video_id, section_id) VALUES (?, ?)", (vid_id, sid))
 
-            # 4. Source Pages (for other.db)
-            if db_type == 'other':
-                for sp_path in info.get('source_pages', []):
-                    if sp_path:
-                        spid = get_or_create('source_pages', 'path', sp_path, source_cache)
-                        if spid: cursor.execute("INSERT OR IGNORE INTO video_other (video_id, source_page_id) VALUES (?, ?)", (vid_id, spid))
+                # 4. Source Pages (for other.db)
+                if db_type == 'other':
+                    for sp_path in info.get('source_pages', []):
+                        if sp_path:
+                            spid = get_or_create('source_pages', 'path', sp_path, source_cache)
+                            if spid: cursor.execute("INSERT OR IGNORE INTO video_other (video_id, source_page_id) VALUES (?, ?)", (vid_id, spid))
 
-        conn.commit()
-        conn.close()
+            conn.commit()
+        finally:
+            conn.close()
 
     def _create_basic_schema(self, cursor):
         """Creates the minimum necessary tables for a video database."""
@@ -1728,6 +1730,55 @@ class VideoIndex:
             self.ytpmv_data.get(vid) or self.collabs_data.get(vid)
         if e:
             pass # status is deprecated
+
+    def exclude_video(self, vid, reason="Metadata fetch failed"):
+        # Add to in-memory sets
+        self.actually_excluded_ids.add(vid)
+        self.excluded_ids.add(vid)
+        
+        # Add to ytp.db excluded_videos table
+        try:
+            conn = self.get_conn('ytp')
+            cursor = conn.cursor()
+            cursor.execute("INSERT OR IGNORE INTO excluded_videos (id, reason) VALUES (?, ?)", (vid, reason))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"  [!] Error adding {vid} to excluded_videos table: {e}")
+            
+        # Add to scripts/db/excluded_videos.json
+        excluded_json_path = os.path.join(PROJECT_ROOT, "scripts", "db", "excluded_videos.json")
+        excluded_data = {}
+        if os.path.exists(excluded_json_path):
+            try:
+                with open(excluded_json_path, 'r', encoding='utf-8') as f:
+                    excluded_data = json.load(f)
+            except Exception as e:
+                print(f"  [!] Error loading excluded_videos.json: {e}")
+                
+        if vid not in excluded_data:
+            # Get video data if available
+            e = self.data.get(vid) or self.other_data.get(vid) or \
+                self.ytpmv_data.get(vid) or self.collabs_data.get(vid) or {}
+                
+            excluded_data[vid] = {
+                "url": e.get('url') or f"https://www.youtube.com/watch?v={vid}",
+                "title": e.get('title'),
+                "description": e.get('description'),
+                "channel_name": e.get('channel_name'),
+                "channel_url": e.get('channel_url'),
+                "publish_date": e.get('publish_date'),
+                "view_count": e.get('view_count'),
+                "like_count": e.get('like_count'),
+                "status": "excluded"
+            }
+            
+            try:
+                with open(excluded_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(excluded_data, f, indent=2, ensure_ascii=False)
+                print(f"    [+] Added {vid} to excluded_videos.json")
+            except Exception as e:
+                print(f"  [!] Error saving excluded_videos.json: {e}")
 
     def clear_failed(self):
         all_ytp = {**self.data, **self.ytpmv_data, **self.collabs_data, **self.other_data}
@@ -3525,39 +3576,43 @@ def do_find_mirrors(index):
 def sync_ytpoopers_index(index):
     """Ensures every channel found in SQLite videos is present in ytpoopers.db."""
     conn_poopers = sqlite3.connect(index.poopers_db_path)
-    cursor_poopers = conn_poopers.cursor()
-    
-    # 1. Gather all channels from ytp.db and other.db
-    all_channels = {} # url -> name
-    
-    def gather_from_db(db_type):
-        conn = index.get_conn(db_type)
-        cursor = conn.cursor()
-        cursor.execute("SELECT DISTINCT channel_url, channel_name FROM videos WHERE channel_url IS NOT NULL")
-        for url, name in cursor.fetchall():
-            if url not in all_channels or (name and not all_channels[url]):
-                all_channels[url] = name
-        conn.close()
+    try:
+        cursor_poopers = conn_poopers.cursor()
+        
+        # 1. Gather all channels from ytp.db and other.db
+        all_channels = {} # url -> name
+        
+        def gather_from_db(db_type):
+            conn = index.get_conn(db_type)
+            try:
+                cursor = conn.cursor()
+                cursor.execute("SELECT DISTINCT channel_url, channel_name FROM videos WHERE channel_url IS NOT NULL")
+                for url, name in cursor.fetchall():
+                    if url not in all_channels or (name and not all_channels[url]):
+                        all_channels[url] = name
+            finally:
+                conn.close()
 
-    gather_from_db('ytp')
-    gather_from_db('other')
-    
-    # 3. Sync to ytpoopers.db
-    added = 0
-    updated = 0
-    for url, name in all_channels.items():
-        cursor_poopers.execute("SELECT channel_url, channel_name FROM channels WHERE channel_url = ?", (url,))
-        row = cursor_poopers.fetchone()
-        if not row:
-            cursor_poopers.execute("INSERT INTO channels (channel_url, channel_name, aliases) VALUES (?, ?, ?)", 
-                                   (url, name or url, "[]"))
-            added += 1
-        elif name and not row[1]:
-            cursor_poopers.execute("UPDATE channels SET channel_name = ? WHERE channel_url = ?", (name, url))
-            updated += 1
-            
-    conn_poopers.commit()
-    conn_poopers.close()
+        gather_from_db('ytp')
+        gather_from_db('other')
+        
+        # 3. Sync to ytpoopers.db
+        added = 0
+        updated = 0
+        for url, name in all_channels.items():
+            cursor_poopers.execute("SELECT channel_url, channel_name FROM channels WHERE channel_url = ?", (url,))
+            row = cursor_poopers.fetchone()
+            if not row:
+                cursor_poopers.execute("INSERT INTO channels (channel_url, channel_name, aliases) VALUES (?, ?, ?)", 
+                                       (url, name or url, "[]"))
+                added += 1
+            elif name and not row[1]:
+                cursor_poopers.execute("UPDATE channels SET channel_name = ? WHERE channel_url = ?", (name, url))
+                updated += 1
+                
+        conn_poopers.commit()
+    finally:
+        conn_poopers.close()
     if added or updated:
         print(f"  [sync] ytpoopers.db updated: {added} added, {updated} updated.")
 
