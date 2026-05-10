@@ -1731,6 +1731,55 @@ class VideoIndex:
         if e:
             pass # status is deprecated
 
+    def exclude_video(self, vid, reason="Metadata fetch failed"):
+        # Add to in-memory sets
+        self.actually_excluded_ids.add(vid)
+        self.excluded_ids.add(vid)
+        
+        # Add to ytp.db excluded_videos table
+        try:
+            conn = self.get_conn('ytp')
+            cursor = conn.cursor()
+            cursor.execute("INSERT OR IGNORE INTO excluded_videos (id, reason) VALUES (?, ?)", (vid, reason))
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"  [!] Error adding {vid} to excluded_videos table: {e}")
+            
+        # Add to scripts/db/excluded_videos.json
+        excluded_json_path = os.path.join(PROJECT_ROOT, "scripts", "db", "excluded_videos.json")
+        excluded_data = {}
+        if os.path.exists(excluded_json_path):
+            try:
+                with open(excluded_json_path, 'r', encoding='utf-8') as f:
+                    excluded_data = json.load(f)
+            except Exception as e:
+                print(f"  [!] Error loading excluded_videos.json: {e}")
+                
+        if vid not in excluded_data:
+            # Get video data if available
+            e = self.data.get(vid) or self.other_data.get(vid) or \
+                self.ytpmv_data.get(vid) or self.collabs_data.get(vid) or {}
+                
+            excluded_data[vid] = {
+                "url": e.get('url') or f"https://www.youtube.com/watch?v={vid}",
+                "title": e.get('title'),
+                "description": e.get('description'),
+                "channel_name": e.get('channel_name'),
+                "channel_url": e.get('channel_url'),
+                "publish_date": e.get('publish_date'),
+                "view_count": e.get('view_count'),
+                "like_count": e.get('like_count'),
+                "status": "excluded"
+            }
+            
+            try:
+                with open(excluded_json_path, 'w', encoding='utf-8') as f:
+                    json.dump(excluded_data, f, indent=2, ensure_ascii=False)
+                print(f"    [+] Added {vid} to excluded_videos.json")
+            except Exception as e:
+                print(f"  [!] Error saving excluded_videos.json: {e}")
+
     def clear_failed(self):
         all_ytp = {**self.data, **self.ytpmv_data, **self.collabs_data, **self.other_data}
         for e in all_ytp.values():
